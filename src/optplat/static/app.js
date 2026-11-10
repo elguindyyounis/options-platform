@@ -68,7 +68,11 @@
       pill("market", "market " + (status.market.open ? "open" : "closed") + ": " + status.market.reason, status.market.open ? "ok" : "");
       killState = !!portfolio.kill_switch;
       pill("kill", killState ? "KILL SWITCH ON" : "kill switch off", killState ? "bad" : "");
-      pill("runner", status.runner.running ? "loop running" : "loop stopped", status.runner.running ? "ok" : "");
+      const rn = status.runner;
+      pill("runner",
+        rn.stalled ? "LOOP STALLED: no good cycle for " + rn.seconds_since_success + "s" : (rn.running ? "loop running" : "loop stopped"),
+        rn.stalled ? "bad" : (rn.running ? "ok" : ""));
+      $("runner").title = rn.last_error ? "Last error: " + rn.last_error : "";
       $("cfg-entries").checked = status.config.auto_entries;
       $("cfg-exits").checked = status.config.auto_exits;
       $("cfg-hours").checked = status.market.hours_enforced;

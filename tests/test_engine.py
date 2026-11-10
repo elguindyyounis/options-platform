@@ -291,3 +291,65 @@ def test_runner_starts_runs_a_cycle_and_stops():
     assert engine.last_cycle() is not None and runner.running()
     runner.stop()
     assert not runner.running() and runner.last_error is None
+
+
+# ---------------------------------------------------------------- runner health
+def test_runner_reports_a_recent_success_and_is_not_stalled():
+    engine, manager, broker, provider, clock = build()
+    runner = Runner(engine)
+    runner.start()
+    deadline = time.time() + 5
+    while runner.last_success_at is None and time.time() < deadline:
+        time.sleep(0.05)
+    try:
+        status = runner.status()
+        assert status["running"] and status["last_success_at"] is not None
+        assert status["seconds_since_success"] == 0 and status["stalled"] is False
+    finally:
+        runner.stop()
+
+
+def test_runner_is_stalled_after_three_intervals_without_a_good_cycle():
+    engine, manager, broker, provider, clock = build()
+    runner = Runner(engine)
+    runner.started_at = clock.now
+    runner.running = lambda: True  # simulate a live thread that has stopped producing cycles
+    interval = engine.config().interval_s
+    clock.now = clock.now + timedelta(seconds=3 * interval)
+    assert runner.stalled() is False  # exactly three intervals is not yet past the limit
+    clock.now = clock.now + timedelta(seconds=1)
+    assert runner.stalled() is True and runner.status()["seconds_since_success"] == 3 * interval + 1
+
+
+def test_a_success_resets_the_stall_clock_and_a_stopped_runner_is_never_called_stalled():
+    engine, manager, broker, provider, clock = build()
+    runner = Runner(engine)
+    runner.started_at = clock.now
+    clock.now = clock.now + timedelta(hours=5)
+    assert runner.stalled() is False  # not running: stopped, not stalled
+    runner.running = lambda: True
+    assert runner.stalled() is True
+    runner.last_success_at = clock.now
+    assert runner.stalled() is False and runner.seconds_since_success() == 0
+
+
+def test_a_raising_cycle_is_recorded_as_an_error_and_not_as_a_success(monkeypatch):
+    engine, *_ = build()
+
+    def boom():
+        raise RuntimeError("provider exploded")
+
+    monkeypatch.setattr(engine, "run_cycle", boom)
+    runner = Runner(engine)
+    runner.start()
+    deadline = time.time() + 5
+    while runner.last_error is None and time.time() < deadline:
+        time.sleep(0.05)
+    runner.stop()
+    assert "provider exploded" in runner.last_error and runner.last_success_at is None
+    assert runner.status()["last_success_at"] is None
+
+
+def test_never_started_runner_has_no_health_numbers():
+    engine, *_ = build()
+    assert Runner(engine).health() == {"running": False, "stalled": False, "seconds_since_success": None}

@@ -2,6 +2,19 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: runner health (owner away)
+
+* `Runner` now tracks `last_success_at` (a cycle that returned without raising) and reports
+  `seconds_since_success` and `stalled` (running with no good cycle for more than 3 intervals).
+  `/api/health` gets `runner: {running, stalled, seconds_since_success}` only; the error text stays in
+  the token-protected `/api/engine/status`. Reviewer: `/api/health` is unauthenticated and now also
+  reveals loop activity timing; no auth check was changed.
+* Dashboard shows `LOOP STALLED: no good cycle for Ns` in red; the last error is in the pill tooltip.
+* 7 new tests, 199 total. Not verified: a real stall (for example a hung Yahoo call). A cycle that is
+  slow rather than failing will also be flagged once it exceeds 3 intervals, which is intended.
+* Skipped on purpose: **daily loss halt**. Its default threshold is a risk-limit decision that
+  CLAUDE.md reserves for the owner, so it stays on the backlog for a human to specify.
+
 ## 2026-11-11: strategy evaluation report (owner away; backlog item after replay)
 
 * `src/optplat/evaluation.py` + `python -m optplat.evaluate`: replays recorded real snapshots in an

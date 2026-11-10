@@ -111,7 +111,10 @@ def create_app(
             broker = manager.broker.healthcheck()
         except Exception as exc:  # noqa: BLE001
             broker = {"connected": False, "error": type(exc).__name__}
-        return {"ok": True, "mode": manager.broker.mode.value, "broker": broker}
+        body: dict[str, Any] = {"ok": True, "mode": manager.broker.mode.value, "broker": broker}
+        if runner is not None:
+            body["runner"] = runner.health()  # counts and flags only; error text stays behind the token
+        return body
 
     @app.get("/api/portfolio", dependencies=[Depends(auth)])
     def portfolio() -> dict[str, Any]:

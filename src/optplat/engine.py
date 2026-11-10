@@ -457,12 +457,16 @@ class TradingEngine:
 class Runner:
     """Runs engine cycles on a background thread at the configured interval."""
 
+    STALL_FACTOR = 3  # no successful cycle for this many intervals means the loop is stalled
+
     def __init__(self, engine: TradingEngine) -> None:
         self.engine = engine
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self.last_error: Optional[str] = None
+        self.started_at: Optional[datetime] = None
+        self.last_success_at: Optional[datetime] = None
 
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive() and not self._stop.is_set()
@@ -472,6 +476,8 @@ class Runner:
             if self.running():
                 return
             self._stop.clear()
+            self.started_at = self.engine.clock()
+            self.last_success_at = None
             self._thread = threading.Thread(target=self._loop, name="optplat-runner", daemon=True)
             self._thread.start()
 
@@ -482,14 +488,40 @@ class Runner:
         if thread is not None:
             thread.join(timeout=5)
 
+    def seconds_since_success(self) -> Optional[int]:
+        """Seconds since the last cycle that finished without raising (or since start, if none has yet)."""
+        ref = self.last_success_at or self.started_at
+        if ref is None:
+            return None
+        return max(0, int((self.engine.clock() - ref).total_seconds()))
+
+    def stalled(self) -> bool:
+        since = self.seconds_since_success()
+        return self.running() and since is not None and since > self.STALL_FACTOR * self.engine.config().interval_s
+
     def status(self) -> dict[str, Any]:
-        return {"running": self.running(), "last_error": self.last_error}
+        return {
+            "running": self.running(),
+            "last_error": self.last_error,
+            "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
+            "seconds_since_success": self.seconds_since_success(),
+            "stalled": self.stalled(),
+        }
+
+    def health(self) -> dict[str, Any]:
+        """The part safe for the unauthenticated health endpoint: no error text."""
+        return {
+            "running": self.running(),
+            "stalled": self.stalled(),
+            "seconds_since_success": self.seconds_since_success(),
+        }
 
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
                 self.engine.run_cycle()
                 self.last_error = None
+                self.last_success_at = self.engine.clock()
             except Exception as exc:  # noqa: BLE001 - keep the loop alive; the error is surfaced in status
                 self.last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
             self._stop.wait(self.engine.config().interval_s)

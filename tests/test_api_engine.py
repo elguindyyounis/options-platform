@@ -112,3 +112,15 @@ def test_status_exposes_recorder_counts_and_config_accepts_retention(client):
     assert ok.status_code == 200 and ok.json()["snapshot_retention_days"] == 7
     bad = client.put("/api/engine/config", json={"snapshot_retention_days": 0}, headers=H)
     assert bad.status_code == 422 or bad.status_code == 400
+
+
+def test_health_shows_runner_flags_but_never_error_text_and_status_shows_the_detail(client):
+    body = client.get("/api/health").json()
+    assert set(body["runner"]) == {"running", "stalled", "seconds_since_success"}
+    detail = client.get("/api/engine/status", headers=H).json()["runner"]
+    assert {"last_error", "last_success_at", "stalled"} <= set(detail)
+
+
+def test_dashboard_warns_when_the_loop_is_stalled(client):
+    src = client.get("/static/app.js").text
+    assert "LOOP STALLED" in src and "rn.stalled" in src
