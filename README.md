@@ -28,6 +28,7 @@ demo market is fictional random data, so profit or loss there means nothing.
 | Strategy | `src/optplat/strategy.py` | Strategy interface and a baseline liquid-trend strategy |
 | Market data | `src/optplat/marketdata.py` | Fictional demo market, static test provider, unofficial Yahoo provider |
 | Recorder | `src/optplat/store.py`, `engine.py` | Stores every market snapshot the engine sees (real and fictional kept apart), pruned by a retention setting |
+| Replay | `src/optplat/replay.py` | Runs the real engine over recorded snapshots with no look-ahead, in a throwaway store |
 | Market clock | `src/optplat/market_clock.py` | NYSE session table; fails closed for years it has no calendar for |
 | Dashboard | `src/optplat/static/` | Single page served at `/`: controls, positions, orders, last cycle, results |
 

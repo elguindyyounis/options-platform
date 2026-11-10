@@ -2,6 +2,23 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: replay provider (owner away; backlog item 1 after the recorder)
+
+* New `src/optplat/replay.py`: `ReplayDataProvider` serves recorded snapshots as of the replay clock
+  and never later; `ReplayClock`; `run_replay(rows, strategy, config, policy)` runs one real engine
+  cycle per recorded moment in a throwaway in-memory store with the simulated broker.
+* Safety properties, each with a test: no look-ahead (mutation-checked: returning the newest snapshot
+  makes 6 tests fail); the strict quote-time policy still applies unless the caller passes the same
+  explicit opt-in used live; market hours still apply to real rows; automatic entries stay off unless
+  the caller asks; replay can never record snapshots again or touch the source database; real and
+  fictional rows are never mixed; an empty input is an error.
+* Reproducibility: two replays of the same rows give the same `fingerprint()` (random order ids are
+  excluded). A live-recorded run replays to the same realized P&L in the integration test.
+* 12 new tests, 178 total. No change to risk, orders, auth, or defaults.
+* Not verified: replay over a long real recording (none exists yet), performance on large histories
+  (rows are loaded into memory), and anything about strategy quality.
+* Next: strategy evaluation report (needs a minimum trade count and an out-of-sample split).
+
 ## 2026-11-11: quote and snapshot recorder (human-directed session, backlog item 1)
 
 * Every `MarketSnapshot` the engine reads in a cycle is appended to a new `snapshots` table with
