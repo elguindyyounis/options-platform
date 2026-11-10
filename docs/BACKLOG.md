@@ -21,28 +21,24 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 ## Next up
 
-1. **Decision journal and rejected-opportunity tracking.** Store a structured rationale for every entry,
-   exit and rejection (features, thresholds hit, risk failures, assumption). Track what happened to
-   rejected candidates afterwards (forward outcome from recorded snapshots) so filters and entry
-   timing can be judged.
-2. **Champion/challenger framework.** Versioned strategies, a frozen baseline run alongside every
+1. **Champion/challenger framework.** Versioned strategies, a frozen baseline run alongside every
    challenger in shadow mode (no orders), and a pre-registered hypothesis file with pass criteria
    that the evaluation reads and the agent cannot change after the fact.
-3. **Options signals as measured features.** Volume-to-open-interest, unusual-activity flags, liquidity
+2. **Options signals as measured features.** Volume-to-open-interest, unusual-activity flags, liquidity
    filters, GEX. Each is evaluated for predictive value in item 2 before any strategy may use it.
-4. **Dashboard question audit.** Every panel states the trading question it answers; remove or redesign
+3. **Dashboard question audit.** Every panel states the trading question it answers; remove or redesign
    those that do not help a decision.
-5. **Weekly research agent.** Proposes experiments from the journal and evaluation results, runs them in
+4. **Weekly research agent.** Proposes experiments from the journal and evaluation results, runs them in
    shadow mode, and writes a report for the owner to approve.
 
 Existing items, in order:
 
-6. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
+5. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
    default, with tests for ratchet behaviour and unobservable quotes.
-7. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
-8. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
+6. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
+7. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
    `orders(state)`; paginate `list_orders`.
-9. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
+8. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
    they find without changing behaviour.
 
 ## Blocked on a human
@@ -79,5 +75,8 @@ Existing items, in order:
   segments, drawdown, do-nothing and buy-and-hold context, MEASURED only above minimum trade counts.
 * Data-quality gate (roadmap step 1): `dataquality.py` drops crossed, zero-ask, non-finite, expired and
   duplicate rows, rejects stale/future/bad-price snapshots, flags frozen feeds, logs every issue.
+* Decision journal (roadmap step 2): append-only record of every entry, exit and rejected/not-chosen
+  candidate with rationale, provenance and assumptions; forward outcomes of candidates from recorded
+  snapshots (UNOBSERVABLE rather than guessed); `/api/journal`, `/api/journal/summary`, dashboard panel.
 * Runner health: seconds since last good cycle and a stalled flag (3x interval) on `/api/health`
   (no error text) and `/api/engine/status` (with error); dashboard shows LOOP STALLED.

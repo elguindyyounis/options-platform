@@ -125,6 +125,7 @@ class TradingEngine:
         self._cycle_cfg: EngineConfig = self._default
         self._cycle_now: datetime = self.clock()
         self._cycle_market_open: bool = False
+        self._journal_seen: dict[tuple[str, str, str], datetime] = {}
         self._last_fingerprint: dict[str, tuple[str, int]] = {}
 
     # ---- config -------------------------------------------------------
@@ -255,6 +256,49 @@ class TradingEngine:
                 cache[symbol] = self._vet(cache[symbol], report)
         return cache[symbol]
 
+    JOURNAL_DEDUPE_S = 3600
+    JOURNAL_MAX_CANDIDATES = 5
+    _ALWAYS_JOURNAL = {"FILLED", "SUBMITTED", "PARTIALLY_FILLED", "RISK_REJECTED", "BROKER_REJECTED"}
+
+    def _journal(
+        self,
+        kind: str,
+        symbol: str,
+        disposition: str,
+        contract: Any,
+        ref_price: Optional[float],
+        payload: dict[str, Any],
+        snap: Optional[MarketSnapshot] = None,
+        order_id: Optional[str] = None,
+    ) -> None:
+        """Append one decision record. Repeats of the same contract/disposition within an hour are not re-written
+        (a candidate that stays on screen every cycle would otherwise flood the journal). Never blocks trading."""
+        try:
+            key = (contract.occ_symbol.strip(), kind, disposition)
+            last = self._journal_seen.get(key)
+            if disposition not in self._ALWAYS_JOURNAL and last is not None and (
+                self._cycle_now - last
+            ).total_seconds() < self.JOURNAL_DEDUPE_S:
+                return
+            self._journal_seen[key] = self._cycle_now
+            provenance = {
+                "data_source": self.provider.name,
+                "snapshot_source": snap.source if snap else None,
+                "quote_time_verified": snap.timestamp_verified if snap else None,
+                "broker": self.manager.broker.name,
+            }
+            assumptions = ["Fills are simulated; the strategy has no demonstrated edge."]
+            if snap is not None and not snap.timestamp_verified:
+                assumptions.append("Quote times are unverified (download time, not exchange time).")
+            self.store.record_decision(
+                self._cycle_now, symbol, kind, disposition, contract.occ_symbol.strip(),
+                f"{self.strategy.name}:{self.strategy.version}", ref_price, order_id,
+                self.provider.fictional, {**payload, "contract": contract.to_dict(), "provenance": provenance,
+                                          "assumptions": assumptions},
+            )
+        except Exception:  # noqa: BLE001 - the journal must never stop a cycle
+            pass
+
     def _vet(self, snap: MarketSnapshot, report: dict[str, Any]) -> Optional[MarketSnapshot]:
         """Run the data-quality gate. A rejected snapshot is treated exactly like a failed data fetch."""
         result = check_snapshot(snap, self._cycle_now)
@@ -375,6 +419,15 @@ class TradingEngine:
                     item["result"] = "DEFERRED_MARKET_CLOSED"
                 else:
                     item.update(self._submit_exit(cfg, pos, quote, now))
+            if decision.action != "HOLD":  # holds are the quiet default and would drown the journal
+                self._journal(
+                    "EXIT", pos.contract.underlying, item.get("result") or decision.action, pos.contract,
+                    quote.bid if quote is not None else None,
+                    {"action": decision.action, "reason": decision.reason, "trigger": decision.trigger,
+                     "pnl_pct": decision.pnl_pct, "quantity": pos.quantity,
+                     "risk_failures": item.get("risk_failures", [])},
+                    order_id=item.get("order_id"),
+                )
             out.append(item)
         return out
 
@@ -442,9 +495,15 @@ class TradingEngine:
                 closed_at = self.manager.last_close_time(contract)
                 return closed_at is not None and now - closed_at < cooldown
 
-            proposals = [
-                p for p in self.strategy.propose(snap, now) if p.contract not in held and not cooling(p.contract)
-            ]
+            raw = self.strategy.propose(snap, now)
+            for p in raw[: self.JOURNAL_MAX_CANDIDATES]:
+                if p.contract in held:
+                    self._journal("ENTRY", symbol, "SKIPPED_HELD", p.contract, p.limit_price,
+                                  {"rationale": p.rationale, "score": p.score}, snap)
+                elif cooling(p.contract):
+                    self._journal("ENTRY", symbol, "SKIPPED_COOLDOWN", p.contract, p.limit_price,
+                                  {"rationale": p.rationale, "score": p.score}, snap)
+            proposals = [p for p in raw if p.contract not in held and not cooling(p.contract)]
             if not proposals:
                 report["entries"].append({"symbol": symbol, "result": "NO_PROPOSAL"})
                 continue
@@ -456,9 +515,17 @@ class TradingEngine:
                     chosen = (proposal, quantity)
                     break
             if chosen is None:
+                for p in proposals[: self.JOURNAL_MAX_CANDIDATES]:
+                    self._journal("ENTRY", symbol, "NOT_CHOSEN_SIZE_CAP", p.contract, p.limit_price,
+                                  {"rationale": p.rationale, "score": p.score}, snap)
                 report["entries"].append({"symbol": symbol, "result": "NOTHING_AFFORDABLE_WITHIN_SIZE_CAP"})
                 continue
             proposal, quantity = chosen
+            for p in proposals[: self.JOURNAL_MAX_CANDIDATES]:
+                if p is not proposal:
+                    self._journal("ENTRY", symbol, "NOT_CHOSEN", p.contract, p.limit_price,
+                                  {"rationale": p.rationale, "score": p.score,
+                                   "why": "ranked below the chosen candidate or over the size cap"}, snap)
             bucket = int(now.timestamp() // cfg.order_ttl_s)
             intent = OrderIntent(
                 idempotency_key=f"e-{proposal.contract.occ_symbol.strip()}-{bucket}",
@@ -480,11 +547,16 @@ class TradingEngine:
             except ValueError as exc:
                 item.update(result="KEY_CONFLICT", detail=str(exc)[:100])
                 report["entries"].append(item)
+                self._journal("ENTRY", symbol, "KEY_CONFLICT", proposal.contract, proposal.limit_price,
+                              {"rationale": proposal.rationale, "score": proposal.score, "quantity": quantity}, snap)
                 continue
             item.update(result=order.state.value, order_id=order.id)
             if order.risk_failures:
                 item["risk_failures"] = order.risk_failures
             report["entries"].append(item)
+            self._journal("ENTRY", symbol, order.state.value, proposal.contract, proposal.limit_price,
+                          {"rationale": proposal.rationale, "score": proposal.score, "quantity": quantity,
+                           "risk_failures": order.risk_failures}, snap, order.id)
             if order.state in (OrderState.SUBMITTED, OrderState.PARTIALLY_FILLED, OrderState.FILLED):
                 submitted += 1
 

@@ -56,12 +56,13 @@
   async function refresh() {
     if (!token) return;
     try {
-      const [health, status, portfolio, orders, report] = await Promise.all([
+      const [health, status, portfolio, orders, report, decisions] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         api("/api/engine/status"),
         api("/api/portfolio"),
         api("/api/paper/orders"),
         api("/api/report"),
+        api("/api/journal?limit=15"),
       ]);
       pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
       pill("data", status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), status.data_source.fictional ? "warn" : "");
@@ -106,6 +107,14 @@
         { label: "Type", get: (r) => r.kind }, { label: "Contract", get: (r) => r.name },
         { label: "Result", get: (r) => r.action }, { label: "Detail", get: (r) => r.detail },
       ], rows, "Nothing to show");
+
+      const why = (d) => (d.payload.risk_failures && d.payload.risk_failures.length) ? d.payload.risk_failures.join("; ")
+        : (d.payload.why || d.payload.reason || (d.payload.score !== undefined ? "score " + Number(d.payload.score).toFixed(2) : ""));
+      table($("decisions"), [
+        { label: "Time", get: (d) => d.ts.slice(0, 19) }, { label: "Type", get: (d) => d.kind },
+        { label: "Contract", get: (d) => d.contract }, { label: "Outcome", get: (d) => d.disposition },
+        { label: "Why", get: why },
+      ], decisions, "No decisions recorded yet");
 
       table($("orders"), [
         { label: "Time", get: (o) => o.created_at.slice(0, 19) }, { label: "Side", get: (o) => o.intent.side },

@@ -186,6 +186,16 @@ def create_app(
         def engine_status() -> dict[str, Any]:
             return {**engine.status(), "runner": runner.status() if runner else {"running": False}}
 
+        @app.get("/api/journal", dependencies=[Depends(auth)])
+        def journal(limit: int = 50) -> list[dict[str, Any]]:
+            return engine.store.list_decisions(limit=max(1, min(limit, 500)))
+
+        @app.get("/api/journal/summary", dependencies=[Depends(auth)])
+        def journal_report() -> dict[str, Any]:
+            from .journal import journal_summary
+
+            return journal_summary(engine.store, engine.clock())
+
         @app.put("/api/engine/config", dependencies=[Depends(auth)])
         def engine_config(body: EngineConfigBody) -> dict[str, Any]:
             try:

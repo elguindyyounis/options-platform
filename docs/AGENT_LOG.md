@@ -2,6 +2,26 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: decision journal and rejected-opportunity tracking (roadmap step 2, owner away)
+
+* New append-only `decisions` table. The engine writes one record for each placed or risk-rejected
+  entry, each non-HOLD exit, and each candidate not taken (`NOT_CHOSEN`, `NOT_CHOSEN_SIZE_CAP`,
+  `SKIPPED_HELD`, `SKIPPED_COOLDOWN`, `KEY_CONFLICT`), with the strategy rationale and score, risk
+  failures, data provenance (source, whether quote times are verified, broker) and stated
+  assumptions. Up to 5 candidates per symbol per cycle; identical non-order records are not
+  rewritten within an hour. Journaling can never stop a cycle. Records are never edited.
+* New `journal.py`: for each entry candidate, the contract's bid at 4h / 24h / 120h after, from the
+  first recorded snapshot at or after the horizon that passes the data-quality gate. A gap beyond 25%
+  of the horizon, a missing contract or a failed snapshot is `UNOBSERVABLE`; a not-yet-recorded
+  horizon is `PENDING`; a zero bid is -100%. Nothing is interpolated. Groups under 30 matured
+  candidates are marked descriptive only.
+* API: `GET /api/journal`, `GET /api/journal/summary` (both behind the token). Dashboard: new panel
+  "Why did it act, or not?" (the question it answers is its heading).
+* 17 new tests, 236 total; a headless-browser load of the demo market shows the panel with no JS errors.
+* Not verified: any real forward outcomes (needs days of recorded data); the journal's volume on a
+  full real session. Overnight and weekend horizons will mostly read UNOBSERVABLE by design.
+* Journal rows are not pruned. Reviewer: decide a retention policy once its size is known.
+
 ## 2026-11-11: data-quality gate (roadmap step 1, owner away)
 
 * Owner set the direction: a self-improving paper research platform (see BACKLOG "Direction"). Step 1

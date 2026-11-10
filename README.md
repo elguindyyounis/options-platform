@@ -31,6 +31,7 @@ demo market is fictional random data, so profit or loss there means nothing.
 | Replay | `src/optplat/replay.py` | Runs the real engine over recorded snapshots with no look-ahead, in a throwaway store |
 | Evaluation | `src/optplat/evaluation.py` | In-sample vs out-of-sample report over recorded data. Labels results only above minimum trade counts |
 | Data quality | `src/optplat/dataquality.py` | Drops or rejects bad quotes and snapshots before anything uses them; logs every issue |
+| Decision journal | `src/optplat/journal.py` | Why each entry, exit or skipped candidate happened, and what skipped candidates did afterwards |
 | Market clock | `src/optplat/market_clock.py` | NYSE session table; fails closed for years it has no calendar for |
 | Dashboard | `src/optplat/static/` | Single page served at `/`: controls, positions, orders, last cycle, results |
 

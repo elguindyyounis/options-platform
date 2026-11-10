@@ -50,6 +50,20 @@ CREATE TABLE IF NOT EXISTS data_issues (
     detail TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_data_issues_ts ON data_issues(ts);
+CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    disposition TEXT NOT NULL,
+    contract TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    ref_price REAL,
+    order_id TEXT,
+    fictional INTEGER NOT NULL,
+    payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_decisions_ts ON decisions(ts);
 CREATE INDEX IF NOT EXISTS idx_snapshots_symbol_time ON snapshots(symbol, recorded_at);
 CREATE INDEX IF NOT EXISTS idx_snapshots_recorded ON snapshots(recorded_at);
 """
@@ -217,6 +231,69 @@ class Store:
             ).fetchone()
         n, fake = int(row["n"]), int(row["fake"])
         return {"total": n, "real": n - fake, "fictional": fake, "oldest": row["oldest"], "newest": row["newest"]}
+
+    # ---- decision journal --------------------------------------------
+    def record_decision(
+        self,
+        ts: datetime,
+        symbol: str,
+        kind: str,
+        disposition: str,
+        contract: str,
+        strategy: str,
+        ref_price: Optional[float],
+        order_id: Optional[str],
+        fictional: bool,
+        payload: dict[str, Any],
+    ) -> int:
+        """Append-only. A decision is never edited; outcomes are computed from it later, not written into it."""
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT INTO decisions (ts, symbol, kind, disposition, contract, strategy, ref_price, order_id,"
+                " fictional, payload) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (ts.isoformat(), symbol, kind, disposition, contract, strategy, ref_price, order_id, int(fictional),
+                 json.dumps(payload, default=str)),
+            )
+            self._db.commit()
+            return int(cur.lastrowid)
+
+    def list_decisions(
+        self,
+        kind: Optional[str] = None,
+        include_fictional: bool = True,
+        newest_first: bool = True,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        where, args = [], []  # type: list[str], list[Any]
+        if kind:
+            where.append("kind=?")
+            args.append(kind)
+        if not include_fictional:
+            where.append("fictional=0")
+        sql = "SELECT * FROM decisions" + (" WHERE " + " AND ".join(where) if where else "")
+        sql += " ORDER BY ts DESC, id DESC LIMIT ?" if newest_first else " ORDER BY ts, id LIMIT ?"
+        with self._lock:
+            rows = self._db.execute(sql, (*args, max(1, min(limit, 100_000)))).fetchall()
+        return [
+            {
+                "id": r["id"], "ts": r["ts"], "symbol": r["symbol"], "kind": r["kind"],
+                "disposition": r["disposition"], "contract": r["contract"], "strategy": r["strategy"],
+                "ref_price": r["ref_price"], "order_id": r["order_id"], "fictional": bool(r["fictional"]),
+                "payload": json.loads(r["payload"]),
+            }
+            for r in rows
+        ]
+
+    def first_snapshot_at_or_after(
+        self, symbol: str, when: datetime, include_fictional: bool = False
+    ) -> Optional[dict[str, Any]]:
+        sql = "SELECT * FROM snapshots WHERE symbol=? AND recorded_at>=?" + ("" if include_fictional else " AND fictional=0")
+        with self._lock:
+            r = self._db.execute(sql + " ORDER BY recorded_at, id LIMIT 1", (symbol, when.isoformat())).fetchone()
+        if r is None:
+            return None
+        return {"id": r["id"], "symbol": r["symbol"], "recorded_at": r["recorded_at"], "fictional": bool(r["fictional"]),
+                "payload": json.loads(r["payload"])}
 
     # ---- data-quality log --------------------------------------------
     def record_data_issue(self, ts: datetime, symbol: str, kind: str, severity: str, count: int, detail: str) -> None:
