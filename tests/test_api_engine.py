@@ -40,6 +40,11 @@ def test_dashboard_never_assigns_html_from_api_data(client):
     assert "innerHTML" not in src and "outerHTML" not in src and "insertAdjacentHTML" not in src
 
 
+def test_dashboard_reads_a_launcher_token_from_the_fragment_and_scrubs_it(client):
+    src = client.get("/static/app.js").text
+    assert "location.hash" in src and "history.replaceState" in src
+
+
 def test_unexpected_host_header_is_rejected(client):
     assert client.get("/api/health", headers={"Host": "evil.example"}).status_code == 400
 

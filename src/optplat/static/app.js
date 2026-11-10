@@ -3,6 +3,14 @@
   const $ = (id) => document.getElementById(id);
   let token = "";
   try { token = sessionStorage.getItem("optplat_token") || ""; } catch (e) { /* storage unavailable */ }
+  // The launcher opens /#token=... . A URL fragment is never sent to the server. Read it once, keep it for this
+  // tab only, then remove it from the address bar so it is not left in the URL or copied by accident.
+  const fromUrl = /^#token=([A-Za-z0-9_-]{16,200})$/.exec(location.hash);
+  if (fromUrl) {
+    token = fromUrl[1];
+    try { sessionStorage.setItem("optplat_token", token); } catch (e) { /* storage unavailable */ }
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* ignore */ }
+  }
   let killState = false;
 
   // Build DOM with textContent only: nothing from the API is ever parsed as HTML.
@@ -63,7 +71,8 @@
       pill("runner", status.runner.running ? "loop running" : "loop stopped", status.runner.running ? "ok" : "");
       $("cfg-entries").checked = status.config.auto_entries;
       $("cfg-exits").checked = status.config.auto_exits;
-      $("cfg-hours").checked = status.config.enforce_market_hours;
+      $("cfg-hours").checked = status.market.hours_enforced;
+      $("cfg-hours").disabled = status.market.hours_enforced && !status.data_source.fictional; // real data: always on
       if (document.activeElement !== $("cfg-watch")) $("cfg-watch").value = status.config.watchlist.join(", ");
 
       const a = portfolio.account;

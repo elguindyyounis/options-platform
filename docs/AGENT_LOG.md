@@ -14,6 +14,36 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Measured: about 20 KB per snapshot on the demo chain. Real chains may differ; see BACKLOG ideas.
 * Not verified: recording against the live Yahoo feed, or growth over weeks of real use.
 
+## 2026-11-11: market hours always enforced on real data (human-directed session)
+
+* Found: the dashboard's "Enforce market hours" box could be saved off while using Yahoo data. The
+  engine would then trade on stale, unverified after-hours quotes. The owner's saved settings showed
+  exactly that (entries on, hours off) with `OPTPLAT_DATA=yahoo`.
+* Fix (tightening only): the switch is honoured only when the data provider is `fictional`. For real
+  data hours are always enforced; `/api/engine/status` reports `market.hours_enforced` and the
+  dashboard shows the box ticked and disabled.
+* Test change, for the reviewer: `test_market_hours_enforcement_can_be_switched_off_for_demos` now
+  sets `provider.fictional = True`, because that is the only case where the behaviour it describes is
+  still allowed. Added two tests that it cannot be switched off for non-fictional data. No assertion
+  was removed or loosened. 146 tests pass.
+* Not verified: Yahoo against the live feed.
+
+## 2026-11-11: one-command launcher (human-directed session)
+
+* Added `run.sh`: finds Python 3.10+, creates `.venv`, installs once, starts the server, opens the
+  dashboard already connected. `./run.sh yahoo` is the explicit opt-in for unverified Yahoo quotes
+  (sets `OPTPLAT_ALLOW_UNVERIFIED_QUOTES=1` and the startup warning prints). The default `./run.sh`
+  stays on the fictional demo market and keeps the strict quote-time check.
+* Dashboard reads `#token=...` from the URL fragment once, keeps it in `sessionStorage`, and scrubs
+  it with `history.replaceState`. Token checks in `api.py` are unchanged. Reviewer: this is the one
+  change that touches how the token reaches the browser; the token is one-off and local-only.
+* `--loop` / `OPTPLAT_AUTOSTART_LOOP=1` only starts the runner. `auto_entries` still comes from saved
+  config and still defaults to off.
+* Verified: 151 tests; a clean-copy `./run.sh demo --loop` (venv, install, start) and a headless
+  Chromium load of the fragment URL (connected, URL scrubbed, loop running, entries off).
+* Not verified: macOS (the owner's machine), `./run.sh yahoo` against the live feed, and
+  `webbrowser.open` on a real desktop (no browser in the sandbox).
+
 ## 2026-11-11: token UX and Yahoo quickstart (human-directed session)
 
 * `python -m optplat` now generates and prints a one-off token when `OPTPLAT_API_TOKEN` is unset,
