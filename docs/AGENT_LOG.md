@@ -2,6 +2,20 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: market hours always enforced on real data (human-directed session)
+
+* Found: the dashboard's "Enforce market hours" box could be saved off while using Yahoo data. The
+  engine would then trade on stale, unverified after-hours quotes. The owner's saved settings showed
+  exactly that (entries on, hours off) with `OPTPLAT_DATA=yahoo`.
+* Fix (tightening only): the switch is honoured only when the data provider is `fictional`. For real
+  data hours are always enforced; `/api/engine/status` reports `market.hours_enforced` and the
+  dashboard shows the box ticked and disabled.
+* Test change, for the reviewer: `test_market_hours_enforcement_can_be_switched_off_for_demos` now
+  sets `provider.fictional = True`, because that is the only case where the behaviour it describes is
+  still allowed. Added two tests that it cannot be switched off for non-fictional data. No assertion
+  was removed or loosened. 146 tests pass.
+* Not verified: Yahoo against the live feed.
+
 ## 2026-11-11: token UX and Yahoo quickstart (human-directed session)
 
 * `python -m optplat` now generates and prints a one-off token when `OPTPLAT_API_TOKEN` is unset,

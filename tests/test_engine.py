@@ -147,11 +147,29 @@ def test_market_closed_blocks_entries_and_defers_exits():
 
 
 def test_market_hours_enforcement_can_be_switched_off_for_demos():
-    engine, manager, broker, *_ = build(auto_entries=True, enforce_market_hours=False)
+    engine, manager, broker, provider, _ = build(auto_entries=True, enforce_market_hours=False)
+    provider.fictional = True  # only fictional data may run outside the session
     engine.manager.clock.now = SATURDAY
     report = engine.run_cycle()
     assert report["market_open"] is False and report["trading_allowed"] is True
     assert report["entries"][0]["result"] == "FILLED"
+
+
+def test_market_hours_cannot_be_switched_off_for_real_data():
+    engine, manager, broker, provider, clock = build(auto_entries=True, enforce_market_hours=False)
+    assert provider.fictional is False
+    clock.now = SATURDAY
+    report = engine.run_cycle()
+    assert report["market_open"] is False and report["trading_allowed"] is False
+    assert "Market closed" in report["entries_note"] and broker.get_positions() == []
+    assert engine.status()["market"]["hours_enforced"] is True
+
+
+def test_market_hours_switch_is_honoured_only_for_fictional_data():
+    engine, _, _, provider, _ = build(enforce_market_hours=False)
+    assert engine.status()["market"]["hours_enforced"] is True
+    provider.fictional = True
+    assert engine.status()["market"]["hours_enforced"] is False
 
 
 def test_kill_switch_blocks_entries():

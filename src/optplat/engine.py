@@ -136,6 +136,10 @@ class TradingEngine:
         self.store.audit("engine_config", None, {"changes": changes})
         return new
 
+    def _hours_enforced(self, cfg: EngineConfig) -> bool:
+        """Market hours can only be switched off for fictional data. Real quotes outside the session are stale."""
+        return cfg.enforce_market_hours or not self.provider.fictional
+
     def last_cycle(self) -> Optional[dict[str, Any]]:
         raw = self.store.get_state("last_cycle", "")
         return json.loads(raw) if raw else None
@@ -144,7 +148,7 @@ class TradingEngine:
         is_open, reason = session_status(self.clock())
         return {
             "config": self.config().to_dict(),
-            "market": {"open": is_open, "reason": reason},
+            "market": {"open": is_open, "reason": reason, "hours_enforced": self._hours_enforced(self.config())},
             "data_source": {"name": self.provider.name, "fictional": self.provider.fictional},
             "strategy": {"name": self.strategy.name, "version": self.strategy.version},
             "kill_switch": self.manager.kill_switch_active(),
@@ -157,7 +161,7 @@ class TradingEngine:
             now = self.clock()
             cfg = self.config()
             is_open, reason = session_status(now)
-            trading_allowed = is_open or not cfg.enforce_market_hours
+            trading_allowed = is_open or not self._hours_enforced(cfg)
             report: dict[str, Any] = {
                 "started_at": now.isoformat(),
                 "market_open": is_open,

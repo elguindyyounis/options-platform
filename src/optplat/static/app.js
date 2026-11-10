@@ -63,7 +63,8 @@
       pill("runner", status.runner.running ? "loop running" : "loop stopped", status.runner.running ? "ok" : "");
       $("cfg-entries").checked = status.config.auto_entries;
       $("cfg-exits").checked = status.config.auto_exits;
-      $("cfg-hours").checked = status.config.enforce_market_hours;
+      $("cfg-hours").checked = status.market.hours_enforced;
+      $("cfg-hours").disabled = status.market.hours_enforced && !status.data_source.fictional; // real data: always on
       if (document.activeElement !== $("cfg-watch")) $("cfg-watch").value = status.config.watchlist.join(", ");
 
       const a = portfolio.account;
