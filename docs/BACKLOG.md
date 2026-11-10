@@ -21,8 +21,8 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 ## Next up
 
-1. **Weekly research agent.** Proposes experiments from the journal and evaluation results, runs them in
-   shadow mode, and writes a report for the owner to approve.
+1. **Schedule the weekly report.** `python -m optplat.weekly` exists; running it on a timer and where the
+   owner reads it (file, email, notification) is the owner's choice.
 
 Existing items, in order:
 
@@ -88,3 +88,7 @@ Existing items, in order:
   equity/drawdown curve recorded per cycle while trading is allowed (kept apart for fictional vs real data),
   with a sample-size notice against the 30-trade minimum; positions show exit levels and days to expiry;
   experiments panel reads pre-registered hypotheses; duplicated per-cycle table removed.
+* Weekly research report (roadmap step 6): `weekly.py`, `python -m optplat.weekly`; read-only, rule-based
+  summary of data health, paper results, decisions, forward outcomes and experiments, plus questions worth
+  a pre-registered test (data reliability, a dominant risk rejection, ranking vs passed-over candidates),
+  each with its evidence and sample-size caveat. It registers nothing and never proposes loosening a limit.

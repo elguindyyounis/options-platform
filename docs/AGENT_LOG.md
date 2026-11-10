@@ -2,6 +2,19 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: weekly research report (roadmap step 6, owner away)
+
+* New `weekly.py` and `python -m optplat.weekly [--days N] [--fictional] [--out file]`. Opens the
+  database read-only, so it cannot trade, register a hypothesis or change a setting. Rule-based, no
+  language model. Sections: data trust, paper account, decisions and top risk rejections, 24 h forward
+  outcomes of chosen vs passed-over candidates, experiments, and proposed questions.
+* Proposals are questions with evidence, never instructions: reliability first; a rejection rule that
+  causes more than half of 20+ rejections is flagged for the owner (the text says an agent must not loosen
+  it); a ranking question appears only with 30+ matured outcomes in both groups and a 2-point gap.
+* Verified: 290 tests pass, including thresholds, the read-only CLI and error paths.
+* Not done on purpose: scheduling it. Where and how often it runs is the owner's call. Thresholds for
+  proposals are my choice and are only prompts for a human, not trading parameters.
+
 ## 2026-11-11: dashboard question audit (roadmap step 5, owner away)
 
 * Every dashboard panel now states the trading question it answers; a test fails on any `<section>`

@@ -35,6 +35,7 @@ demo market is fictional random data, so profit or loss there means nothing.
 | Research | `src/optplat/research.py` | Pre-registered challenger vs frozen baseline experiments; confirmatory results use only data recorded after registration |
 | Options signals | `src/optplat/signals.py` | Volume/OI, unusual activity, liquidity tiers, partial-chain GEX. All unvalidated; strategies cannot use them yet |
 | Market clock | `src/optplat/market_clock.py` | NYSE session table; fails closed for years it has no calendar for |
+| Weekly report | `src/optplat/weekly.py` | `python -m optplat.weekly`: read-only summary of the week and questions worth a pre-registered test |
 | Dashboard | `src/optplat/static/` | Single page served at `/`. Each panel states the question it answers: controls, can I trust this, equity and results, positions with exit levels, decisions, orders, experiments |
 
 ## The MVP loop
