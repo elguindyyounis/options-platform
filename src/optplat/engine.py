@@ -43,6 +43,8 @@ class EngineConfig:
     max_days_held: int = 0
     min_dte_to_hold: int = 5
     reentry_cooldown_s: int = 86400  # do not re-buy a contract within this long of selling it
+    record_market_data: bool = True  # persist every snapshot/quote the engine sees (replay raw material)
+    record_retention_days: int = 90  # 0 keeps recordings forever
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -74,7 +76,7 @@ class EngineConfig:
         for name, value in asdict(self).items():
             if name == "watchlist":
                 continue
-            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours")):
+            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_market_data")):
                 raise ValueError(f"{name} has the wrong type")
         checks = [
             (0 <= self.max_new_per_cycle <= 5, "max_new_per_cycle must be 0-5"),
@@ -85,6 +87,7 @@ class EngineConfig:
             (0 <= self.max_days_held <= 365, "max_days_held must be 0-365"),
             (0 <= self.min_dte_to_hold <= 60, "min_dte_to_hold must be 0-60"),
             (0 <= self.reentry_cooldown_s <= 2_592_000, "reentry_cooldown_s must be 0-2592000"),
+            (0 <= self.record_retention_days <= 3650, "record_retention_days must be 0-3650"),
         ]
         for ok, message in checks:
             if not ok:
@@ -118,6 +121,7 @@ class TradingEngine:
         self.clock = clock
         self._default = default_config or EngineConfig()
         self._lock = threading.RLock()
+        self._record = True  # per-cycle copy of cfg.record_market_data
 
     # ---- config -------------------------------------------------------
     def config(self) -> EngineConfig:
@@ -173,6 +177,7 @@ class TradingEngine:
                 "errors": [],
             }
             snapshots: dict[str, Optional[MarketSnapshot]] = {}
+            self._record = cfg.record_market_data
 
             if hasattr(self.provider, "advance"):
                 self.provider.advance()  # demo market moves one step per cycle
@@ -206,10 +211,19 @@ class TradingEngine:
             return self._finish(report)
 
     def _finish(self, report: dict[str, Any]) -> dict[str, Any]:
+        self._purge_recordings(report)
         report["finished_at"] = self.clock().isoformat()
         self.store.set_state("last_cycle", json.dumps(report, default=str))
         self.store.audit("engine_cycle", None, {"exits": len(report["exits"]), "entries": len(report["entries"])})
         return report
+
+    def _purge_recordings(self, report: dict[str, Any]) -> None:
+        try:
+            cfg = self.config()
+            if cfg.record_market_data:
+                self.store.purge_market_data(cfg.record_retention_days, now=self.clock())
+        except Exception as exc:  # noqa: BLE001 - housekeeping must never stop the cycle
+            report["errors"].append(f"recorder purge: {type(exc).__name__}: {str(exc)[:100]}")
 
     @staticmethod
     def _guard(report: dict[str, Any], phase: str, fn: Callable[[], Any]) -> None:
@@ -225,10 +239,28 @@ class TradingEngine:
         if symbol not in cache:
             try:
                 cache[symbol] = self.provider.snapshot(symbol)
+                self._record_snapshot(cache[symbol], report)
             except Exception as exc:  # noqa: BLE001
                 cache[symbol] = None
                 report["errors"].append(f"data {symbol}: {type(exc).__name__}: {str(exc)[:100]}")
         return cache[symbol]
+
+    def _record_snapshot(self, snap: MarketSnapshot, report: dict[str, Any]) -> None:
+        """Recording is best effort: a storage failure is reported but never blocks trading or exits."""
+        if not self._record:
+            return
+        try:
+            self.store.record_snapshot(snap, recorded_at=self.clock())
+        except Exception as exc:  # noqa: BLE001
+            report["errors"].append(f"recorder {snap.symbol}: {type(exc).__name__}: {str(exc)[:100]}")
+
+    def _record_quotes(self, quotes: list, report: dict[str, Any]) -> None:
+        if not self._record:
+            return
+        try:
+            self.store.record_quotes(quotes, fictional=self.provider.fictional, recorded_at=self.clock())
+        except Exception as exc:  # noqa: BLE001
+            report["errors"].append(f"recorder quotes: {type(exc).__name__}: {str(exc)[:100]}")
 
     def _sync_sim_quotes(
         self,
@@ -252,7 +284,9 @@ class TradingEngine:
         missing = [p.contract for p in positions if p.contract not in covered]
         if missing:
             try:
-                for quote in self.provider.quotes_for(missing):
+                held = self.provider.quotes_for(missing)
+                self._record_quotes(held, report)
+                for quote in held:
                     sim.set_quote(quote)
             except Exception as exc:  # noqa: BLE001
                 report["errors"].append(f"held quotes: {type(exc).__name__}: {str(exc)[:100]}")
