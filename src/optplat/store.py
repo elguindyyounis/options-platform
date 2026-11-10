@@ -64,6 +64,15 @@ CREATE TABLE IF NOT EXISTS decisions (
     payload TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_ts ON decisions(ts);
+CREATE TABLE IF NOT EXISTS equity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    equity REAL NOT NULL,
+    cash REAL NOT NULL,
+    open_premium REAL NOT NULL,
+    fictional INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_equity_ts ON equity(ts);
 CREATE TABLE IF NOT EXISTS hypotheses (
     id TEXT PRIMARY KEY,
     registered_at TEXT NOT NULL,
@@ -245,6 +254,30 @@ class Store:
             ).fetchone()
         n, fake = int(row["n"]), int(row["fake"])
         return {"total": n, "real": n - fake, "fictional": fake, "oldest": row["oldest"], "newest": row["newest"]}
+
+    # ---- equity curve ------------------------------------------------
+    def record_equity(self, ts: datetime, equity: float, cash: float, open_premium: float, fictional: bool) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO equity (ts, equity, cash, open_premium, fictional) VALUES (?,?,?,?,?)",
+                (ts.isoformat(), equity, cash, open_premium, int(fictional)),
+            )
+            self._db.commit()
+
+    def list_equity(self, limit: int = 500, fictional: Optional[bool] = None) -> list[dict[str, Any]]:
+        """The newest `limit` points, returned oldest first. `fictional` keeps made-up and real curves apart."""
+        sql = "SELECT * FROM equity" + ("" if fictional is None else " WHERE fictional=?")
+        args: tuple[Any, ...] = () if fictional is None else (int(fictional),)
+        with self._lock:
+            rows = self._db.execute(sql + " ORDER BY ts DESC, id DESC LIMIT ?", (*args, max(1, min(limit, 5000)))).fetchall()
+        return [{"ts": r["ts"], "equity": r["equity"], "cash": r["cash"], "open_premium": r["open_premium"],
+                 "fictional": bool(r["fictional"])} for r in reversed(rows)]
+
+    def prune_equity(self, before: datetime) -> int:
+        with self._lock:
+            cur = self._db.execute("DELETE FROM equity WHERE ts<?", (before.isoformat(),))
+            self._db.commit()
+            return cur.rowcount
 
     # ---- pre-registered hypotheses (append-only: no update, no delete) -
     def register_hypothesis(self, registered_at: datetime, content_hash: str, payload: dict[str, Any]) -> str:

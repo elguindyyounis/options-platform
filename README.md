@@ -35,7 +35,7 @@ demo market is fictional random data, so profit or loss there means nothing.
 | Research | `src/optplat/research.py` | Pre-registered challenger vs frozen baseline experiments; confirmatory results use only data recorded after registration |
 | Options signals | `src/optplat/signals.py` | Volume/OI, unusual activity, liquidity tiers, partial-chain GEX. All unvalidated; strategies cannot use them yet |
 | Market clock | `src/optplat/market_clock.py` | NYSE session table; fails closed for years it has no calendar for |
-| Dashboard | `src/optplat/static/` | Single page served at `/`: controls, positions, orders, last cycle, results |
+| Dashboard | `src/optplat/static/` | Single page served at `/`. Each panel states the question it answers: controls, can I trust this, equity and results, positions with exit levels, decisions, orders, experiments |
 
 ## The MVP loop
 
@@ -114,7 +114,9 @@ subclass `BrokerConformance`, make the tests pass, then run it against a paper a
 
 `python -m optplat` serves a dashboard at http://127.0.0.1:8800. Paste your `OPTPLAT_API_TOKEN`, then
 **Run one cycle**. With the default demo market you can tick *Automatic entries* and *Save settings*
-to watch positions open and close. The token is kept in `sessionStorage` for the tab only.
+to watch positions open and close. The token is kept in `sessionStorage` for the tab only. Each panel is headed
+by the question it answers; the equity curve needs a few completed cycles, and below 30 closed trades the
+page says the results are not evidence.
 
 Environment variables (see `.env.example`):
 

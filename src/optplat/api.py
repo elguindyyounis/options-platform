@@ -196,6 +196,30 @@ def create_app(
 
             return journal_summary(engine.store, engine.clock())
 
+        @app.get("/api/equity", dependencies=[Depends(auth)])
+        def equity(limit: int = 500) -> dict[str, Any]:
+            from .evaluation import equity_summary
+
+            fictional = engine.provider.fictional  # never mix a made-up curve with a real one
+            points = engine.store.list_equity(limit=max(2, min(limit, 2000)), fictional=fictional)
+            return {"fictional": fictional, "points": [{"ts": p["ts"], "equity": p["equity"]} for p in points],
+                    "summary": equity_summary(points)}
+
+        @app.get("/api/research/hypotheses", dependencies=[Depends(auth)])
+        def hypotheses() -> list[dict[str, Any]]:
+            from .research import verify
+
+            out = []
+            for h in engine.store.list_hypotheses():
+                results = engine.store.hypothesis_results(h["id"])
+                out.append({
+                    "id": h["id"], "registered_at": h["registered_at"], "statement": h["payload"]["statement"],
+                    "challenger": h["payload"]["challenger"], "criteria": h["payload"]["criteria"],
+                    "intact": verify(h), "status": results[-1]["status"] if results else "NOT_EVALUATED",
+                    "evaluations": len(results),
+                })
+            return out
+
         @app.get("/api/signals/{symbol}", dependencies=[Depends(auth)])
         def signals(symbol: str) -> dict[str, Any]:
             from datetime import datetime as _dt

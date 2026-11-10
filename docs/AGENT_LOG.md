@@ -2,6 +2,29 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: dashboard question audit (roadmap step 5, owner away)
+
+* Every dashboard panel now states the trading question it answers; a test fails on any `<section>`
+  without `data-question` (or `data-plumbing` for the connect box). Panels: controls, "can I trust
+  this right now" (loop, last cycle and errors, data source, market, recorder counts, 24 h data
+  quality, with a verdict line), account and results, open positions (take-profit and stop levels
+  at the bid, days to expiry), decisions, orders, experiments (pre-registered hypotheses and their
+  status). The duplicated per-cycle table was removed: the decision journal already answers "why".
+* New `equity` table, written once per completed cycle only while trading is allowed (no flat overnight
+  points), pruned at 90 days or the snapshot retention if longer, and kept apart by fictional/real so a
+  made-up curve never mixes with a real one. `/api/equity`, `/api/research/hypotheses`, `equity_summary`.
+* Equity chart: one series, no legend, hairline grid, start-equity reference, end label, crosshair
+  tooltip (arrow keys work), "show as table", light and dark colours, drawn at the real pixel width so
+  text stays readable on a phone. Built with `createElementNS` and `textContent` only.
+* The sample-size notice states that fewer than 30 closed trades is not evidence. The chart title says
+  nothing about edge, and fictional data is labelled in the tiles and the trust panel.
+* Verified: 283 tests pass; page loaded in headless Chromium at 1100 px and 390 px in light and dark
+  with no console or page errors and no horizontal overflow; hover tooltip and table toggle exercised.
+  Visual check used a fictional demo curve I seeded for the test.
+* Not verified: the page against live Yahoo data or in Safari; exit-level columns assume the
+  engine's percent thresholds apply to average cost, as `exits.py` does. No risk defaults or exit
+  thresholds were changed.
+
 ## 2026-11-11: options signals as measured features (roadmap step 4, owner away)
 
 * New `signals.py`: coverage of the sampled chain, liquidity tiers (A/B/C; B is the baseline's own

@@ -21,19 +21,17 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 ## Next up
 
-1. **Dashboard question audit.** Every panel states the trading question it answers; remove or redesign
-   those that do not help a decision.
-2. **Weekly research agent.** Proposes experiments from the journal and evaluation results, runs them in
+1. **Weekly research agent.** Proposes experiments from the journal and evaluation results, runs them in
    shadow mode, and writes a report for the owner to approve.
 
 Existing items, in order:
 
-3. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
+2. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
    default, with tests for ratchet behaviour and unobservable quotes.
-4. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
-5. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
+3. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
+4. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
    `orders(state)`; paginate `list_orders`.
-6. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
+5. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
    they find without changing behaviour.
 
 ## Blocked on a human
@@ -47,7 +45,7 @@ Existing items, in order:
 * **Licensed, timestamped options data.** Needs an account and budget decision.
 * **Earnings and event blackout.** Needs a trustworthy event-calendar source.
 * **2027 NYSE holiday table.** Needs an official source; the clock fails closed for unknown years.
-* **Risk-limit tuning, strategy promotion.** Owner decisions, driven by evidence from items 1-3.
+* **Risk-limit tuning, strategy promotion.** Owner decisions, driven by evidence from the research loop.
 
 ## Ideas (unscheduled)
 
@@ -85,3 +83,8 @@ Existing items, in order:
   `python -m optplat.signals scan|study`; `/api/signals/{symbol}`.
 * Runner health: seconds since last good cycle and a stalled flag (3x interval) on `/api/health`
   (no error text) and `/api/engine/status` (with error); dashboard shows LOOP STALLED.
+* Dashboard question audit (roadmap step 5): every panel states the trading question it answers (a test
+  fails on a section without one); a "can I trust this right now" panel replaces three plumbing lines;
+  equity/drawdown curve recorded per cycle while trading is allowed (kept apart for fictional vs real data),
+  with a sample-size notice against the 30-trade minimum; positions show exit levels and days to expiry;
+  experiments panel reads pre-registered hypotheses; duplicated per-cycle table removed.

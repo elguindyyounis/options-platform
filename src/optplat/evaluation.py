@@ -39,6 +39,21 @@ def _max_drawdown_pct(equity: Sequence[float], start: float) -> float:
     return round(worst, 2)
 
 
+def equity_summary(points: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Peak, drawdowns and change from the first point, for the equity chart's headline numbers."""
+    values = [float(p["equity"]) for p in points]
+    if not values:
+        return {"points": 0, "start": None, "last": None, "change_pct": None, "peak": None,
+                "current_drawdown_pct": None, "max_drawdown_pct": None}
+    peak = max(values)
+    return {
+        "points": len(values), "start": values[0], "last": values[-1],
+        "change_pct": round((values[-1] - values[0]) / values[0] * 100, 3) if values[0] else None,
+        "peak": peak, "current_drawdown_pct": round((peak - values[-1]) / peak * 100, 2) if peak > 0 else None,
+        "max_drawdown_pct": _max_drawdown_pct(values, values[0]),
+    }
+
+
 def _segment(name: str, rows: Sequence[dict[str, Any]], **replay_kwargs: Any) -> dict[str, Any]:
     result: ReplayResult = run_replay(rows, **replay_kwargs)
     rep = result.report

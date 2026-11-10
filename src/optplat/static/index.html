@@ -6,10 +6,10 @@
 <title>options-platform</title>
 <style>
   :root { color-scheme: light dark; --bg:#fff; --fg:#1b1b1f; --mut:#6b6b76; --line:#dcdce2; --card:#f6f6f9;
-          --ok:#13763a; --bad:#b42318; --warn:#9a5b00; --accent:#2457d6; }
+          --ok:#13763a; --bad:#b42318; --warn:#9a5b00; --accent:#2457d6; --series-1:#2a78d6; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#111114; --fg:#ececf1; --mut:#9b9ba6; --line:#2b2b33; --card:#19191e;
-            --ok:#4cc17a; --bad:#ff7b72; --warn:#e3b341; --accent:#7aa2ff; }
+            --ok:#4cc17a; --bad:#ff7b72; --warn:#e3b341; --accent:#7aa2ff; --series-1:#3987e5; }
   }
   * { box-sizing: border-box; }
   body { margin:0; font:14px/1.45 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--fg); }
@@ -29,8 +29,32 @@
   th, td { text-align:left; padding:4px 8px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; vertical-align:top; }
   th { color:var(--mut); font-weight:600; font-size:12px; }
   .scroll { overflow-x:auto; }
+  main > section { min-width:0; }
   .muted { color:var(--mut); }
   #msg { min-height:1.4em; }
+  .q { color:var(--mut); font-size:12.5px; margin:-4px 0 10px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:10px; margin-bottom:12px; }
+  .tile { padding:2px 0; } .tile .label { color:var(--mut); font-size:12px; }
+  .tile .value { font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .tile .sub { color:var(--mut); font-size:12px; }
+  .verdict { font-weight:600; margin-bottom:8px; }
+  dl.facts { display:grid; grid-template-columns:max-content 1fr; gap:3px 14px; margin:0; }
+  dl.facts dt { color:var(--mut); } dl.facts dd { margin:0; }
+  .viz { position:relative; }
+  .viz svg { display:block; width:100%; height:auto; overflow:visible; touch-action:pan-y; }
+  .viz svg:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+  .viz .grid { stroke:var(--line); stroke-width:1; }
+  .viz .ref { stroke:var(--mut); stroke-width:1; opacity:.55; }
+  .viz .line { fill:none; stroke:var(--series-1); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+  .viz .area { fill:var(--series-1); opacity:.10; }
+  .viz .dot { fill:var(--series-1); stroke:var(--card); stroke-width:2; }
+  .viz .cross { stroke:var(--mut); stroke-width:1; }
+  .viz text { fill:var(--mut); font-size:11px; font-variant-numeric:tabular-nums; }
+  .viz text.end { fill:var(--fg); font-weight:600; }
+  .viz .tip { position:absolute; pointer-events:none; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:5px 9px; font-size:12px; white-space:nowrap; }
+  .viz .tip strong { display:block; font-size:14px; font-variant-numeric:tabular-nums; }
+  .viz .tip span { color:var(--mut); }
+  .linkbtn { border:none; background:none; color:var(--accent); padding:0; margin-top:6px; }
 </style>
 </head>
 <body>
@@ -42,7 +66,7 @@
   <span id="kill" class="pill"></span>
 </header>
 <main>
-  <section id="connect">
+  <section id="connect" data-plumbing="Connection to the local server">
     <h2>Connect</h2>
     <div class="row">
       <input id="token" type="password" placeholder="Paste the token printed in the terminal" autocomplete="off">
@@ -51,8 +75,9 @@
     <div id="msg" class="muted"></div>
   </section>
 
-  <section>
+  <section data-question="Is it running, and what is it allowed to do?">
     <h2>Controls</h2>
+    <p class="q">Is it running, and what is it allowed to do?</p>
     <div class="row">
       <button id="btn-cycle" class="primary">Run one cycle</button>
       <button id="btn-start">Start loop</button>
@@ -66,15 +91,51 @@
       <label><input id="cfg-hours" type="checkbox"> Enforce market hours</label>
       <input id="cfg-watch" type="text" placeholder="Watchlist: SPY, QQQ">
       <button id="btn-save">Save settings</button>
+      <span id="cfg-dirty" class="muted"></span>
     </div>
     <p class="muted" style="margin:8px 0 0">Entries cannot be enabled without exits. Everything here is paper trading.</p>
   </section>
 
-  <section><h2>Account and results</h2><div id="account"></div><div id="report" class="muted"></div></section>
-  <section><h2>Open positions</h2><div class="scroll" id="positions"></div></section>
-  <section><h2>Last cycle</h2><div id="cycle" class="muted"></div><div id="recorder" class="muted"></div><div id="quality" class="muted"></div><div class="scroll" id="cycle-table"></div></section>
-  <section><h2>Why did it act, or not? (latest decisions)</h2><div class="scroll" id="decisions"></div></section>
-  <section><h2>Orders</h2><div class="scroll" id="orders"></div></section>
+  <section data-question="Can I trust the numbers on this page right now?">
+    <h2>Can I trust this right now?</h2>
+    <p class="q">Can I trust the numbers on this page right now?</p>
+    <div id="trust-verdict" class="verdict"></div>
+    <dl class="facts" id="trust"></dl>
+  </section>
+
+  <section data-question="Is the paper account growing, and is there enough history for that to mean anything?">
+    <h2>Account and results</h2>
+    <p class="q">Is the paper account growing, and is there enough history for that to mean anything?</p>
+    <div class="tiles" id="tiles"></div>
+    <div id="sample" class="muted"></div>
+    <div class="viz" id="equity-chart"></div>
+    <button class="linkbtn" id="btn-table" type="button">Show as table</button>
+    <div class="scroll" id="equity-table" hidden></div>
+  </section>
+
+  <section data-question="What do I hold, and what would make each position exit?">
+    <h2>Open positions</h2>
+    <p class="q">What do I hold, and what would make each position exit?</p>
+    <div class="scroll" id="positions"></div>
+  </section>
+
+  <section data-question="Why did it act, or not?">
+    <h2>Latest decisions</h2>
+    <p class="q">Why did it act, or not? Includes candidates it passed on.</p>
+    <div class="scroll" id="decisions"></div>
+  </section>
+
+  <section data-question="What did the broker actually do with my orders?">
+    <h2>Orders</h2>
+    <p class="q">What did the broker actually do with the orders sent?</p>
+    <div class="scroll" id="orders"></div>
+  </section>
+
+  <section data-question="Is any challenger beating the frozen baseline, with enough trades to mean it?">
+    <h2>Experiments</h2>
+    <p class="q">Is any challenger beating the frozen baseline, with enough trades to mean it?</p>
+    <div class="scroll" id="research"></div>
+  </section>
 </main>
 <script src="/static/app.js"></script>
 </body>

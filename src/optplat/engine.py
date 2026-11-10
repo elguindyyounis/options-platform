@@ -230,6 +230,12 @@ class TradingEngine:
 
     def _finish(self, report: dict[str, Any]) -> dict[str, Any]:
         report["finished_at"] = self.clock().isoformat()
+        if report.get("trading_allowed"):  # equity only moves with the market; flat overnight points would stretch the chart
+            try:
+                acct = self.manager.broker.get_account()
+                self.store.record_equity(self._cycle_now, acct.equity, acct.cash, acct.open_premium, self.provider.fictional)
+            except Exception:  # noqa: BLE001 - a missing chart point must never affect a cycle
+                pass
         self.store.set_state("last_cycle", json.dumps(report, default=str))
         self.store.audit("engine_cycle", None, {"exits": len(report["exits"]), "entries": len(report["entries"])})
         return report
@@ -348,6 +354,7 @@ class TradingEngine:
             return
         self.store.prune_snapshots(now - timedelta(days=cfg.snapshot_retention_days))
         self.store.prune_data_issues(now - timedelta(days=cfg.snapshot_retention_days))
+        self.store.prune_equity(now - timedelta(days=max(cfg.snapshot_retention_days, 90)))
         self.store.set_state("snapshot_last_prune", now.isoformat())
 
     def _sync_sim_quotes(
