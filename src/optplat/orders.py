@@ -19,9 +19,11 @@ from .models import (
     TERMINAL_STATES,
     BrokerOrderStatus,
     Mode,
+    OptionContract,
     Order,
     OrderIntent,
     OrderState,
+    Side,
     utcnow,
 )
 from .risk import RiskPolicy, evaluate
@@ -87,7 +89,8 @@ class OrderManager:
         self.store.audit("kill_switch", None, {"active": active, "reason": reason[:200]})
 
     # ---- submit -------------------------------------------------------
-    def submit_buy(self, intent: OrderIntent) -> Order:
+    def submit(self, intent: OrderIntent) -> Order:
+        """Risk-check and place one BUY_TO_OPEN or SELL_TO_CLOSE limit order."""
         with self._lock:
             existing = self.store.get_by_key(intent.idempotency_key)
             if existing is not None:
@@ -114,6 +117,13 @@ class OrderManager:
             except Exception as exc:  # noqa: BLE001
                 return self._reject(order, [f"Broker account data unavailable: {type(exc).__name__}"])
 
+            pending_close = 0
+            if intent.side is Side.SELL_TO_CLOSE:
+                pending_close = self._pending_close_qty(intent.contract)
+                held = [p for p in positions if p.contract == intent.contract]
+                if held:
+                    order.cost_basis = held[0].avg_cost
+
             decision = evaluate(
                 intent,
                 quote,
@@ -122,6 +132,7 @@ class OrderManager:
                 self.policy,
                 now=self.clock(),
                 kill_switch=self.kill_switch_active(),
+                pending_close_qty=pending_close,
             )
             order.risk_warnings = decision.warnings
             if not decision.allowed:
@@ -184,6 +195,88 @@ class OrderManager:
                     changed.append(order.id)
         return changed
 
+    def submit_buy(self, intent: OrderIntent) -> Order:
+        if intent.side is not Side.BUY_TO_OPEN:
+            raise ValueError("submit_buy requires a BUY_TO_OPEN intent")
+        return self.submit(intent)
+
+    def _pending_close_qty(self, contract: OptionContract) -> int:
+        """Quantity already being sold by working orders, so exits can never double-sell a position."""
+        active = (S.RISK_APPROVED, S.SUBMITTED, S.PARTIALLY_FILLED, S.ERROR_RECONCILE_REQUIRED)
+        total = 0
+        for o in self.store.list_orders(open_only=True, limit=1000):
+            if o.intent.side is Side.SELL_TO_CLOSE and o.intent.contract == contract and o.state in active:
+                total += max(0, o.intent.quantity - o.filled_qty)
+        return total
+
+    def entry_time(self, contract: OptionContract) -> Optional[datetime]:
+        """When the most recent filled buy of this contract completed (None if unknown)."""
+        for o in self.store.list_orders(limit=1000):  # newest first
+            if o.intent.side is Side.BUY_TO_OPEN and o.intent.contract == contract and o.state is S.FILLED:
+                return o.updated_at
+        return None
+
+    def last_close_time(self, contract: OptionContract) -> Optional[datetime]:
+        """When this contract was most recently sold (None if never)."""
+        for o in self.store.list_orders(limit=1000):  # newest first
+            if o.intent.side is Side.SELL_TO_CLOSE and o.intent.contract == contract and o.state is S.FILLED:
+                return o.updated_at
+        return None
+
+    def report(self) -> dict[str, Any]:
+        """Realized P&L from closed paper trades plus bid-marked open positions."""
+        closed = []
+        for o in self.store.list_orders(limit=1000):
+            if (
+                o.intent.side is Side.SELL_TO_CLOSE
+                and o.state is S.FILLED
+                and o.cost_basis is not None
+                and o.avg_fill_price
+            ):
+                pnl = round((o.avg_fill_price - o.cost_basis) * o.filled_qty * o.intent.contract.multiplier, 2)
+                closed.append(
+                    {
+                        "order_id": o.id,
+                        "contract": o.intent.contract.occ_symbol.strip(),
+                        "quantity": o.filled_qty,
+                        "entry": o.cost_basis,
+                        "exit": o.avg_fill_price,
+                        "pnl": pnl,
+                        "closed_at": o.updated_at.isoformat(),
+                    }
+                )
+        wins = sum(1 for c in closed if c["pnl"] > 0)
+        open_rows = []
+        for p in self.broker.get_positions():
+            row: dict[str, Any] = {
+                "contract": p.contract.occ_symbol.strip(),
+                "quantity": p.quantity,
+                "avg_cost": p.avg_cost,
+                "mark": None,
+                "unrealized_pnl": None,
+                "mark_quality": "UNOBSERVABLE",
+            }
+            try:
+                q = self.broker.get_quote(p.contract)
+                if q.is_valid() and q.bid > 0:
+                    row.update(
+                        mark=q.bid,
+                        unrealized_pnl=round((q.bid - p.avg_cost) * p.quantity * p.contract.multiplier, 2),
+                        mark_quality="BID",
+                    )
+            except Exception:  # noqa: BLE001 - an unobservable mark is reported, never guessed
+                pass
+            open_rows.append(row)
+        return {
+            "closed_trades": len(closed),
+            "wins": wins,
+            "realized_pnl": round(sum(c["pnl"] for c in closed), 2),
+            "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
+            "closed": closed[:50],
+            "open": open_rows,
+            "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
+        }
+
     # ---- queries ------------------------------------------------------
     def get(self, order_id: str) -> Optional[Order]:
         return self.store.get_order(order_id)
@@ -244,5 +337,6 @@ class OrderManager:
         if target is not order.state or target is S.PARTIALLY_FILLED:
             self._transition(order, target, f"Broker status {status.status}")
         else:
-            order.updated_at = self.clock()
+            # Refresh fill fields only. updated_at marks the last real state change, so a routine
+            # reconcile must not make a resting order look fresh (that would defeat stale-order cancels).
             self.store.save_order(order)

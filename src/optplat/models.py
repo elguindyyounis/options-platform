@@ -23,6 +23,11 @@ class Right(str, Enum):
     PUT = "P"
 
 
+class Side(str, Enum):
+    BUY_TO_OPEN = "BUY_TO_OPEN"
+    SELL_TO_CLOSE = "SELL_TO_CLOSE"
+
+
 class OrderState(str, Enum):
     DRAFT = "DRAFT"
     RISK_REJECTED = "RISK_REJECTED"
@@ -114,6 +119,7 @@ class OrderIntent:
     quantity: int
     limit_price: float
     note: str = ""
+    side: Side = Side.BUY_TO_OPEN
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -123,6 +129,7 @@ class OrderIntent:
             "quantity": self.quantity,
             "limit_price": self.limit_price,
             "note": self.note,
+            "side": self.side.value,
         }
 
     @classmethod
@@ -134,6 +141,7 @@ class OrderIntent:
             quantity=d["quantity"],
             limit_price=d["limit_price"],
             note=d.get("note", ""),
+            side=Side(d.get("side", Side.BUY_TO_OPEN.value)),
         )
 
 
@@ -179,6 +187,7 @@ class Order:
     filled_qty: int = 0
     avg_fill_price: Optional[float] = None
     history: list[dict[str, str]] = field(default_factory=list)
+    cost_basis: Optional[float] = None  # per-share entry cost, recorded on SELL_TO_CLOSE orders
 
     @classmethod
     def new(cls, intent: OrderIntent, now: datetime) -> "Order":
@@ -204,6 +213,7 @@ class Order:
             "filled_qty": self.filled_qty,
             "avg_fill_price": self.avg_fill_price,
             "history": list(self.history),
+            "cost_basis": self.cost_basis,
         }
 
     @classmethod
@@ -220,4 +230,5 @@ class Order:
             filled_qty=int(d.get("filled_qty", 0)),
             avg_fill_price=d.get("avg_fill_price"),
             history=list(d.get("history", [])),
+            cost_basis=d.get("cost_basis"),
         )
