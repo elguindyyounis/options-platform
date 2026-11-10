@@ -23,3 +23,19 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-10: quote and snapshot recorder (scheduled agent run)
+
+* Backlog item 1. New `market_snapshots` / `market_quotes` tables plus `Store.record_snapshot`,
+  `record_quotes`, `recorded_snapshots`, `recorder_counts`, `purge_market_data`. The engine records every
+  snapshot it fetches and the held-position quotes it pulls. Recording is best effort: a storage error is
+  reported in the cycle's `errors` and never blocks exits or entries.
+* New engine config: `record_market_data` (default on) and `record_retention_days` (default 90; 0 keeps
+  everything; validated 0-3650). Retention is applied at the end of each cycle. No safety control,
+  risk limit or auth code was touched.
+* Verified: 156 tests pass (11 new in `tests/test_recorder.py`: contents, time order, disable switch,
+  fictional flag, failure isolation, transaction rollback, retention).
+* Not verified: growth of the database over weeks against Yahoo (a 20-symbol watchlist at a 5 minute
+  interval stores a full chain sample per cycle; the 90 day default is a guess the owner should tune),
+  and no migration path for existing databases beyond `CREATE TABLE IF NOT EXISTS` (new tables only).
+
