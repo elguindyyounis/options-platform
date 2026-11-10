@@ -2,6 +2,26 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: options signals as measured features (roadmap step 4, owner away)
+
+* New `signals.py`: coverage of the sampled chain, liquidity tiers (A/B/C; B is the baseline's own
+  filter), volume-to-open-interest and unusual-activity flags (volume at least equal to open interest,
+  with minimums; trade direction is unknown and stated), call/put volume and OI ratios (undefined,
+  not infinite, when one side is empty), and Black-Scholes GEX (calls positive, puts negative; stated
+  as contested; r = 0; rows without IV, open interest or at least 1 day to expiry are skipped and
+  counted). GEX is always marked `partial_chain` because Yahoo gives a sample, not the full chain.
+* Gate: every result says UNVALIDATED. `VALIDATED_SIGNALS` is empty and `use_signal(name)` raises
+  until the owner adds a name. No strategy reads any signal today, so trading behaviour is unchanged.
+* `study_signal` measures Spearman rank correlation between a signal and the underlying's next-24h
+  move (default) from recorded real snapshots that pass the data-quality gate. Gaps are skipped, not
+  stretched. It is descriptive below 100 observations (which overlap, so the effective sample is
+  smaller) and never validates anything. CLI `python -m optplat.signals scan|study` is read-only.
+  `GET /api/signals/{symbol}` (token required) returns the latest signals.
+* 19 new tests including the textbook gamma value (S=K=100, T=1, vol 20% gives 0.019848).
+* Not verified: any signal on real data (no multi-week recording yet), and whether Yahoo's volume and
+  IV fields are reliable enough for these to mean anything. The coverage numbers will show that.
+* Not built: true unusual-options-activity detection needs licensed trade-level data (owner decision).
+
 ## 2026-11-11: champion/challenger framework (roadmap step 3, owner away)
 
 * New `research.py` and `python -m optplat.research register|evaluate|list`. Rules enforced in code:

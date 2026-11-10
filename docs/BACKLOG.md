@@ -21,24 +21,25 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 ## Next up
 
-1. **Options signals as measured features.** Volume-to-open-interest, unusual-activity flags, liquidity
-   filters, GEX. Each is evaluated for predictive value in item 2 before any strategy may use it.
-2. **Dashboard question audit.** Every panel states the trading question it answers; remove or redesign
+1. **Dashboard question audit.** Every panel states the trading question it answers; remove or redesign
    those that do not help a decision.
-3. **Weekly research agent.** Proposes experiments from the journal and evaluation results, runs them in
+2. **Weekly research agent.** Proposes experiments from the journal and evaluation results, runs them in
    shadow mode, and writes a report for the owner to approve.
 
 Existing items, in order:
 
-4. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
+3. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
    default, with tests for ratchet behaviour and unobservable quotes.
-5. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
-6. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
+4. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
+5. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
    `orders(state)`; paginate `list_orders`.
-7. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
+6. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
    they find without changing behaviour.
 
 ## Blocked on a human
+
+* **Validating any signal.** `VALIDATED_SIGNALS` in `signals.py` is empty. Adding a name is the owner's
+  decision, after `study_signal` and a pre-registered experiment support it.
 
 * **Daily loss halt.** Stop new entries once equity is down X% from the day's start; exits keep
   working. Needs the owner to choose X (a risk-limit default) before anyone builds it.
@@ -78,5 +79,9 @@ Existing items, in order:
 * Champion/challenger (roadmap step 3): `research.py`; frozen baseline by fingerprint, append-only
   hashed pre-registered hypotheses, criteria floors, confirmatory runs on post-registration data only,
   one final verdict, `python -m optplat.research register|evaluate|list`.
+* Options signals (roadmap step 4): `signals.py` volume/OI and unusual-activity flags, call/put ratios,
+  liquidity tiers, coverage, partial-chain GEX with stated assumptions; all UNVALIDATED, a strategy
+  cannot use one until the owner adds it to `VALIDATED_SIGNALS`; `study_signal` and
+  `python -m optplat.signals scan|study`; `/api/signals/{symbol}`.
 * Runner health: seconds since last good cycle and a stalled flag (3x interval) on `/api/health`
   (no error text) and `/api/engine/status` (with error); dashboard shows LOOP STALLED.

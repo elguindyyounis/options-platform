@@ -196,6 +196,19 @@ def create_app(
 
             return journal_summary(engine.store, engine.clock())
 
+        @app.get("/api/signals/{symbol}", dependencies=[Depends(auth)])
+        def signals(symbol: str) -> dict[str, Any]:
+            from datetime import datetime as _dt
+
+            from .marketdata import snapshot_from_dict
+            from .signals import compute_signals
+
+            rows = engine.store.list_snapshots(symbol=symbol.upper(), include_fictional=engine.provider.fictional, limit=100_000)
+            if not rows:
+                raise HTTPException(status_code=404, detail="No recorded snapshot for that symbol yet")
+            last = rows[-1]
+            return compute_signals(snapshot_from_dict(last["payload"]), _dt.fromisoformat(last["recorded_at"]))
+
         @app.put("/api/engine/config", dependencies=[Depends(auth)])
         def engine_config(body: EngineConfigBody) -> dict[str, Any]:
             try:
