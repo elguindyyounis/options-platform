@@ -5,6 +5,7 @@ import json
 import sqlite3
 import threading
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from .models import Order, OrderState, TERMINAL_STATES, utcnow
@@ -45,13 +46,19 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_recorded ON snapshots(recorded_at);
 
 
 class Store:
-    def __init__(self, path: str = ":memory:") -> None:
-        self._db = sqlite3.connect(path, check_same_thread=False)
+    def __init__(self, path: str = ":memory:", *, read_only: bool = False) -> None:
+        if read_only:
+            # For analysis tools: the file cannot be modified through this handle, and no tables are created.
+            uri = Path(path).resolve().as_uri() + "?mode=ro"
+            self._db = sqlite3.connect(uri, uri=True, check_same_thread=False)
+        else:
+            self._db = sqlite3.connect(path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._lock = threading.RLock()
-        with self._lock:
-            self._db.executescript(SCHEMA)
-            self._db.commit()
+        if not read_only:
+            with self._lock:
+                self._db.executescript(SCHEMA)
+                self._db.commit()
 
     # ---- orders -------------------------------------------------------
     def insert_order(self, order: Order) -> None:

@@ -29,6 +29,7 @@ demo market is fictional random data, so profit or loss there means nothing.
 | Market data | `src/optplat/marketdata.py` | Fictional demo market, static test provider, unofficial Yahoo provider |
 | Recorder | `src/optplat/store.py`, `engine.py` | Stores every market snapshot the engine sees (real and fictional kept apart), pruned by a retention setting |
 | Replay | `src/optplat/replay.py` | Runs the real engine over recorded snapshots with no look-ahead, in a throwaway store |
+| Evaluation | `src/optplat/evaluation.py` | In-sample vs out-of-sample report over recorded data. Labels results only above minimum trade counts |
 | Market clock | `src/optplat/market_clock.py` | NYSE session table; fails closed for years it has no calendar for |
 | Dashboard | `src/optplat/static/` | Single page served at `/`: controls, positions, orders, last cycle, results |
 
@@ -146,6 +147,19 @@ This is **research-grade data, not market-grade**:
 
 If you want to use a different token each time, you can set `OPTPLAT_API_TOKEN` yourself (16+
 characters). The curl examples above need that variable set.
+
+## Evaluate over recorded data
+
+Once the recorder has collected real snapshots (leave the platform running during market hours):
+
+```bash
+python -m optplat.evaluate --entries                     # strict quote policy
+python -m optplat.evaluate --entries --allow-unverified  # recorded Yahoo data has no verified timestamps
+```
+
+It opens the database read-only and runs a simulation only. Until there are enough closed trades,
+including out of sample, it says `INSUFFICIENT_DATA` and the figures are descriptive. It never says a
+strategy has an edge.
 
 ## What is still missing
 

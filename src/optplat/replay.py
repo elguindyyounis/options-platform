@@ -107,12 +107,13 @@ class ReplayResult:
     steps: int
     cycles: list[dict[str, Any]] = field(default_factory=list)
     trace: list[list[Any]] = field(default_factory=list)  # per step: [time, [[kind, contract, result], ...]]
+    equity: list[float] = field(default_factory=list)  # account equity after each step (open positions at bid)
     report: dict[str, Any] = field(default_factory=dict)  # OrderManager.report(): realized P&L and open positions
     fictional: bool = False
 
     def fingerprint(self) -> str:
         """Stable hash of what happened. Two replays of the same rows must give the same value."""
-        blob = json.dumps({"trace": self.trace, "report": _without_random_ids(self.report)}, sort_keys=True, default=str)
+        blob = json.dumps({"trace": self.trace, "equity": self.equity, "report": _without_random_ids(self.report)}, sort_keys=True, default=str)
         return hashlib.sha256(blob.encode()).hexdigest()
 
 
@@ -145,5 +146,6 @@ def run_replay(
         items = [["exit", x.get("contract"), x.get("result") or x.get("action")] for x in cycle["exits"]]
         items += [["entry", x.get("contract") or x.get("symbol"), x.get("result")] for x in cycle["entries"]]
         result.trace.append([moment.isoformat(), items])
+        result.equity.append(manager.broker.get_account().equity)
     result.report = manager.report()
     return result

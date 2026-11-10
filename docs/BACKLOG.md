@@ -5,20 +5,17 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Next up
 
-1. **Strategy evaluation report.** A script/endpoint that runs the engine over recorded or replayed
-   data and reports trades, costs, drawdown, and a comparison against a do-nothing baseline.
-   Require a minimum trade count and an out-of-sample split before any number is called "result".
-2. **Daily loss halt.** Stop new entries for the rest of the day once equity is down a configurable
+1. **Daily loss halt.** Stop new entries for the rest of the day once equity is down a configurable
    percent from the day's start (default conservative, e.g. 2%). Exits keep working. New policy
    field, engine guard, tests. (The default value is a risk decision: propose it in the PR.)
-3. **Runner health.** Expose time since last successful cycle and last error on `/api/health`; show
+2. **Runner health.** Expose time since last successful cycle and last error on `/api/health`; show
    a "stalled" warning in the dashboard when no cycle has completed in 3x the interval.
-4. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
+3. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
    default, with tests for ratchet behaviour and unobservable quotes.
-5. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
-6. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
+4. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
+5. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
    `orders(state)`; paginate `list_orders`.
-7. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
+6. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
    they find without changing behaviour.
 
 ## Blocked on a human
@@ -49,3 +46,5 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
   with source and time), retention setting, hourly prune, dashboard count.
 * Replay provider: `ReplayDataProvider` (no look-ahead), `ReplayClock`, `run_replay` drives the real
   engine over recorded snapshots in a throwaway store; reproducible via `ReplayResult.fingerprint()`.
+* Strategy evaluation report: `evaluate()` / `python -m optplat.evaluate`; in-sample vs out-of-sample
+  segments, drawdown, do-nothing and buy-and-hold context, MEASURED only above minimum trade counts.

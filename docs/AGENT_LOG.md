@@ -2,6 +2,22 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: strategy evaluation report (owner away; backlog item after replay)
+
+* `src/optplat/evaluation.py` + `python -m optplat.evaluate`: replays recorded real snapshots in an
+  earlier in-sample and a later out-of-sample segment (fresh account each), and reports closed trades,
+  win rate, realized P&L, per-trade expectancy, return, max drawdown, a do-nothing baseline and the
+  underlying's buy-and-hold move for context.
+* Status is `MEASURED` only with at least 30 closed trades in total and 10 out of sample; otherwise
+  `INSUFFICIENT_DATA` (figures marked descriptive only); fictional data is always `FICTIONAL_DATA`.
+  The report never says a strategy has an edge and always prints its caveats.
+* Safety: the CLI opens the database read-only (new `Store(read_only=True)`, tested), changes no live
+  setting, keeps the strict quote-time policy unless `--allow-unverified` is passed (same explicit
+  opt-in as live), and needs `--entries` before any trade is simulated.
+* Added per-step account equity to `ReplayResult` (included in the fingerprint).
+* 14 new tests, 192 total. Not verified: results on a real multi-week recording (none exists yet).
+  The default thresholds (30 and 10) are my choice; the owner may want stricter ones.
+
 ## 2026-11-11: replay provider (owner away; backlog item 1 after the recorder)
 
 * New `src/optplat/replay.py`: `ReplayDataProvider` serves recorded snapshots as of the replay clock
