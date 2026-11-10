@@ -5,12 +5,20 @@ import hmac
 from datetime import date
 from typing import Any
 
+from pathlib import Path
+from typing import Optional
+
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .broker.sim import SimBroker
-from .models import OptionContract, OrderIntent, Quote, Right, utcnow
+from .engine import Runner, TradingEngine
+from .models import OptionContract, OrderIntent, Quote, Right, Side, utcnow
 from .orders import InvalidTransition, LiveTradingDisabled, OrderManager
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 SYMBOL = r"^[A-Z][A-Z0-9.\-]{0,9}$"
 
@@ -31,6 +39,22 @@ class OrderBody(ContractBody):
     quantity: int = Field(ge=1, le=100)
     limit_price: float = Field(gt=0, lt=100_000)
     note: str = Field(default="", max_length=200)
+    side: Side = Side.BUY_TO_OPEN
+
+
+class EngineConfigBody(BaseModel):
+    watchlist: Optional[list[str]] = None
+    auto_entries: Optional[bool] = None
+    auto_exits: Optional[bool] = None
+    max_new_per_cycle: Optional[int] = None
+    order_ttl_s: Optional[int] = None
+    interval_s: Optional[int] = None
+    enforce_market_hours: Optional[bool] = None
+    take_profit_pct: Optional[float] = None
+    stop_loss_pct: Optional[float] = None
+    max_days_held: Optional[int] = None
+    min_dte_to_hold: Optional[int] = None
+    reentry_cooldown_s: Optional[int] = None
 
 
 class KillSwitchBody(BaseModel):
@@ -43,10 +67,37 @@ class SimQuoteBody(ContractBody):
     ask: float = Field(gt=0)
 
 
-def create_app(manager: OrderManager, api_token: str) -> FastAPI:
+def create_app(
+    manager: OrderManager,
+    api_token: str,
+    engine: Optional[TradingEngine] = None,
+    runner: Optional[Runner] = None,
+    allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost", "testserver"),
+) -> FastAPI:
     if not api_token or len(api_token) < 16:
         raise ValueError("api_token must be at least 16 characters")
     app = FastAPI(title="options-platform", docs_url=None, redoc_url=None)
+    # Reject unexpected Host headers (DNS-rebinding protection for a localhost service).
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
+
+    @app.middleware("http")
+    async def security_headers(request, call_next):  # type: ignore[no-untyped-def]
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Cache-Control", "no-store")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'",
+        )
+        return response
+
+    @app.get("/", include_in_schema=False)
+    def dashboard() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
+
+    @app.get("/static/app.js", include_in_schema=False)
+    def dashboard_js() -> FileResponse:
+        return FileResponse(STATIC_DIR / "app.js", media_type="text/javascript")
 
     def auth(x_api_token: str = Header(default="")) -> None:
         if not hmac.compare_digest(x_api_token.encode(), api_token.encode()):
@@ -77,9 +128,10 @@ def create_app(manager: OrderManager, api_token: str) -> FastAPI:
             quantity=body.quantity,
             limit_price=body.limit_price,
             note=body.note,
+            side=body.side,
         )
         try:
-            return manager.submit_buy(intent).to_dict()
+            return manager.submit(intent).to_dict()
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except LiveTradingDisabled as exc:
@@ -118,5 +170,38 @@ def create_app(manager: OrderManager, api_token: str) -> FastAPI:
                 Quote(body.to_contract(), body.bid, body.ask, utcnow(), "sim", timestamp_verified=True)
             )
             return {"ok": True}
+
+    @app.get("/api/report", dependencies=[Depends(auth)])
+    def report() -> dict[str, Any]:
+        return manager.report()
+
+    if engine is not None:
+
+        @app.get("/api/engine/status", dependencies=[Depends(auth)])
+        def engine_status() -> dict[str, Any]:
+            return {**engine.status(), "runner": runner.status() if runner else {"running": False}}
+
+        @app.put("/api/engine/config", dependencies=[Depends(auth)])
+        def engine_config(body: EngineConfigBody) -> dict[str, Any]:
+            try:
+                return engine.set_config(body.model_dump(exclude_none=True)).to_dict()
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        @app.post("/api/engine/cycle", dependencies=[Depends(auth)])
+        def engine_cycle() -> dict[str, Any]:
+            return engine.run_cycle()
+
+        if runner is not None:
+
+            @app.post("/api/engine/start", dependencies=[Depends(auth)])
+            def engine_start() -> dict[str, Any]:
+                runner.start()
+                return runner.status()
+
+            @app.post("/api/engine/stop", dependencies=[Depends(auth)])
+            def engine_stop() -> dict[str, Any]:
+                runner.stop()
+                return runner.status()
 
     return app

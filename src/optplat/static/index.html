@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>options-platform</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#1b1b1f; --mut:#6b6b76; --line:#dcdce2; --card:#f6f6f9;
+          --ok:#13763a; --bad:#b42318; --warn:#9a5b00; --accent:#2457d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111114; --fg:#ececf1; --mut:#9b9ba6; --line:#2b2b33; --card:#19191e;
+            --ok:#4cc17a; --bad:#ff7b72; --warn:#e3b341; --accent:#7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  h1 { font-size:16px; margin:0 12px 0 0; }
+  main { padding:16px; max-width:1100px; margin:0 auto; display:grid; gap:14px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:0 0 8px; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:99px; border:1px solid var(--line); font-size:12px; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  button { font:inherit; padding:5px 11px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.danger { border-color:var(--bad); color:var(--bad); }
+  input[type=text], input[type=password] { font:inherit; padding:5px 8px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); min-width:220px; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:4px 8px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; vertical-align:top; }
+  th { color:var(--mut); font-weight:600; font-size:12px; }
+  .scroll { overflow-x:auto; }
+  .muted { color:var(--mut); }
+  #msg { min-height:1.4em; }
+</style>
+</head>
+<body>
+<header>
+  <h1>options-platform</h1>
+  <span id="mode" class="pill">not connected</span>
+  <span id="data" class="pill"></span>
+  <span id="market" class="pill"></span>
+  <span id="kill" class="pill"></span>
+</header>
+<main>
+  <section id="connect">
+    <h2>Connect</h2>
+    <div class="row">
+      <input id="token" type="password" placeholder="API token (OPTPLAT_API_TOKEN)" autocomplete="off">
+      <button id="btn-connect" class="primary">Connect</button>
+    </div>
+    <div id="msg" class="muted"></div>
+  </section>
+
+  <section>
+    <h2>Controls</h2>
+    <div class="row">
+      <button id="btn-cycle" class="primary">Run one cycle</button>
+      <button id="btn-start">Start loop</button>
+      <button id="btn-stop">Stop loop</button>
+      <span id="runner" class="pill"></span>
+      <button id="btn-kill" class="danger">Toggle kill switch</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label><input id="cfg-entries" type="checkbox"> Automatic entries</label>
+      <label><input id="cfg-exits" type="checkbox"> Automatic exits</label>
+      <label><input id="cfg-hours" type="checkbox"> Enforce market hours</label>
+      <input id="cfg-watch" type="text" placeholder="Watchlist: SPY, QQQ">
+      <button id="btn-save">Save settings</button>
+    </div>
+    <p class="muted" style="margin:8px 0 0">Entries cannot be enabled without exits. Everything here is paper trading.</p>
+  </section>
+
+  <section><h2>Account and results</h2><div id="account"></div><div id="report" class="muted"></div></section>
+  <section><h2>Open positions</h2><div class="scroll" id="positions"></div></section>
+  <section><h2>Last cycle</h2><div id="cycle" class="muted"></div><div class="scroll" id="cycle-table"></div></section>
+  <section><h2>Orders</h2><div class="scroll" id="orders"></div></section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

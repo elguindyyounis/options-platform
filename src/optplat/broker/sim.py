@@ -19,6 +19,7 @@ from ..models import (
     OrderIntent,
     Position,
     Quote,
+    Side,
 )
 from .base import BrokerAdapter, BrokerRejected, QuoteUnavailable
 
@@ -87,6 +88,17 @@ class SimBroker(BrokerAdapter):
             quote = self._quotes.get(intent.contract)
             if quote is None:
                 raise BrokerRejected(f"No quote for {intent.contract.occ_symbol}")
+            if intent.side is Side.SELL_TO_CLOSE:
+                held = self._positions.get(intent.contract, [0, 0.0])[0]
+                reserved = sum(
+                    r["intent"].quantity - r["filled_qty"]
+                    for r in self._orders.values()
+                    if r["status"] == STATUS_SUBMITTED
+                    and r["intent"].side is Side.SELL_TO_CLOSE
+                    and r["intent"].contract == intent.contract
+                )
+                if held - reserved < intent.quantity:
+                    raise BrokerRejected("Not enough open position to sell")
             self._seq += 1
             broker_id = f"SIM-{self._seq:06d}"
             rec = {
@@ -132,14 +144,27 @@ class SimBroker(BrokerAdapter):
         intent: OrderIntent = rec["intent"]
         if not quote.is_valid():
             return
-        fill_price = round(quote.ask * (1 + self.slippage_pct / 100), 2)
-        cost = fill_price * intent.contract.multiplier * intent.quantity
-        if intent.limit_price + 1e-9 < fill_price or cost > self.cash:
-            return
-        self.cash -= cost
+        mult = intent.contract.multiplier
         qty, avg = self._positions.get(intent.contract, [0, 0.0])
-        new_qty = qty + intent.quantity
-        self._positions[intent.contract] = [new_qty, (avg * qty + fill_price * intent.quantity) / new_qty]
+        if intent.side is Side.SELL_TO_CLOSE:
+            # Conservative: sells fill at bid minus slippage, and only if the limit allows that price.
+            fill_price = round(quote.bid * (1 - self.slippage_pct / 100), 2)
+            if fill_price <= 0 or intent.limit_price - 1e-9 > fill_price or qty < intent.quantity:
+                return
+            self.cash += fill_price * mult * intent.quantity
+            remaining = qty - intent.quantity
+            if remaining > 0:
+                self._positions[intent.contract] = [remaining, avg]
+            else:
+                self._positions.pop(intent.contract, None)
+        else:
+            fill_price = round(quote.ask * (1 + self.slippage_pct / 100), 2)
+            cost = fill_price * mult * intent.quantity
+            if intent.limit_price + 1e-9 < fill_price or cost > self.cash:
+                return
+            self.cash -= cost
+            new_qty = qty + intent.quantity
+            self._positions[intent.contract] = [new_qty, (avg * qty + fill_price * intent.quantity) / new_qty]
         rec["status"] = STATUS_FILLED
         rec["filled_qty"] = intent.quantity
         rec["avg_fill_price"] = fill_price

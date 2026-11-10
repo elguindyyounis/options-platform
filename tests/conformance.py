@@ -6,8 +6,11 @@ choose contracts and prices that are live in the market (run during market hours
 """
 from __future__ import annotations
 
+import pytest
+
 from helpers import CONTRACT, make_intent, make_quote
-from optplat.models import Mode
+from optplat.broker import BrokerRejected
+from optplat.models import Mode, Side
 
 
 class BrokerConformance:
@@ -58,6 +61,28 @@ class BrokerConformance:
         found = broker.find_order_by_client_id("key-00000001")
         assert found is not None and found.broker_order_id == placed.broker_order_id
         assert broker.find_order_by_client_id("never-sent") is None
+
+    def test_sell_to_close_fills_and_reduces_the_position(self):
+        broker = self.make_broker()
+        self.seed_quote(broker, 1.90, 2.00)
+        broker.submit_limit_order(make_intent(limit=2.50))
+        sell = broker.submit_limit_order(make_intent("sell-00000001", limit=1.00, side=Side.SELL_TO_CLOSE))
+        assert sell.status == "FILLED" and sell.filled_qty == 4
+        assert broker.get_positions() == []
+
+    def test_cannot_sell_what_is_not_held(self):
+        broker = self.make_broker()
+        self.seed_quote(broker, 1.90, 2.00)
+        with pytest.raises(BrokerRejected):
+            broker.submit_limit_order(make_intent("sell-00000002", side=Side.SELL_TO_CLOSE))
+
+    def test_sell_is_idempotent_on_client_id(self):
+        broker = self.make_broker()
+        self.seed_quote(broker, 1.90, 2.00)
+        broker.submit_limit_order(make_intent(limit=2.50))
+        a = broker.submit_limit_order(make_intent("sell-00000003", limit=5.00, side=Side.SELL_TO_CLOSE))
+        b = broker.submit_limit_order(make_intent("sell-00000003", limit=5.00, side=Side.SELL_TO_CLOSE))
+        assert a.broker_order_id == b.broker_order_id
 
     def test_account_fields_are_present(self):
         account = self.make_broker().get_account()

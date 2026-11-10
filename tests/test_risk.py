@@ -88,6 +88,18 @@ def test_duplicate_open_contract():
     assert "Duplicate open contract" in run(positions=held).failures
 
 
+def test_same_underlying_and_direction_concentration_limit():
+    def held(underlying, right, strike):
+        return Position(OptionContract(underlying, CONTRACT.expiry, right, strike), 1, 1.0)
+
+    two_spy_calls = [held("SPY", Right.CALL, 590.0), held("SPY", Right.CALL, 595.0)]
+    assert any("concentration limit" in f for f in run(positions=two_spy_calls).failures)
+    one_spy_call = two_spy_calls[:1]
+    assert run(positions=one_spy_call).allowed
+    assert run(positions=[held("SPY", Right.PUT, 590.0), held("SPY", Right.PUT, 595.0)]).allowed  # other side
+    assert run(positions=[held("QQQ", Right.CALL, 500.0), held("QQQ", Right.CALL, 505.0)]).allowed  # other name
+
+
 def test_max_open_positions():
     other = [
         Position(OptionContract("QQQ", CONTRACT.expiry, Right.CALL, 500.0 + i), 1, 1.0) for i in range(12)

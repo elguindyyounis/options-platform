@@ -23,7 +23,7 @@ IB Gateway, using `ib_async`. Nothing here has been run against a real account y
 | `get_account` | Net liquidation, cash, and cost basis of open long options |
 | `get_positions` | Long option positions only, mapped to `OptionContract` |
 | `get_quote` | Fresh bid/ask for the exact contract. Raise `QuoteUnavailable` if empty, zero-ask or delayed |
-| `submit_limit_order` | BUY limit, DAY. Put `idempotency_key` in `orderRef`. Return the existing order if that ref already exists |
+| `submit_limit_order` | BUY_TO_OPEN **or** SELL_TO_CLOSE limit, DAY (`intent.side`). Put `idempotency_key` in `orderRef`. Return the existing order if that ref already exists. Raise `BrokerRejected` when selling more than is held |
 | `cancel_order` | Cancel and return the resulting status |
 | `get_order_status` | Map IBKR status to `SUBMITTED / PARTIALLY_FILLED / FILLED / CANCELLED / REJECTED` |
 | `find_order_by_client_id` | Search open and completed orders by `orderRef`. Return `None` only if truly absent |
