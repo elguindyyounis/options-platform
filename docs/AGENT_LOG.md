@@ -16,6 +16,22 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   was removed or loosened. 146 tests pass.
 * Not verified: Yahoo against the live feed.
 
+## 2026-11-11: one-command launcher (human-directed session)
+
+* Added `run.sh`: finds Python 3.10+, creates `.venv`, installs once, starts the server, opens the
+  dashboard already connected. `./run.sh yahoo` is the explicit opt-in for unverified Yahoo quotes
+  (sets `OPTPLAT_ALLOW_UNVERIFIED_QUOTES=1` and the startup warning prints). The default `./run.sh`
+  stays on the fictional demo market and keeps the strict quote-time check.
+* Dashboard reads `#token=...` from the URL fragment once, keeps it in `sessionStorage`, and scrubs
+  it with `history.replaceState`. Token checks in `api.py` are unchanged. Reviewer: this is the one
+  change that touches how the token reaches the browser; the token is one-off and local-only.
+* `--loop` / `OPTPLAT_AUTOSTART_LOOP=1` only starts the runner. `auto_entries` still comes from saved
+  config and still defaults to off.
+* Verified: 151 tests; a clean-copy `./run.sh demo --loop` (venv, install, start) and a headless
+  Chromium load of the fragment URL (connected, URL scrubbed, loop running, entries off).
+* Not verified: macOS (the owner's machine), `./run.sh yahoo` against the live feed, and
+  `webbrowser.open` on a real desktop (no browser in the sandbox).
+
 ## 2026-11-11: token UX and Yahoo quickstart (human-directed session)
 
 * `python -m optplat` now generates and prints a one-off token when `OPTPLAT_API_TOKEN` is unset,

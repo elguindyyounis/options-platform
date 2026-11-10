@@ -46,12 +46,30 @@ Safety limits (see `risk.py`): 1% of equity per position, 10% total premium, 15%
 under 60 seconds old with a verified timestamp, 2 contracts per underlying and direction, 12
 positions, and a re-entry cooldown after selling a contract.
 
-## Run it
+## Quick start (one command)
+
+```bash
+./run.sh                 # fictional demo market, works at any hour
+./run.sh yahoo           # free, delayed Yahoo data (US market hours only)
+./run.sh yahoo --loop    # same, and start the cycle loop automatically
+```
+
+`run.sh` finds Python 3.10+, creates `.venv`, installs what is needed (first run only), starts the
+server and opens the dashboard already connected. It needs Python 3.10 or newer; on a Mac install it
+from python.org or `brew install python@3.12` (the `python3` that ships with Apple's command line
+tools is 3.9, which is too old). The token is passed to the browser in the URL fragment, which is
+never sent to the server, and the dashboard removes it from the address bar after reading it. The
+terminal also prints the token as a fallback.
+
+`--loop` only starts the cycle loop. Automatic entries stay exactly as saved in the dashboard, and
+they are **off** until you turn them on.
+
+## Run it by hand
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest                                   # 140 tests
+pytest
 
 python -m optplat    # http://127.0.0.1:8800 (simulated broker). It prints a one-off token: paste it into the dashboard
 ```
@@ -97,9 +115,13 @@ Environment variables (see `.env.example`):
 |---|---|
 | `OPTPLAT_BROKER` | `sim` (default) or `ibkr_paper` |
 | `OPTPLAT_DATA` | `demo` (default with `sim`) or `yahoo` (needs `pip install -e ".[yahoo]"`) |
-| `OPTPLAT_ALLOW_UNVERIFIED_QUOTES` | `1` lets unofficial quotes through the risk gate. Research only |
+| `OPTPLAT_ALLOW_UNVERIFIED_QUOTES` | `1` lets unofficial quotes through the risk gate. Research only. `./run.sh yahoo` sets it |
+| `OPTPLAT_OPEN_BROWSER` | `1` opens the dashboard, already connected, when the server is ready. `./run.sh` sets it |
+| `OPTPLAT_AUTOSTART_LOOP` | `1` starts the cycle loop at launch. Does not change the saved entries setting |
 
 ## Run with free online data (Yahoo)
+
+`./run.sh yahoo` does everything below for you. By hand:
 
 ```bash
 pip install -e ".[yahoo]"
