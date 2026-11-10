@@ -2,6 +2,27 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: champion/challenger framework (roadmap step 3, owner away)
+
+* New `research.py` and `python -m optplat.research register|evaluate|list`. Rules enforced in code:
+  the baseline (`liquid-trend 0.1.0`, default parameters) is frozen by fingerprint and evaluation
+  refuses if it ever moves; a hypothesis (statement, challenger, pass criteria) is stored append-only
+  with a content hash, and tampering is detected; a challenger may change strategy parameters only,
+  never exits, risk limits or the evaluation criteria; criteria cannot be laxer than 30 closed trades
+  total and 10 out of sample, and need a strictly positive improvement; a confirmatory evaluation uses
+  only snapshots recorded after registration; exploratory runs on older data can never pass; the first
+  time the sample requirements are met the verdict is recorded and returned unchanged on re-runs (no
+  optional stopping); every result shows how many hypotheses have been registered, and says
+  "PASSED_CRITERIA" is not proof of an edge and promotion is the owner's decision.
+* "Shadow mode" is implemented as replay of the same forward-recorded snapshots through challenger and
+  baseline, so the comparison is deterministic and places no orders.
+* 19 new tests (verdict logic is tested with controlled inputs; one integration run uses a synthetic
+  market that gives the baseline ~44 distinct trades). 255 total.
+* Not verified: any real hypothesis (needs weeks of recorded data). Passing needs both arms to trade
+  enough, which on a 2-symbol watchlist may take a long time.
+* For the owner: consider adding to CLAUDE.md that agents must not edit `BASELINE`,
+  `BASELINE_FINGERPRINT`, or the criteria floors in `research.py`. I did not edit CLAUDE.md myself.
+
 ## 2026-11-11: decision journal and rejected-opportunity tracking (roadmap step 2, owner away)
 
 * New append-only `decisions` table. The engine writes one record for each placed or risk-rejected

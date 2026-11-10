@@ -64,6 +64,20 @@ CREATE TABLE IF NOT EXISTS decisions (
     payload TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_ts ON decisions(ts);
+CREATE TABLE IF NOT EXISTS hypotheses (
+    id TEXT PRIMARY KEY,
+    registered_at TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS hypothesis_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hypothesis_id TEXT NOT NULL,
+    evaluated_at TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_snapshots_symbol_time ON snapshots(symbol, recorded_at);
 CREATE INDEX IF NOT EXISTS idx_snapshots_recorded ON snapshots(recorded_at);
 """
@@ -231,6 +245,49 @@ class Store:
             ).fetchone()
         n, fake = int(row["n"]), int(row["fake"])
         return {"total": n, "real": n - fake, "fictional": fake, "oldest": row["oldest"], "newest": row["newest"]}
+
+    # ---- pre-registered hypotheses (append-only: no update, no delete) -
+    def register_hypothesis(self, registered_at: datetime, content_hash: str, payload: dict[str, Any]) -> str:
+        with self._lock:
+            n = self._db.execute("SELECT COUNT(*) FROM hypotheses").fetchone()[0]
+            hid = f"H-{n + 1:04d}"
+            self._db.execute(
+                "INSERT INTO hypotheses (id, registered_at, content_hash, payload) VALUES (?,?,?,?)",
+                (hid, registered_at.isoformat(), content_hash, json.dumps({**payload, "id": hid}, sort_keys=True)),
+            )
+            self._db.commit()
+            return hid
+
+    def get_hypothesis(self, hid: str) -> Optional[dict[str, Any]]:
+        with self._lock:
+            r = self._db.execute("SELECT * FROM hypotheses WHERE id=?", (hid,)).fetchone()
+        if r is None:
+            return None
+        return {"id": r["id"], "registered_at": r["registered_at"], "content_hash": r["content_hash"],
+                "payload": json.loads(r["payload"])}
+
+    def list_hypotheses(self) -> list[dict[str, Any]]:
+        with self._lock:
+            ids = [r["id"] for r in self._db.execute("SELECT id FROM hypotheses ORDER BY id").fetchall()]
+        return [h for h in (self.get_hypothesis(i) for i in ids) if h]
+
+    def record_hypothesis_result(
+        self, hid: str, evaluated_at: datetime, mode: str, status: str, payload: dict[str, Any]
+    ) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO hypothesis_results (hypothesis_id, evaluated_at, mode, status, payload) VALUES (?,?,?,?,?)",
+                (hid, evaluated_at.isoformat(), mode, status, json.dumps(payload, default=str)),
+            )
+            self._db.commit()
+
+    def hypothesis_results(self, hid: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM hypothesis_results WHERE hypothesis_id=? ORDER BY id", (hid,)
+            ).fetchall()
+        return [{"evaluated_at": r["evaluated_at"], "mode": r["mode"], "status": r["status"],
+                 "payload": json.loads(r["payload"])} for r in rows]
 
     # ---- decision journal --------------------------------------------
     def record_decision(
