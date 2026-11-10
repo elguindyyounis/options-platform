@@ -19,6 +19,7 @@ from typing import Any, Callable, Optional
 from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
 from .market_clock import session_status
+from .dataquality import check_snapshot, frozen_issue, quote_fingerprint
 from .marketdata import MarketDataProvider, MarketSnapshot, snapshot_to_dict
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
 from .orders import OrderManager
@@ -123,6 +124,8 @@ class TradingEngine:
         self._lock = threading.RLock()
         self._cycle_cfg: EngineConfig = self._default
         self._cycle_now: datetime = self.clock()
+        self._cycle_market_open: bool = False
+        self._last_fingerprint: dict[str, tuple[str, int]] = {}
 
     # ---- config -------------------------------------------------------
     def config(self) -> EngineConfig:
@@ -159,6 +162,10 @@ class TradingEngine:
             "kill_switch": self.manager.kill_switch_active(),
             "last_cycle": self.last_cycle(),
             "recorder": self.store.snapshot_stats(),
+            "data_quality": {
+                "window_hours": 24,
+                "issues": self.store.data_issue_summary(self.clock() - timedelta(hours=24)),
+            },
         }
 
     # ---- cycle --------------------------------------------------------
@@ -169,6 +176,7 @@ class TradingEngine:
             is_open, reason = session_status(now)
             trading_allowed = is_open or not self._hours_enforced(cfg)
             self._cycle_cfg, self._cycle_now = cfg, now
+            self._cycle_market_open = is_open
             report: dict[str, Any] = {
                 "started_at": now.isoformat(),
                 "market_open": is_open,
@@ -182,6 +190,7 @@ class TradingEngine:
                 "entries": [],
                 "entries_note": "",
                 "snapshots_recorded": 0,
+                "data_quality": [],
                 "errors": [],
             }
             self._guard(report, "snapshot prune", lambda: self._maybe_prune_snapshots(cfg, now))
@@ -242,8 +251,33 @@ class TradingEngine:
                 cache[symbol] = None
                 report["errors"].append(f"data {symbol}: {type(exc).__name__}: {str(exc)[:100]}")
             else:
-                self._record(cache[symbol], report)
+                self._record(cache[symbol], report)  # the raw snapshot is kept as the provider returned it
+                cache[symbol] = self._vet(cache[symbol], report)
         return cache[symbol]
+
+    def _vet(self, snap: MarketSnapshot, report: dict[str, Any]) -> Optional[MarketSnapshot]:
+        """Run the data-quality gate. A rejected snapshot is treated exactly like a failed data fetch."""
+        result = check_snapshot(snap, self._cycle_now)
+        issues = list(result.issues)
+        fp = quote_fingerprint(snap)
+        prev, n = self._last_fingerprint.get(snap.symbol, ("", 0))
+        n = n + 1 if fp == prev else 0
+        self._last_fingerprint[snap.symbol] = (fp, n)
+        frozen = frozen_issue(n, self._cycle_market_open)
+        if frozen:
+            issues.append(frozen)
+        for issue in issues:
+            report["data_quality"].append(
+                {"symbol": snap.symbol, "kind": issue.kind, "severity": issue.severity, "count": issue.count}
+            )
+            try:
+                self.store.record_data_issue(self._cycle_now, snap.symbol, issue.kind, issue.severity, issue.count, issue.detail)
+            except Exception as exc:  # noqa: BLE001 - logging trouble must not hide the data problem
+                report["errors"].append(f"data issue log: {type(exc).__name__}")
+        if result.rejected:
+            reason = next(i for i in issues if i.severity == "reject")
+            report["errors"].append(f"data {snap.symbol}: rejected ({reason.kind}: {reason.detail})")
+        return result.snapshot
 
     def _record(self, snap: MarketSnapshot, report: dict[str, Any]) -> None:
         """Keep what the market looked like. A recording failure is reported but never blocks trading logic."""
@@ -269,6 +303,7 @@ class TradingEngine:
         if last and now - datetime.fromisoformat(last) < timedelta(hours=1):
             return
         self.store.prune_snapshots(now - timedelta(days=cfg.snapshot_retention_days))
+        self.store.prune_data_issues(now - timedelta(days=cfg.snapshot_retention_days))
         self.store.set_state("snapshot_last_prune", now.isoformat())
 
     def _sync_sim_quotes(

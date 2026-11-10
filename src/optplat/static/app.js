@@ -96,6 +96,10 @@
       $("recorder").textContent = "Recorded market snapshots: " + rec.real + " real, " + rec.fictional + " fictional" +
         (rec.newest ? " (latest " + rec.newest.slice(0, 19) + ")" : "") +
         (status.config.record_snapshots ? "" : ". Recording is off");
+      const dq = Object.entries(status.data_quality.issues);
+      $("quality").textContent = "Data quality, last " + status.data_quality.window_hours + "h: " +
+        (dq.length ? dq.map(([k, v]) => k.toLowerCase().replace(/_/g, " ") + " x" + v.items + " (" + v.severity + ")").join(", ")
+                   : "no issues");
       const rows = c ? c.exits.map((x) => ({ kind: "exit", name: x.contract, action: x.action, detail: (x.trigger || x.reason) + (x.result ? " -> " + x.result : "") }))
         .concat(c.entries.map((x) => ({ kind: "entry", name: x.contract || x.symbol, action: x.result, detail: (x.risk_failures || []).join("; ") }))) : [];
       table($("cycle-table"), [

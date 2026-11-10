@@ -40,6 +40,16 @@ CREATE TABLE IF NOT EXISTS snapshots (
     timestamp_verified INTEGER NOT NULL,
     payload TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS data_issues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    count INTEGER NOT NULL,
+    detail TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_data_issues_ts ON data_issues(ts);
 CREATE INDEX IF NOT EXISTS idx_snapshots_symbol_time ON snapshots(symbol, recorded_at);
 CREATE INDEX IF NOT EXISTS idx_snapshots_recorded ON snapshots(recorded_at);
 """
@@ -207,6 +217,31 @@ class Store:
             ).fetchone()
         n, fake = int(row["n"]), int(row["fake"])
         return {"total": n, "real": n - fake, "fictional": fake, "oldest": row["oldest"], "newest": row["newest"]}
+
+    # ---- data-quality log --------------------------------------------
+    def record_data_issue(self, ts: datetime, symbol: str, kind: str, severity: str, count: int, detail: str) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO data_issues (ts, symbol, kind, severity, count, detail) VALUES (?,?,?,?,?,?)",
+                (ts.isoformat(), symbol, kind, severity, int(count), detail[:200]),
+            )
+            self._db.commit()
+
+    def data_issue_summary(self, since: datetime) -> dict[str, dict[str, Any]]:
+        """Per issue kind since `since`: severity, how many times it occurred, and how many rows/cycles it touched."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT kind, severity, COUNT(*) AS events, SUM(count) AS items FROM data_issues"
+                " WHERE ts>=? GROUP BY kind, severity ORDER BY kind",
+                (since.isoformat(),),
+            ).fetchall()
+        return {r["kind"]: {"severity": r["severity"], "events": int(r["events"]), "items": int(r["items"])} for r in rows}
+
+    def prune_data_issues(self, before: datetime) -> int:
+        with self._lock:
+            cur = self._db.execute("DELETE FROM data_issues WHERE ts<?", (before.isoformat(),))
+            self._db.commit()
+            return cur.rowcount
 
     # ---- key/value state ---------------------------------------------
     def get_state(self, key: str, default: str = "") -> str:

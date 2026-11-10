@@ -2,6 +2,26 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: data-quality gate (roadmap step 1, owner away)
+
+* Owner set the direction: a self-improving paper research platform (see BACKLOG "Direction"). Step 1
+  is reliability: no misleading data reaches a signal or a decision.
+* New `dataquality.py`, applied by the engine to every snapshot before any strategy, exit rule or
+  simulated quote sees it. Dropped rows: crossed, zero or non-finite ask/bid, expired, duplicate.
+  Whole-snapshot rejects: bad underlying or history, stale (over 900 s) or future-dated, no usable
+  rows. Warnings kept and counted: implausible IV (value removed, not corrected), negative
+  volume/open interest, spot far from last close, quotes identical for 3+ cycles while the market is
+  open. A rejected snapshot behaves like a failed fetch (fails closed). The checks only remove data, so
+  they can make the platform trade less, never more. No risk limit or default changed.
+* The raw snapshot is still recorded before the gate runs (evidence kept), and replay applies the same
+  gate, so replayed decisions match live ones. Issues go to a new `data_issues` table (pruned with the
+  snapshot retention) and the dashboard shows a "Data quality, last 24h" line.
+* Checked, not changed: held-position quotes already pass `exits.py` validity and 60 s staleness checks.
+* 20 new tests, 219 total. Thresholds (900 s age, IV 0-500%, 20% spot gap, 3 frozen cycles) are my
+  choices; the owner may want them stricter. Not verified: how often Yahoo data trips these in
+  practice. The dashboard line will show it after a real session.
+* Roadmap for later steps is in BACKLOG "Direction" and "Next up".
+
 ## 2026-11-11: runner health (owner away)
 
 * `Runner` now tracks `last_success_at` (a cycle that returned without raising) and reports
