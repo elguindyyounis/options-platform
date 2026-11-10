@@ -2,8 +2,13 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
+import socket
 import sys
+import threading
+import time
+import webbrowser
 
 import uvicorn
 
@@ -15,6 +20,30 @@ from .orders import OrderManager
 from .risk import RiskPolicy
 from .store import Store
 from .strategy import LiquidTrendStrategy
+
+
+_FRAGMENT_SAFE_TOKEN = re.compile(r"[A-Za-z0-9_-]{16,200}")
+
+
+def _open_when_ready(url: str, port: int, timeout_s: float = 15.0) -> None:
+    """Open the dashboard once the server accepts connections (best effort, never raises)."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                break
+        except OSError:
+            time.sleep(0.2)
+    else:
+        return
+    try:
+        webbrowser.open(url)
+    except Exception:  # noqa: BLE001 - a missing browser must not stop the server
+        pass
+
+
+def _start_browser_opener(url: str, port: int) -> None:
+    threading.Thread(target=_open_when_ready, args=(url, port), name="optplat-open-browser", daemon=True).start()
 
 
 def main() -> None:
@@ -60,11 +89,22 @@ def main() -> None:
     engine = TradingEngine(manager, provider, LiquidTrendStrategy(), default_config=default_cfg)
     runner = Runner(engine)
     port = int(os.environ.get("OPTPLAT_PORT", "8800"))
-    print(f"Dashboard: http://127.0.0.1:{port}   broker={which}   data={data}", flush=True)
+    dashboard = f"http://127.0.0.1:{port}"
+    print(f"Dashboard: {dashboard}   broker={which}   data={data}", flush=True)
     if data == "demo":
         print("NOTE: demo data is FICTIONAL random prices. Profit or loss here means nothing.", flush=True)
     if allow_unverified:
         print("WARNING: unverified, delayed quotes are allowed through the risk gate. Research only.", flush=True)
+    if os.environ.get("OPTPLAT_AUTOSTART_LOOP") == "1":
+        # Starts the cycle loop only. Automatic entries stay exactly as saved (off unless the owner turned them on).
+        runner.start()
+        entries = "ON" if engine.config().auto_entries else "off"
+        print(f"Loop started automatically. Automatic entries: {entries} (saved setting).", flush=True)
+    if os.environ.get("OPTPLAT_OPEN_BROWSER") == "1":
+        # The token travels in the URL fragment, which browsers never send to the server. The dashboard reads it
+        # once and removes it from the address bar. Tokens with unusual characters are not put in a URL.
+        url = f"{dashboard}/#token={token}" if _FRAGMENT_SAFE_TOKEN.fullmatch(token) else dashboard
+        _start_browser_opener(url, port)
     # Bound to localhost only. Do not expose this server to the internet.
     uvicorn.run(create_app(manager, token, engine, runner), host="127.0.0.1", port=port)
 

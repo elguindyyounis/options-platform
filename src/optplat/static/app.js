@@ -3,6 +3,14 @@
   const $ = (id) => document.getElementById(id);
   let token = "";
   try { token = sessionStorage.getItem("optplat_token") || ""; } catch (e) { /* storage unavailable */ }
+  // The launcher opens /#token=... . A URL fragment is never sent to the server. Read it once, keep it for this
+  // tab only, then remove it from the address bar so it is not left in the URL or copied by accident.
+  const fromUrl = /^#token=([A-Za-z0-9_-]{16,200})$/.exec(location.hash);
+  if (fromUrl) {
+    token = fromUrl[1];
+    try { sessionStorage.setItem("optplat_token", token); } catch (e) { /* storage unavailable */ }
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* ignore */ }
+  }
   let killState = false;
 
   // Build DOM with textContent only: nothing from the API is ever parsed as HTML.
