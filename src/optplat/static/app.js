@@ -79,6 +79,10 @@
 
       const c = status.last_cycle;
       $("cycle").textContent = c ? ("Started " + c.started_at + ". " + (c.entries_note || "") + (c.errors.length ? " Errors: " + c.errors.join("; ") : "")) : "No cycle has run yet";
+      const rec = status.recorder;
+      $("recorder").textContent = "Recorded market snapshots: " + rec.real + " real, " + rec.fictional + " fictional" +
+        (rec.newest ? " (latest " + rec.newest.slice(0, 19) + ")" : "") +
+        (status.config.record_snapshots ? "" : ". Recording is off");
       const rows = c ? c.exits.map((x) => ({ kind: "exit", name: x.contract, action: x.action, detail: (x.trigger || x.reason) + (x.result ? " -> " + x.result : "") }))
         .concat(c.entries.map((x) => ({ kind: "entry", name: x.contract || x.symbol, action: x.result, detail: (x.risk_failures || []).join("; ") }))) : [];
       table($("cycle-table"), [

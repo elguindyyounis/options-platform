@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from datetime import datetime
 from typing import Any, Optional
 
 from .models import Order, OrderState, TERMINAL_STATES, utcnow
@@ -28,6 +29,18 @@ CREATE TABLE IF NOT EXISTS state (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    source TEXT NOT NULL,
+    fictional INTEGER NOT NULL,
+    timestamp_verified INTEGER NOT NULL,
+    payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_snapshots_symbol_time ON snapshots(symbol, recorded_at);
+CREATE INDEX IF NOT EXISTS idx_snapshots_recorded ON snapshots(recorded_at);
 """
 
 
@@ -105,6 +118,88 @@ class Store:
             {"ts": r["ts"], "kind": r["kind"], "order_id": r["order_id"], "payload": json.loads(r["payload"])}
             for r in rows
         ]
+
+    # ---- recorded market snapshots -----------------------------------
+    def record_snapshot(
+        self,
+        symbol: str,
+        recorded_at: datetime,
+        as_of: datetime,
+        source: str,
+        fictional: bool,
+        timestamp_verified: bool,
+        payload: dict[str, Any],
+    ) -> None:
+        """Append one observed snapshot. Rows are never updated; `fictional` keeps made-up data separable."""
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO snapshots (symbol, recorded_at, as_of, source, fictional, timestamp_verified, payload)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (
+                    symbol,
+                    recorded_at.isoformat(),
+                    as_of.isoformat(),
+                    source,
+                    int(fictional),
+                    int(timestamp_verified),
+                    json.dumps(payload, default=str),
+                ),
+            )
+            self._db.commit()
+
+    def list_snapshots(
+        self,
+        symbol: Optional[str] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        include_fictional: bool = False,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Oldest first, so a replay can walk them in order. Fictional rows only when asked for."""
+        where, args = [], []  # type: list[str], list[Any]
+        if symbol:
+            where.append("symbol=?")
+            args.append(symbol)
+        if since:
+            where.append("recorded_at>=?")
+            args.append(since.isoformat())
+        if until:
+            where.append("recorded_at<?")
+            args.append(until.isoformat())
+        if not include_fictional:
+            where.append("fictional=0")
+        sql = "SELECT * FROM snapshots" + (" WHERE " + " AND ".join(where) if where else "")
+        sql += " ORDER BY recorded_at, id LIMIT ?"
+        with self._lock:
+            rows = self._db.execute(sql, (*args, max(1, min(limit, 100_000)))).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "symbol": r["symbol"],
+                "recorded_at": r["recorded_at"],
+                "as_of": r["as_of"],
+                "source": r["source"],
+                "fictional": bool(r["fictional"]),
+                "timestamp_verified": bool(r["timestamp_verified"]),
+                "payload": json.loads(r["payload"]),
+            }
+            for r in rows
+        ]
+
+    def prune_snapshots(self, before: datetime) -> int:
+        with self._lock:
+            cur = self._db.execute("DELETE FROM snapshots WHERE recorded_at<?", (before.isoformat(),))
+            self._db.commit()
+            return cur.rowcount
+
+    def snapshot_stats(self) -> dict[str, Any]:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT COUNT(*) AS n, COALESCE(SUM(fictional), 0) AS fake, MIN(recorded_at) AS oldest,"
+                " MAX(recorded_at) AS newest FROM snapshots"
+            ).fetchone()
+        n, fake = int(row["n"]), int(row["fake"])
+        return {"total": n, "real": n - fake, "fictional": fake, "oldest": row["oldest"], "newest": row["newest"]}
 
     # ---- key/value state ---------------------------------------------
     def get_state(self, key: str, default: str = "") -> str:

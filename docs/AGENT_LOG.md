@@ -2,6 +2,18 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: quote and snapshot recorder (human-directed session, backlog item 1)
+
+* Every `MarketSnapshot` the engine reads in a cycle is appended to a new `snapshots` table with
+  recorded time, provider time, source, `fictional` and `timestamp_verified` flags and the full chain
+  as JSON. Fictional rows are labelled and excluded from queries unless asked for. Config:
+  `record_snapshots` (default on) and `snapshot_retention_days` (default 30, 1-3650); pruning runs at
+  most hourly. A recording failure is reported in the cycle errors and never blocks exits or entries.
+* New `snapshot_to_dict` / `snapshot_from_dict` (round-trip tested) so replay can read the rows back.
+* 12 new tests plus an API test. Nothing in risk, orders, or auth changed.
+* Measured: about 20 KB per snapshot on the demo chain. Real chains may differ; see BACKLOG ideas.
+* Not verified: recording against the live Yahoo feed, or growth over weeks of real use.
+
 ## 2026-11-11: token UX and Yahoo quickstart (human-directed session)
 
 * `python -m optplat` now generates and prints a one-off token when `OPTPLAT_API_TOKEN` is unset,

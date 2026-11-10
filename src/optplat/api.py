@@ -55,6 +55,8 @@ class EngineConfigBody(BaseModel):
     max_days_held: Optional[int] = None
     min_dte_to_hold: Optional[int] = None
     reentry_cooldown_s: Optional[int] = None
+    record_snapshots: Optional[bool] = None
+    snapshot_retention_days: Optional[int] = None
 
 
 class KillSwitchBody(BaseModel):

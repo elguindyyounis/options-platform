@@ -98,3 +98,12 @@ def test_selling_without_a_position_is_rejected_not_errored(client):
         **contract, "idempotency_key": "api-sell-0002", "candidate_id": "t", "quantity": 1,
         "limit_price": 1.85, "side": "SELL_TO_CLOSE"})
     assert r.status_code == 200 and r.json()["state"] == "RISK_REJECTED"
+
+
+def test_status_exposes_recorder_counts_and_config_accepts_retention(client):
+    r = client.get("/api/engine/status", headers=H).json()
+    assert r["recorder"]["total"] == 0 and r["config"]["record_snapshots"] is True
+    ok = client.put("/api/engine/config", json={"snapshot_retention_days": 7}, headers=H)
+    assert ok.status_code == 200 and ok.json()["snapshot_retention_days"] == 7
+    bad = client.put("/api/engine/config", json={"snapshot_retention_days": 0}, headers=H)
+    assert bad.status_code == 422 or bad.status_code == 400

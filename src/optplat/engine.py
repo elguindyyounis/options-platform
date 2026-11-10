@@ -19,7 +19,7 @@ from typing import Any, Callable, Optional
 from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
 from .market_clock import session_status
-from .marketdata import MarketDataProvider, MarketSnapshot
+from .marketdata import MarketDataProvider, MarketSnapshot, snapshot_to_dict
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
 from .orders import OrderManager
 from .pricing import sell_limit_for
@@ -43,6 +43,8 @@ class EngineConfig:
     max_days_held: int = 0
     min_dte_to_hold: int = 5
     reentry_cooldown_s: int = 86400  # do not re-buy a contract within this long of selling it
+    record_snapshots: bool = True  # keep every observed snapshot: the raw material for honest replay
+    snapshot_retention_days: int = 30
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -74,7 +76,7 @@ class EngineConfig:
         for name, value in asdict(self).items():
             if name == "watchlist":
                 continue
-            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours")):
+            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots")):
                 raise ValueError(f"{name} has the wrong type")
         checks = [
             (0 <= self.max_new_per_cycle <= 5, "max_new_per_cycle must be 0-5"),
@@ -85,6 +87,7 @@ class EngineConfig:
             (0 <= self.max_days_held <= 365, "max_days_held must be 0-365"),
             (0 <= self.min_dte_to_hold <= 60, "min_dte_to_hold must be 0-60"),
             (0 <= self.reentry_cooldown_s <= 2_592_000, "reentry_cooldown_s must be 0-2592000"),
+            (1 <= self.snapshot_retention_days <= 3650, "snapshot_retention_days must be 1-3650"),
         ]
         for ok, message in checks:
             if not ok:
@@ -118,6 +121,8 @@ class TradingEngine:
         self.clock = clock
         self._default = default_config or EngineConfig()
         self._lock = threading.RLock()
+        self._cycle_cfg: EngineConfig = self._default
+        self._cycle_now: datetime = self.clock()
 
     # ---- config -------------------------------------------------------
     def config(self) -> EngineConfig:
@@ -149,6 +154,7 @@ class TradingEngine:
             "strategy": {"name": self.strategy.name, "version": self.strategy.version},
             "kill_switch": self.manager.kill_switch_active(),
             "last_cycle": self.last_cycle(),
+            "recorder": self.store.snapshot_stats(),
         }
 
     # ---- cycle --------------------------------------------------------
@@ -158,6 +164,7 @@ class TradingEngine:
             cfg = self.config()
             is_open, reason = session_status(now)
             trading_allowed = is_open or not cfg.enforce_market_hours
+            self._cycle_cfg, self._cycle_now = cfg, now
             report: dict[str, Any] = {
                 "started_at": now.isoformat(),
                 "market_open": is_open,
@@ -170,8 +177,10 @@ class TradingEngine:
                 "exits": [],
                 "entries": [],
                 "entries_note": "",
+                "snapshots_recorded": 0,
                 "errors": [],
             }
+            self._guard(report, "snapshot prune", lambda: self._maybe_prune_snapshots(cfg, now))
             snapshots: dict[str, Optional[MarketSnapshot]] = {}
 
             if hasattr(self.provider, "advance"):
@@ -228,7 +237,35 @@ class TradingEngine:
             except Exception as exc:  # noqa: BLE001
                 cache[symbol] = None
                 report["errors"].append(f"data {symbol}: {type(exc).__name__}: {str(exc)[:100]}")
+            else:
+                self._record(cache[symbol], report)
         return cache[symbol]
+
+    def _record(self, snap: MarketSnapshot, report: dict[str, Any]) -> None:
+        """Keep what the market looked like. A recording failure is reported but never blocks trading logic."""
+        if not self._cycle_cfg.record_snapshots:
+            return
+        try:
+            self.store.record_snapshot(
+                snap.symbol,
+                self._cycle_now,
+                snap.as_of,
+                snap.source,
+                snap.fictional or self.provider.fictional,
+                snap.timestamp_verified,
+                snapshot_to_dict(snap),
+            )
+            report["snapshots_recorded"] += 1
+        except Exception as exc:  # noqa: BLE001
+            report["errors"].append(f"record {snap.symbol}: {type(exc).__name__}: {str(exc)[:100]}")
+
+    def _maybe_prune_snapshots(self, cfg: EngineConfig, now: datetime) -> None:
+        """Delete snapshots older than the retention window, at most once an hour."""
+        last = self.store.get_state("snapshot_last_prune", "")
+        if last and now - datetime.fromisoformat(last) < timedelta(hours=1):
+            return
+        self.store.prune_snapshots(now - timedelta(days=cfg.snapshot_retention_days))
+        self.store.set_state("snapshot_last_prune", now.isoformat())
 
     def _sync_sim_quotes(
         self,

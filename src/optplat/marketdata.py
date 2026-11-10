@@ -41,6 +41,53 @@ class MarketSnapshot:
     fictional: bool = False
 
 
+def snapshot_to_dict(snap: MarketSnapshot) -> dict[str, Any]:
+    """JSON-safe form of a snapshot, for the recorder and for replay."""
+    return {
+        "symbol": snap.symbol,
+        "underlying": snap.underlying,
+        "closes": list(snap.closes),
+        "as_of": snap.as_of.isoformat(),
+        "source": snap.source,
+        "timestamp_verified": snap.timestamp_verified,
+        "fictional": snap.fictional,
+        "rows": [
+            {
+                "contract": r.contract.to_dict(),
+                "bid": r.bid,
+                "ask": r.ask,
+                "volume": r.volume,
+                "open_interest": r.open_interest,
+                "iv": r.iv,
+            }
+            for r in snap.rows
+        ],
+    }
+
+
+def snapshot_from_dict(d: dict[str, Any]) -> MarketSnapshot:
+    return MarketSnapshot(
+        symbol=d["symbol"],
+        underlying=float(d["underlying"]),
+        closes=tuple(float(c) for c in d["closes"]),
+        rows=tuple(
+            ChainRow(
+                OptionContract.from_dict(r["contract"]),
+                float(r["bid"]),
+                float(r["ask"]),
+                r.get("volume"),
+                r.get("open_interest"),
+                r.get("iv"),
+            )
+            for r in d["rows"]
+        ),
+        as_of=datetime.fromisoformat(d["as_of"]),
+        source=d["source"],
+        timestamp_verified=bool(d["timestamp_verified"]),
+        fictional=bool(d.get("fictional", False)),
+    )
+
+
 class MarketDataProvider(ABC):
     name: str = "abstract"
     fictional: bool = False
