@@ -53,8 +53,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest                                   # 140 tests
 
-export OPTPLAT_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-python -m optplat                        # http://127.0.0.1:8800 (simulated broker)
+python -m optplat    # http://127.0.0.1:8800 (simulated broker). It prints a one-off token: paste it into the dashboard
 ```
 
 With the simulated broker you seed a quote, then submit an order:
@@ -99,6 +98,30 @@ Environment variables (see `.env.example`):
 | `OPTPLAT_BROKER` | `sim` (default) or `ibkr_paper` |
 | `OPTPLAT_DATA` | `demo` (default with `sim`) or `yahoo` (needs `pip install -e ".[yahoo]"`) |
 | `OPTPLAT_ALLOW_UNVERIFIED_QUOTES` | `1` lets unofficial quotes through the risk gate. Research only |
+
+## Run with free online data (Yahoo)
+
+```bash
+pip install -e ".[yahoo]"
+export OPTPLAT_DATA=yahoo
+export OPTPLAT_ALLOW_UNVERIFIED_QUOTES=1
+python -m optplat
+```
+
+Copy the token it prints into the dashboard, set your watchlist, and run a cycle.
+
+This is **research-grade data, not market-grade**:
+
+* Yahoo is unofficial, usually about 15 minutes delayed, and can rate-limit or return incomplete chains.
+* Its quotes carry no exchange timestamp. The risk gate rejects those by default, which is why
+  `OPTPLAT_ALLOW_UNVERIFIED_QUOTES=1` is needed. Quote "age" then means download time, not market time.
+* The engine only trades during NYSE hours (it fails closed outside them), so outside the session
+  you will see "Market closed" and no orders.
+* Fills are still simulated against delayed bids and asks, so paper results can look better than
+  anything you could actually trade. Treat them as a way to exercise the system, not as evidence.
+
+If you want to use a different token each time, you can set `OPTPLAT_API_TOKEN` yourself (16+
+characters). The curl examples above need that variable set.
 
 ## What is still missing
 
