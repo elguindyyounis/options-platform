@@ -14,7 +14,7 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   tomorrow, weigh against. The skeptic reports a missing calendar or table gap.
 * Consequence to expect: with the default SPY and QQQ watchlist the agent rarely matters. For single stocks, entries
   need a known earnings date, and if Yahoo returns nothing the committee will decline them.
-* Verified: 327 tests, including the fail-closed cases and a fake `yfinance`. Not verified: the real Yahoo
+* Verified: 326 tests, including the fail-closed cases and a fake `yfinance`. Not verified: the real Yahoo
   earnings call from this environment (no network to it), or that its dates are right. The 5-day and 1-day
   windows are my experiment parameters.
 * Not covered: CPI, jobs data, dividends, index events, news.
