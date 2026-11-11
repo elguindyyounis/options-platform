@@ -90,6 +90,12 @@ def main() -> None:
 
     calendar = EventCalendar(earnings_source=yahoo_earnings_dates if data == "yahoo" else None)
     engine = TradingEngine(manager, provider, LiquidTrendStrategy(), default_config=default_cfg, calendar=calendar)
+    scan_every = os.environ.get("OPTPLAT_SCAN_EVERY_S", "")
+    if scan_every:
+        try:
+            engine.set_config({"scan_interval_s": int(scan_every)})
+        except ValueError:
+            sys.exit("OPTPLAT_SCAN_EVERY_S must be 0 or a number of seconds from 600 to 86400")
     mode = os.environ.get("OPTPLAT_COMMITTEE", "")
     if mode:
         if mode not in ("off", "shadow", "active"):

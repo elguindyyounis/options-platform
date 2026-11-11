@@ -2,6 +2,27 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: most-active names, unusual options activity and a trade ledger (owner present)
+
+* `scanner.py`: ranks a FIXED universe of about 75 liquid names and funds by dollar volume and relative volume
+  (today's partial bar is dropped while the session is open), then reads the option chains of the most active
+  and the volume-surge names and flags contracts with volume at least 150 and at least 3x open interest, or at
+  least 500 with zero or missing open interest (no ratio is shown then, never infinity). Rules were adapted
+  from the owner's options-alerter repo. Contracts are REVIEWABLE (liquidity tier A or B, 7-730 days) or
+  OBSERVE_ONLY. It is research context: it places no orders and does not feed the strategy.
+* `trades.py` and `/api/trades`: every filled entry is a trade, exits matched oldest first, open quantity marked at
+  the bid (None and "unobservable" if there is no valid bid), with the entry rationale, the committee's votes,
+  the exit trigger and the audit trail. `/api/scan`, `POST /api/scan/run`. `scan_interval_s` (0 = off, else
+  600-86400); `./run.sh` sets 1800.
+* Found and fixed by a flaky test: entries and exits with the same timestamp were ordered by random id, so an
+  exit could be processed before its entry. Ordering now follows the ledger's recorded sequence.
+* From the skills repo (tradermonty/claude-trading-skills, MIT): it has no most-active or unusual-activity skill.
+  Most of its screeners need an FMP key, which is an owner decision. Nothing was copied.
+* Verified: 350 tests, stable over repeated runs. Not verified: `yf.download` for the daily bars against the live
+  Yahoo service (parsing is shaped for yfinance's grouped-ticker frame and is untested live), and Yahoo rate limits
+  with about 18 chain reads per scan.
+* Not built: feeding scan results into the committee or the watchlist, and recording scan chains for replay.
+
 ## 2026-11-11: event and earnings agent (owner present)
 
 * New `events.py` and an `events` gate in the committee. FOMC decision days for 2026 and 2027 come from

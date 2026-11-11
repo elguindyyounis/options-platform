@@ -24,21 +24,25 @@ and tests better approaches, with entries and exits automated in paper mode only
 1. **Schedule the weekly report.** `python -m optplat.weekly` exists; running it on a timer and where the
    owner reads it (file, email, notification) is the owner's choice.
 
-2. **Scale in and out of held positions.** The committee sizes new entries between 10% and 100% of the
+2. **Use scan results.** Let unusual-activity and most-active names feed the committee's sentiment agent and, if the owner
+   wants, an auto-managed watchlist (single stocks need a known earnings date). Record scan chains for replay.
+3. **Day-trading research lane.** Intraday EMA9/VWAP research on the underlying only (idea from options-alerter),
+   shadow mode, no option fills. Short-dated options need the owner to change the risk policy's 7-day minimum.
+4. **Scale in and out of held positions.** The committee sizes new entries between 10% and 100% of the
    engine cap and learns that share from outcomes. Trimming a loser or adding to a winner needs exit-manager
    support (partial sell orders; adds must still pass the risk gate and its per-order and total-premium caps).
-3. **Agent coverage the owner can unblock.** News sentiment needs a data source. The events agent covers
+5. **Agent coverage the owner can unblock.** News sentiment needs a data source. The events agent covers
    earnings and FOMC only; CPI, jobs data, dividends and index events need a source. Earnings dates come
    from Yahoo's unofficial calendar and are unverified, so a paid or official earnings feed would be better.
 
 Existing items, in order:
 
-4. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
+6. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
    default, with tests for ratchet behaviour and unobservable quotes.
-5. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
-6. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
+7. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
+8. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
    `orders(state)`; paginate `list_orders`.
-7. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
+9. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
    they find without changing behaviour.
 
 ## Blocked on a human
@@ -109,3 +113,5 @@ Existing items, in order:
   Yahoo's unofficial calendar, unknown is never treated as safe) and the `events` gate in the committee: unknown
   earnings for a single stock is a hard veto, earnings within 5 days is a learnable veto, later earnings and
   an FOMC decision tomorrow weigh against; the skeptic now reports which calendar gaps remain.
+* Scanner and trade ledger: `scanner.py` (most-active names, unusual option activity, fixed universe),
+  `trades.py` (entries matched to exits with reasoning), `/api/scan`, `/api/trades`.

@@ -28,6 +28,7 @@ from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
 from .orders import OrderManager
 from .pricing import sell_limit_for
 from .risk import RiskPolicy
+from .scanner import Scanner
 from .strategy import Strategy
 
 SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
@@ -49,6 +50,7 @@ class EngineConfig:
     reentry_cooldown_s: int = 86400  # do not re-buy a contract within this long of selling it
     record_snapshots: bool = True  # keep every observed snapshot: the raw material for honest replay
     snapshot_retention_days: int = 30
+    scan_interval_s: int = 0  # 0 = off; otherwise the most-active and unusual-activity scan runs this often
     committee_mode: str = "shadow"  # off | shadow (records its votes only) | active (its vote and size apply)
 
     def to_dict(self) -> dict[str, Any]:
@@ -93,6 +95,7 @@ class EngineConfig:
             (0 <= self.min_dte_to_hold <= 60, "min_dte_to_hold must be 0-60"),
             (0 <= self.reentry_cooldown_s <= 2_592_000, "reentry_cooldown_s must be 0-2592000"),
             (1 <= self.snapshot_retention_days <= 3650, "snapshot_retention_days must be 1-3650"),
+            (self.scan_interval_s == 0 or 600 <= self.scan_interval_s <= 86400, "scan_interval_s must be 0 or 600-86400"),
             (self.committee_mode in ("off", "shadow", "active"), "committee_mode must be off, shadow or active"),
         ]
         for ok, message in checks:
@@ -134,6 +137,7 @@ class TradingEngine:
         self._cycle_market_open: bool = False
         self._journal_seen: dict[tuple[str, str, str], datetime] = {}
         self._last_fingerprint: dict[str, tuple[str, int]] = {}
+        self.scanner = Scanner(provider, self.store, clock=clock)
 
     # ---- config -------------------------------------------------------
     def config(self) -> EngineConfig:
@@ -379,6 +383,21 @@ class TradingEngine:
             votes[p.contract] = d
             self._journal(cmt.KIND, symbol, d.disposition, p.contract, p.limit_price, d.to_payload(weights, trust), snap)
         return votes
+
+    def maybe_scan(self) -> None:
+        """Start the background scan when it is due. Never blocks or raises into the trading loop."""
+        try:
+            cfg = self.config()
+            if cfg.scan_interval_s == 0:
+                return
+            now = self.clock()
+            last = self.store.get_state("scan_last_started", "")
+            if last and (now - datetime.fromisoformat(last)).total_seconds() < cfg.scan_interval_s:
+                return
+            if self.scanner.start():
+                self.store.set_state("scan_last_started", now.isoformat())
+        except Exception:  # noqa: BLE001
+            pass
 
     def _maybe_learn(self, cfg: EngineConfig, now: datetime) -> None:
         """Refit agent weights and committee trust from matured outcomes, at most every 30 minutes."""
@@ -701,6 +720,7 @@ class Runner:
                 self.engine.run_cycle()
                 self.last_error = None
                 self.last_success_at = self.engine.clock()
+                self.engine.maybe_scan()
             except Exception as exc:  # noqa: BLE001 - keep the loop alive; the error is surfaced in status
                 self.last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
             self._stop.wait(self.engine.config().interval_s)

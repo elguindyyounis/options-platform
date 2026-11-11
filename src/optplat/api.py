@@ -58,6 +58,7 @@ class EngineConfigBody(BaseModel):
     record_snapshots: Optional[bool] = None
     snapshot_retention_days: Optional[int] = None
     committee_mode: Optional[str] = None
+    scan_interval_s: Optional[int] = None
 
 
 class KillSwitchBody(BaseModel):
@@ -205,6 +206,31 @@ def create_app(
             points = engine.store.list_equity(limit=max(2, min(limit, 2000)), fictional=fictional)
             return {"fictional": fictional, "points": [{"ts": p["ts"], "equity": p["equity"]} for p in points],
                     "summary": equity_summary(points)}
+
+        @app.get("/api/scan", dependencies=[Depends(auth)])
+        def scan_latest() -> dict[str, Any]:
+            return {"status": engine.scanner.status(), "result": engine.scanner.latest(),
+                    "interval_s": engine.config().scan_interval_s}
+
+        @app.post("/api/scan/run", dependencies=[Depends(auth)])
+        def scan_run() -> dict[str, Any]:
+            started = engine.scanner.start()
+            return {"started": started, **engine.scanner.status()}
+
+        @app.get("/api/trades", dependencies=[Depends(auth)])
+        def trades_list(limit: int = 300) -> dict[str, Any]:
+            from .trades import build_trades
+
+            return {**build_trades(manager, limit), "fictional": engine.provider.fictional}
+
+        @app.get("/api/trades/{trade_id}", dependencies=[Depends(auth)])
+        def trades_one(trade_id: str) -> dict[str, Any]:
+            from .trades import trade_detail
+
+            found = trade_detail(manager, trade_id)
+            if found is None:
+                raise HTTPException(status_code=404, detail="Trade not found")
+            return found
 
         @app.get("/api/committee", dependencies=[Depends(auth)])
         def committee_review() -> dict[str, Any]:

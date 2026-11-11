@@ -73,6 +73,12 @@ CREATE TABLE IF NOT EXISTS equity (
     fictional INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_equity_ts ON equity(ts);
+CREATE TABLE IF NOT EXISTS scan_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    fictional INTEGER NOT NULL,
+    payload TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS agent_weights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,
@@ -288,6 +294,20 @@ class Store:
             cur = self._db.execute("DELETE FROM equity WHERE ts<?", (before.isoformat(),))
             self._db.commit()
             return cur.rowcount
+
+    # ---- scanner results (most-active names, unusual option activity): the newest per data kind is the live one ----
+    def record_scan(self, ts: datetime, fictional: bool, payload: dict[str, Any]) -> None:
+        with self._lock:
+            self._db.execute("INSERT INTO scan_results (ts, fictional, payload) VALUES (?,?,?)",
+                             (ts.isoformat(), int(fictional), json.dumps(payload, default=str)))
+            self._db.execute("DELETE FROM scan_results WHERE id NOT IN (SELECT id FROM scan_results ORDER BY id DESC LIMIT 200)")
+            self._db.commit()
+
+    def latest_scan(self, fictional: bool) -> Optional[dict[str, Any]]:
+        with self._lock:
+            r = self._db.execute("SELECT payload FROM scan_results WHERE fictional=? ORDER BY id DESC LIMIT 1",
+                                 (int(fictional),)).fetchone()
+        return json.loads(r["payload"]) if r else None
 
     # ---- learned agent weights: append-only audit trail, the latest row per agent is the live value ----
     def record_agent_weight(self, ts: datetime, agent: str, weight: float, n: int, accuracy: Optional[float],

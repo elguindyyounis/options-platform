@@ -53,6 +53,7 @@ fi
 
 export OPTPLAT_DATA="$mode"
 export OPTPLAT_OPEN_BROWSER=1
+export OPTPLAT_SCAN_EVERY_S="${OPTPLAT_SCAN_EVERY_S:-1800}"  # most-active and unusual-activity scan every 30 minutes
 export OPTPLAT_COMMITTEE="${OPTPLAT_COMMITTEE:-active}"  # agents vote and size paper entries; they learn from outcomes
 [ "$loop" = "1" ] && export OPTPLAT_AUTOSTART_LOOP=1
 if [ "$mode" = "yahoo" ]; then

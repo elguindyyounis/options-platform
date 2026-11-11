@@ -36,6 +36,8 @@ demo market is fictional random data, so profit or loss there means nothing.
 | Options signals | `src/optplat/signals.py` | Volume/OI, unusual activity, liquidity tiers, partial-chain GEX. All unvalidated; strategies cannot use them yet |
 | Market clock | `src/optplat/market_clock.py` | NYSE session table; fails closed for years it has no calendar for |
 | Agents | `src/optplat/agents.py`, `committee.py` | Technical, volatility, sentiment, execution, exposure and skeptic agents; a committee that votes, sizes within the engine cap, and learns each agent's weight from outcomes |
+| Scanner | `src/optplat/scanner.py` | Most-active names and unusual option activity from a fixed universe (free delayed data; research only) |
+| Trades | `src/optplat/trades.py` | Every filled entry as a trade: exit, result, entry reasoning and the committee's votes |
 | Events | `src/optplat/events.py` | FOMC decision days (Fed calendar) and earnings dates (unofficial Yahoo); unknown fails closed |
 | Weekly report | `src/optplat/weekly.py` | `python -m optplat.weekly`: read-only summary of the week and questions worth a pre-registered test |
 | Dashboard | `src/optplat/static/` | Single page served at `/`. Each panel states the question it answers: controls, can I trust this, equity and results, positions with exit levels, decisions, orders, experiments |

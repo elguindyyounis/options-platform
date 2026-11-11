@@ -88,6 +88,14 @@ def snapshot_from_dict(d: dict[str, Any]) -> MarketSnapshot:
     )
 
 
+@dataclass(frozen=True)
+class Bar:
+    """One daily bar: enough to rank names by activity. Volume is shares, close is the unadjusted last price."""
+    day: date
+    close: float
+    volume: float
+
+
 class MarketDataProvider(ABC):
     name: str = "abstract"
     fictional: bool = False
@@ -99,6 +107,10 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def quotes_for(self, contracts: Sequence[OptionContract]) -> list[Quote]:
         """Current quotes for specific contracts (used to keep held positions marked)."""
+
+    def daily_bars(self, symbols: Sequence[str]) -> dict[str, list[Bar]]:
+        """About two months of daily bars per symbol, for activity ranking. Optional: raise if unsupported."""
+        raise NotImplementedError(f"{self.name} cannot supply daily bars")
 
 
 # ---------------------------------------------------------------- Black-Scholes (demo only)
@@ -153,6 +165,29 @@ class DemoDataProvider(MarketDataProvider):
                 closes.append(round(price, 2))
             self._state[symbol] = closes
         return self._state[symbol]
+
+    def daily_bars(self, symbols: Sequence[str]) -> dict[str, list[Bar]]:
+        """Fictional bars with made-up volume, for exercising the scanner. Deterministic per symbol."""
+        today = self._clock().date()
+        days: list[date] = []
+        d = today
+        while len(days) < 30:
+            if d.weekday() < 5:
+                days.append(d)
+            d -= timedelta(days=1)
+        days.reverse()
+        out: dict[str, list[Bar]] = {}
+        for sym in symbols:
+            rng = random.Random(f"{self._seed}:{sym}:bars")
+            price = 50.0 + (sum(map(ord, sym)) % 450)
+            base = 1_000_000 * (1 + sum(map(ord, sym)) % 40)
+            bars = []
+            for i, day in enumerate(days):
+                price *= math.exp(0.012 * rng.gauss(0, 1))
+                surge = 3.0 if (i == len(days) - 1 and sum(map(ord, sym)) % 7 == 0) else 1.0
+                bars.append(Bar(day, round(price, 2), round(base * surge * (0.7 + 0.6 * rng.random()))))
+            out[sym] = bars
+        return out
 
     def advance(self) -> None:
         """Move every known underlying one random step (call once per engine cycle)."""
@@ -301,6 +336,28 @@ class YahooDataProvider(MarketDataProvider):
         for d in expiries[: self._max]:
             rows.extend(self._chain_rows(ticker, symbol, d))
         return MarketSnapshot(symbol, closes[-1], tuple(closes[-120:]), tuple(rows), self._clock(), self.name, False)
+
+    def daily_bars(self, symbols: Sequence[str]) -> dict[str, list[Bar]]:
+        import yfinance as yf
+
+        frame = yf.download(list(symbols), period="2mo", interval="1d", group_by="ticker", auto_adjust=False,
+                            progress=False, threads=True)
+        out: dict[str, list[Bar]] = {}
+        for sym in symbols:
+            try:
+                sub = frame[sym] if len(symbols) > 1 else frame
+                bars = []
+                for ts, close, vol in zip(sub.index, sub["Close"].tolist(), sub["Volume"].tolist()):
+                    c, v = _num(close), _num(vol)
+                    if c and c > 0 and v is not None and v >= 0:
+                        bars.append(Bar(ts.date(), c, v))
+                if bars:
+                    out[sym] = bars
+            except Exception:  # noqa: BLE001 - one symbol failing must not hide the others
+                continue
+        if not out:
+            raise RuntimeError("Yahoo returned no usable daily bars")
+        return out
 
     def quotes_for(self, contracts: Sequence[OptionContract]) -> list[Quote]:
         import yfinance as yf
