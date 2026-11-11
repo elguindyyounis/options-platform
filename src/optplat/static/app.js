@@ -1,7 +1,8 @@
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
-  const PAGES = ["desk", "trades", "market", "agents", "research", "system"];
+  const phone = window.matchMedia("(max-width:860px)");
+  const PAGES = ["desk", "trades", "shortterm", "market", "agents", "research", "system"];
   let token = "";
   try { token = sessionStorage.getItem("optplat_token") || ""; } catch (e) { /* storage unavailable */ }
   // The launcher opens /#token=... . A URL fragment is never sent to the server. Read it once, keep it for this
@@ -103,7 +104,7 @@
     document.querySelectorAll("a.nav").forEach((a) => {
       if (a.getAttribute("data-page") === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
-    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", market: "Market", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
+    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", shortterm: "Short-term", market: "Market", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
   }
 
   // ---------------------------------------------------------------- equity chart (unchanged behaviour)
@@ -334,6 +335,7 @@
   function syncControls(status, cfg) {
     $("cfg-entries").checked = status.config.auto_entries;
     $("cfg-exits").checked = status.config.auto_exits;
+    $("cfg-shortterm").checked = !!cfg.shortterm_enabled;
     $("cfg-hours").checked = status.market.hours_enforced;
     $("cfg-hours").disabled = status.market.hours_enforced && !status.data_source.fictional; // real data: always on
     if (document.activeElement !== $("cfg-watch")) $("cfg-watch").value = status.config.watchlist.join(", ");
@@ -588,6 +590,54 @@
     else if (!ev.shiftKey && document.activeElement === last) { first.focus(); ev.preventDefault(); }
   }
 
+  // ---------------------------------------------------------------- Short-term lane
+  const ST_EXIT = { stop: "Stop", target: "Target", below_vwap: "Below VWAP", flat_by_close: "Closed for the day", carried_over: "Left over" };
+  function renderShortterm(d) {
+    const sm = d.summary;
+    $("st-lede").textContent = (d.enabled ? "" : "The lane is switched off. Turn it on under Controls. ") +
+      "This is the day-trading experiment, kept apart from the long-term options book. It simulates buying shares of six liquid names when a fast trend line crosses above the day's average price, and selling when that fails. It places no orders. " +
+      (sm.closed < sm.min_trades_for_evidence ? "With " + sm.closed + " closed trades it is far below the " + sm.min_trades_for_evidence + " needed before the result means anything." : "It has passed the minimum sample, which still does not show an edge on its own.") +
+      (d.fictional ? " These trades come from fictional demo data." : "");
+    $("st-status").textContent = d.enabled ? "Runs with the loop, on completed 5-minute bars" : "Off";
+    $("btn-st-step").disabled = !d.enabled;
+    const f = $("st-summary");
+    f.replaceChildren();
+    kids(f, [
+      fig(String(sm.total), "Simulated trades", sm.open + " open, " + sm.closed + " closed"),
+      fig(sm.win_rate_pct === null ? "n/a" : sm.win_rate_pct + "%", "Winners", sm.closed ? sm.wins + " of " + sm.closed + " closed" : "no closed trades"),
+      fig(sgn(sm.realized_pnl), "Realized", "simulated, after slippage", tone(sm.realized_pnl)),
+    ]);
+    if (phone.matches && d.trades.length) {
+      const host = $("st-table");
+      host.replaceChildren();
+      d.trades.forEach((t) => {
+        const card = el("div", null, "tcard");
+        const top = el("div", null, "tc-top");
+        top.appendChild(el("b", t.symbol));
+        top.appendChild(t.status === "OPEN" ? el("span", "Open", "tag info") : el("span", ST_EXIT[t.close_reason] || words(t.close_reason), "tag " + (t.pnl > 0 ? "gain" : "loss")));
+        const mid = el("div", null, "tc-mid");
+        mid.appendChild(el("span", t.pnl === null ? "Open" : sgn(t.pnl), "tc-pnl num " + tone(t.pnl)));
+        if (t.pnl_pct !== null) mid.appendChild(el("span", pct(t.pnl_pct), "num " + tone(t.pnl_pct)));
+        const w = t.why_entered || {};
+        kids(card, [top, mid, el("div", t.quantity + " shares at " + Number(t.entry_price).toFixed(2) + (t.exit_price === null ? "" : ", sold at " + Number(t.exit_price).toFixed(2)) +
+          ". Opened " + fmtTime(t.opened_at) + ". EMA " + w.ema + " crossed above VWAP " + w.vwap + ".", "muted")]);
+        host.appendChild(card);
+      });
+    } else table($("st-table"), [
+      { label: "Opened", get: (t) => fmtTime(t.opened_at) }, { label: "Name", get: (t) => el("b", t.symbol) },
+      { label: "Shares", right: true, get: (t) => t.quantity }, { label: "Entry", right: true, get: (t) => Number(t.entry_price).toFixed(2) },
+      { label: "Exit", right: true, get: (t) => t.exit_price === null ? "open" : Number(t.exit_price).toFixed(2) },
+      { label: "Profit or loss", right: true, get: (t) => t.pnl === null ? "open" : span(sgn(t.pnl) + " (" + pct(t.pnl_pct) + ")", tone(t.pnl)) },
+      { label: "How it ended", get: (t) => t.status === "OPEN" ? el("span", "Open", "tag info") : el("span", ST_EXIT[t.close_reason] || words(t.close_reason), "tag " + (t.pnl > 0 ? "gain" : "loss")) },
+      { label: "Why it entered", get: (t) => { const w = t.why_entered || {}; return "EMA " + w.ema + " crossed above VWAP " + w.vwap + " (was " + w.prev_ema + " under " + w.prev_vwap + ")"; } },
+    ], d.trades, "No simulated trades yet", d.enabled ? "A trade needs a fresh crossing between 10:00 and 15:00 New York time on a name in the list." : "Switch the lane on under Controls.");
+    const r = $("st-rules"), l = $("st-limits");
+    r.replaceChildren(); l.replaceChildren();
+    d.rules.forEach((x) => r.appendChild(el("li", x)));
+    d.limitations.forEach((x) => l.appendChild(el("li", x)));
+  }
+  async function loadShortterm() { renderShortterm(await api("/api/shortterm")); }
+
   // ---------------------------------------------------------------- Market scan
   const TABS = [{ id: "active", label: "Most active names" }, { id: "unusual", label: "Unusual options activity" }, { id: "options", label: "Option volume by name" }];
   function renderMarket() {
@@ -689,6 +739,7 @@
   async function loadPage() {
     const page = route();
     if (page === "trades") await loadTrades();
+    else if (page === "shortterm") await loadShortterm();
     else if (page === "market") await loadMarket();
     else if (page === "agents") await loadAgents();
     else if (page === "research") await loadResearch();
@@ -743,10 +794,11 @@
     body: JSON.stringify({
       auto_entries: $("cfg-entries").checked, auto_exits: $("cfg-exits").checked,
       enforce_market_hours: $("cfg-hours").checked, committee_mode: $("cfg-committee").value,
-      scan_interval_s: Number($("cfg-scan").value),
+      scan_interval_s: Number($("cfg-scan").value), shortterm_enabled: $("cfg-shortterm").checked,
       watchlist: $("cfg-watch").value.split(/[,\s]+/).filter(Boolean),
     }),
   })));
+  $("btn-st-step").addEventListener("click", () => act(async () => { await api("/api/shortterm/step", { method: "POST" }); }));
   $("btn-scan").addEventListener("click", () => act(async () => {
     await api("/api/scan/run", { method: "POST" });
     // The scan runs in the background; check back every few seconds until it finishes.
@@ -762,8 +814,7 @@
   $("btn-drawer-close").addEventListener("click", closeTrade);
   $("scrim").addEventListener("click", closeTrade);
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeTrade(); trapFocus(ev); });
-  const phone = window.matchMedia("(max-width:860px)");
-  const onBreak = () => { if (S.trades && route() === "trades") renderTrades(); };
+  const onBreak = () => { if (S.trades && route() === "trades") renderTrades(); if (route() === "shortterm") loadShortterm().catch(() => {}); };
   if (phone.addEventListener) phone.addEventListener("change", onBreak); else if (phone.addListener) phone.addListener(onBreak);
   window.addEventListener("hashchange", () => { showPage(); if (S.connected && route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); if (S.connected) loadPage().catch((e) => { $("updated").textContent = "Error: " + e.message; }); });
 

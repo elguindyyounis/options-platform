@@ -29,6 +29,7 @@ from .orders import OrderManager
 from .pricing import sell_limit_for
 from .risk import RiskPolicy
 from .scanner import Scanner
+from .shortterm import ShortTermLane
 from .strategy import Strategy
 
 SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
@@ -52,6 +53,7 @@ class EngineConfig:
     snapshot_retention_days: int = 30
     scan_interval_s: int = 0  # 0 = off; otherwise the most-active and unusual-activity scan runs this often
     committee_mode: str = "shadow"  # off | shadow (records its votes only) | active (its vote and size apply)
+    shortterm_enabled: bool = False  # research lane: simulated intraday share trades on the underlying, no orders
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -83,7 +85,7 @@ class EngineConfig:
         for name, value in asdict(self).items():
             if name == "watchlist":
                 continue
-            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots")):
+            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots", "shortterm_enabled")):
                 raise ValueError(f"{name} has the wrong type")
         checks = [
             (0 <= self.max_new_per_cycle <= 5, "max_new_per_cycle must be 0-5"),
@@ -138,6 +140,7 @@ class TradingEngine:
         self._journal_seen: dict[tuple[str, str, str], datetime] = {}
         self._last_fingerprint: dict[str, tuple[str, int]] = {}
         self.scanner = Scanner(provider, self.store, clock=clock)
+        self.shortterm = ShortTermLane(provider, self.store, clock=clock)
 
     # ---- config -------------------------------------------------------
     def config(self) -> EngineConfig:
@@ -383,6 +386,19 @@ class TradingEngine:
             votes[p.contract] = d
             self._journal(cmt.KIND, symbol, d.disposition, p.contract, p.limit_price, d.to_payload(weights, trust), snap)
         return votes
+
+    def maybe_shortterm(self) -> Optional[dict[str, Any]]:
+        """One pass of the short-term research lane when it is switched on and the market is open (or the data is
+        fictional with hours not enforced). It never places an order and never raises into the trading loop."""
+        try:
+            cfg = self.config()
+            if not cfg.shortterm_enabled:
+                return None
+            if not session_status(self.clock())[0] and self._hours_enforced(cfg):
+                return None
+            return self.shortterm.step()
+        except Exception:  # noqa: BLE001
+            return None
 
     def maybe_scan(self) -> None:
         """Start the background scan when it is due. Never blocks or raises into the trading loop."""
@@ -721,6 +737,7 @@ class Runner:
                 self.last_error = None
                 self.last_success_at = self.engine.clock()
                 self.engine.maybe_scan()
+                self.engine.maybe_shortterm()
             except Exception as exc:  # noqa: BLE001 - keep the loop alive; the error is surfaced in status
                 self.last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
             self._stop.wait(self.engine.config().interval_s)

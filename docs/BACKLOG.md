@@ -26,9 +26,9 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 2. **Use scan results.** Let unusual-activity and most-active names feed the committee's sentiment agent and, if the owner
    wants, an auto-managed watchlist (single stocks need a known earnings date). Record scan chains for replay.
-3. **Short-term lane (owner wants a long-term book plus a day-trading lane).** Intraday EMA9/VWAP research on the
-   underlying only (idea from options-alerter), shadow mode, its own ledger, labelled separately in the dashboard. Real
-   intraday option fills need the owner to change the risk policy's 7-day minimum and a real-time quote source.
+3. **Short-term lane, next steps.** The EMA9/VWAP lane exists (Done). Next: register it as a pre-registered
+   experiment with pass criteria, record intraday bars for honest replay, and add a second rule to compare. Real intraday
+   option fills need the owner to change the risk policy's 7-day minimum and a real-time quote source.
 4. **Scale in and out of held positions.** The committee sizes new entries between 10% and 100% of the
    engine cap and learns that share from outcomes. Trimming a loser or adding to a winner needs exit-manager
    support (partial sell orders; adds must still pass the risk gate and its per-order and total-premium caps).
@@ -72,6 +72,7 @@ Existing items, in order:
 
 ## Done
 
+* Short-term research lane: EMA9/VWAP on 5-minute bars, simulated share trades in a separate ledger, off by default.
 * Dashboard v2: six pages, trade blotter with per-trade files (reasoning, agent votes, exit, audit trail), market scan
   views, agent record, phone layout. No PR chores.
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,

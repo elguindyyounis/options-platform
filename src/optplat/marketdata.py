@@ -10,7 +10,7 @@ import math
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Optional, Sequence
 
 from .models import OptionContract, Quote, Right, utcnow
@@ -96,6 +96,17 @@ class Bar:
     volume: float
 
 
+@dataclass(frozen=True)
+class IntradayBar:
+    """One intraday bar. ``ts`` is the bar START in UTC; volume is shares."""
+    ts: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+
+
 class MarketDataProvider(ABC):
     name: str = "abstract"
     fictional: bool = False
@@ -111,6 +122,10 @@ class MarketDataProvider(ABC):
     def daily_bars(self, symbols: Sequence[str]) -> dict[str, list[Bar]]:
         """About two months of daily bars per symbol, for activity ranking. Optional: raise if unsupported."""
         raise NotImplementedError(f"{self.name} cannot supply daily bars")
+
+    def intraday_bars(self, symbol: str) -> list["IntradayBar"]:
+        """Today's 5-minute bars for the underlying. Optional: raise if unsupported."""
+        raise NotImplementedError(f"{self.name} cannot supply intraday bars")
 
 
 # ---------------------------------------------------------------- Black-Scholes (demo only)
@@ -188,6 +203,31 @@ class DemoDataProvider(MarketDataProvider):
                 bars.append(Bar(day, round(price, 2), round(base * surge * (0.7 + 0.6 * rng.random()))))
             out[sym] = bars
         return out
+
+    def intraday_bars(self, symbol: str) -> list[IntradayBar]:
+        """Fictional 5-minute bars for the current session up to now. Deterministic per symbol and day."""
+        from .market_clock import NY
+
+        now = self._clock()
+        local = now.astimezone(NY)
+        day = local.date()
+        while day.weekday() >= 5:
+            day -= timedelta(days=1)
+        open_ts = datetime(day.year, day.month, day.day, 9, 30, tzinfo=NY).astimezone(timezone.utc)
+        rng = random.Random(f"{self._seed}:{symbol}:{day.isoformat()}:intraday")
+        price = 50.0 + (sum(map(ord, symbol)) % 450)
+        drift = 0.0
+        bars: list[IntradayBar] = []
+        for i in range(78):  # 9:30 to 16:00 in 5-minute steps
+            ts = open_ts + timedelta(minutes=5 * i)
+            if ts + timedelta(minutes=5) > now:
+                break
+            drift = 0.8 * drift + 0.0006 * rng.gauss(0, 1)  # some persistence, so trends and crossings happen
+            o = price
+            price *= math.exp(drift + 0.0012 * rng.gauss(0, 1))
+            hi, lo = max(o, price) * 1.0003, min(o, price) * 0.9997
+            bars.append(IntradayBar(ts, round(o, 2), round(hi, 2), round(lo, 2), round(price, 2), float(round(20000 * (0.5 + rng.random())))))
+        return bars
 
     def advance(self) -> None:
         """Move every known underlying one random step (call once per engine cycle)."""
@@ -357,6 +397,25 @@ class YahooDataProvider(MarketDataProvider):
                 continue
         if not out:
             raise RuntimeError("Yahoo returned no usable daily bars")
+        return out
+
+    def intraday_bars(self, symbol: str) -> list[IntradayBar]:
+        import yfinance as yf
+
+        frame = yf.download(symbol, period="1d", interval="5m", auto_adjust=False, progress=False)
+        if getattr(frame.columns, "nlevels", 1) > 1:
+            frame.columns = frame.columns.get_level_values(0)
+        out: list[IntradayBar] = []
+        for ts, o, h, l, c, v in zip(frame.index, frame["Open"].tolist(), frame["High"].tolist(), frame["Low"].tolist(),
+                                     frame["Close"].tolist(), frame["Volume"].tolist()):
+            vals = [_num(x) for x in (o, h, l, c, v)]
+            if any(x is None for x in vals) or vals[3] <= 0 or vals[4] < 0:
+                continue
+            dt = ts.to_pydatetime()
+            dt = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+            out.append(IntradayBar(dt, vals[0], vals[1], vals[2], vals[3], vals[4]))
+        if not out:
+            raise RuntimeError(f"Yahoo returned no usable intraday bars for {symbol}")
         return out
 
     def quotes_for(self, contracts: Sequence[OptionContract]) -> list[Quote]:

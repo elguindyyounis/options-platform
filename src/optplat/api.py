@@ -60,6 +60,7 @@ class EngineConfigBody(BaseModel):
     snapshot_retention_days: Optional[int] = None
     committee_mode: Optional[str] = None
     scan_interval_s: Optional[int] = None
+    shortterm_enabled: Optional[bool] = None
 
 
 class KillSwitchBody(BaseModel):
@@ -219,6 +220,20 @@ def create_app(
         def scan_run() -> dict[str, Any]:
             started = engine.scanner.start()
             return {"started": started, **engine.scanner.status()}
+
+        @app.get("/api/shortterm", dependencies=[Depends(auth)])
+        def shortterm_report() -> dict[str, Any]:
+            from .shortterm import build_report
+
+            return {**build_report(engine.store, engine.provider.fictional, engine.clock()),
+                    "enabled": engine.config().shortterm_enabled}
+
+        @app.post("/api/shortterm/step", dependencies=[Depends(auth)])
+        def shortterm_step() -> dict[str, Any]:
+            cfg = engine.config()
+            if not cfg.shortterm_enabled:
+                raise HTTPException(status_code=409, detail="The short-term lane is switched off. Turn it on in Controls first.")
+            return engine.maybe_shortterm() or {"note": "Market closed or no data: nothing evaluated"}
 
         @app.get("/api/trades", dependencies=[Depends(auth)])
         def trades_list(limit: int = 300) -> dict[str, Any]:

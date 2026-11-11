@@ -40,7 +40,8 @@ demo market is fictional random data, so profit or loss there means nothing.
 | Trades | `src/optplat/trades.py` | Every filled entry as a trade: exit, result, entry reasoning and the committee's votes |
 | Events | `src/optplat/events.py` | FOMC decision days (Fed calendar) and earnings dates (unofficial Yahoo); unknown fails closed |
 | Weekly report | `src/optplat/weekly.py` | `python -m optplat.weekly`: read-only summary of the week and questions worth a pre-registered test |
-| Dashboard | `src/optplat/static/` | Single page served at `/` with six views: Desk (account, equity, positions, decisions), Trades (blotter plus a file per trade), Market (most active names, unusual options activity), Agents, Research, Controls. Each panel states the question it answers |
+| Short-term lane | `src/optplat/shortterm.py` | Research-only EMA9/VWAP experiment on 5-minute bars of a few liquid names. Simulated share trades in their own ledger, no orders, off by default |
+| Dashboard | `src/optplat/static/` | Single page served at `/` with six views: Desk (account, equity, positions, decisions), Trades (blotter plus a file per trade), Short-term, Market (most active names, unusual options activity), Agents, Research, Controls. Each panel states the question it answers |
 
 ## The MVP loop
 

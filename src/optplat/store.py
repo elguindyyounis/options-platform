@@ -79,6 +79,21 @@ CREATE TABLE IF NOT EXISTS scan_results (
     fictional INTEGER NOT NULL,
     payload TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS lane_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lane TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    opened_at TEXT NOT NULL,
+    entry_price REAL NOT NULL,
+    quantity INTEGER NOT NULL,
+    open_payload TEXT NOT NULL,
+    closed_at TEXT,
+    exit_price REAL,
+    close_reason TEXT,
+    close_payload TEXT,
+    fictional INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_lane_trades_lane ON lane_trades(lane, id);
 CREATE TABLE IF NOT EXISTS agent_weights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,
@@ -308,6 +323,36 @@ class Store:
             r = self._db.execute("SELECT payload FROM scan_results WHERE fictional=? ORDER BY id DESC LIMIT 1",
                                  (int(fictional),)).fetchone()
         return json.loads(r["payload"]) if r else None
+
+    # ---- research lanes that simulate trades outside the options account (the short-term lane) ----
+    def lane_open(self, lane: str, symbol: str, ts: datetime, price: float, quantity: int, fictional: bool,
+                  payload: dict[str, Any]) -> int:
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT INTO lane_trades (lane, symbol, opened_at, entry_price, quantity, open_payload, fictional)"
+                " VALUES (?,?,?,?,?,?,?)", (lane, symbol, ts.isoformat(), price, quantity, json.dumps(payload, default=str), int(fictional)))
+            self._db.commit()
+            return int(cur.lastrowid)
+
+    def lane_close(self, trade_id: int, ts: datetime, price: float, reason: str, payload: dict[str, Any]) -> bool:
+        with self._lock:
+            cur = self._db.execute(
+                "UPDATE lane_trades SET closed_at=?, exit_price=?, close_reason=?, close_payload=? WHERE id=? AND closed_at IS NULL",
+                (ts.isoformat(), price, reason, json.dumps(payload, default=str), trade_id))
+            self._db.commit()
+            return cur.rowcount == 1
+
+    def lane_trades(self, lane: str, fictional: bool, limit: int = 300) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM lane_trades WHERE lane=? AND fictional=? ORDER BY id DESC LIMIT ?",
+                                    (lane, int(fictional), max(1, min(limit, 2000)))).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["open_payload"] = json.loads(d["open_payload"])
+            d["close_payload"] = json.loads(d["close_payload"]) if d["close_payload"] else None
+            out.append(d)
+        return out
 
     # ---- learned agent weights: append-only audit trail, the latest row per agent is the live value ----
     def record_agent_weight(self, ts: datetime, agent: str, weight: float, n: int, accuracy: Optional[float],

@@ -2,6 +2,28 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: short-term research lane (owner present, direction given in chat)
+
+* Owner direction: a long-term portfolio plus a short-term day-trading strategy. The long-term book is the existing
+  options engine. The short-term lane is a separate research experiment, `shortterm.py`: an EMA9 versus session VWAP
+  rule on 5-minute bars of SPY, QQQ, IWM, AAPL, NVDA and TSLA, long only, simulated share trades on the underlying in
+  its own ledger (`lane_trades`). It places no orders, uses no broker and does not touch the risk policy or the
+  options account. It is off by default (`shortterm_enabled`); `./run.sh` switches it on.
+* Why shares and not options: the risk policy keeps entries at 7 or more days to expiry and the free feed is delayed
+  about 15 minutes, so a real options day trade is not possible. Changing either is an owner decision.
+* The rule parameters (10:00 to 15:00 ET entries, 0.5% stop, 1.0% target, VWAP exit, flat by 15:45, $1,000 simulated
+  size, 3 open, 0.05% slippage each way) were fixed before any result and are research settings, not risk limits.
+  Owner: please review them. Unknown, stale or too little data means no entry.
+* Dashboard: new Short-term page (rule, limits, simulated trades, phone cards) and a Controls switch. API:
+  `/api/shortterm`, `POST /api/shortterm/step` (409 while off).
+* Tests: 366 pass (12 new: indicators, one entry per signal, window, stale and failing feeds, exits, carried-over
+  trades, the open cap, report maths, off-by-default, API).
+* Not verified: Yahoo intraday bars live (`yf.download(..., interval="5m")` is untested against the network), and
+  nothing here is evidence of an edge. The demo run used invented prices.
+* Skill repos the owner named: `claude-trading-skills` and `day-trader-skill` were read but NOT installed. The
+  second contains `trader-broker`, an Alpaca order path, which this repo's rules reserve for the owner. The auto-mode
+  classifier also blocked copying skills into `~/.claude/skills`. Nothing was installed.
+
 ## 2026-11-11: dashboard v2, with a trade blotter and trade files (owner present)
 
 * The dashboard is now six pages behind a left rail (a bottom bar on phones): Desk, Trades, Market, Agents,
