@@ -2,6 +2,20 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: swing replay (owner agreed the rule settings and asked for simulated trades now)
+
+* The owner approved the swing settings as written. This sandbox cannot reach Yahoo (the request returns nothing and
+  yfinance is not installed), so there is no real market data here and no real-data paper trades could be made from
+  this session. Trades on real data are made by the owner's own run (`./run.sh yahoo --loop`, swing lane on).
+* To give history immediately instead of waiting days, `swing_replay.py` runs the same `SwingLane.step` day by day over
+  past daily bars in a throwaway in-memory store. Each day sees only bars up to that day. Run it with
+  `.venv/bin/python -m optplat.swing_replay --data yahoo --months 12`. It covers funds only (no historical earnings
+  dates, so single stocks would be contaminated), enters at the close, models no gaps, and prints the same-window
+  buy-and-hold average for comparison. It never writes to the real database.
+* Tests: 385 pass (4 new: funds only, no look-ahead, determinism, demo run and text output).
+* Verified only on fictional demo data (78 invented trades, which mean nothing). Not verified on real bars.
+* A good-looking replay still proves nothing: the same bars were used to look at the outcome and the rule is untested out of sample.
+
 ## 2026-11-11: swing research lane (owner present, "start with swing trading")
 
 * `swing.py`: a research experiment on DAILY bars of the 74-name scan universe. Buy a pullback inside an uptrend

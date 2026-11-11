@@ -41,6 +41,7 @@ demo market is fictional random data, so profit or loss there means nothing.
 | Events | `src/optplat/events.py` | FOMC decision days (Fed calendar) and earnings dates (unofficial Yahoo); unknown fails closed |
 | Weekly report | `src/optplat/weekly.py` | `python -m optplat.weekly`: read-only summary of the week and questions worth a pre-registered test |
 | Swing lane | `src/optplat/swing.py` | Research-only pullback-in-an-uptrend experiment on daily bars. Simulated share trades with their own stop, target and time limit, earnings-aware, no orders, off by default |
+| Swing replay | `src/optplat/swing_replay.py` | `python -m optplat.swing_replay --data yahoo --months 12` replays the swing rule over past daily bars of funds, one day at a time with no look-ahead, in a throwaway store. A history check, not evidence |
 | Short-term lane | `src/optplat/shortterm.py` | Research-only EMA9/VWAP experiment on 5-minute bars of a few liquid names. Simulated share trades in their own ledger, no orders, off by default |
 | Dashboard | `src/optplat/static/` | Single page served at `/` with six views: Desk (account, equity, positions, decisions), Trades (blotter plus a file per trade), Swing, Short-term, Market (most active names, unusual options activity), Agents, Research, Controls. Each panel states the question it answers |
 
