@@ -175,8 +175,10 @@ class ShortTermLane:
         return out
 
 
-def build_report(store: Store, fictional: bool, now: datetime) -> dict[str, Any]:
-    rows = store.lane_trades(LANE, fictional, 500)
+def lane_report(store: Store, lane: str, fictional: bool, now: datetime, *, rules: Sequence[str], limitations: Sequence[str],
+                symbols: Sequence[str], exit_text: dict[str, str]) -> dict[str, Any]:
+    """The ledger of one research lane as the dashboard reads it. Shared by the short-term and swing lanes."""
+    rows = store.lane_trades(lane, fictional, 500)
     trades = []
     for t in rows:
         closed = t["closed_at"] is not None
@@ -187,16 +189,20 @@ def build_report(store: Store, fictional: bool, now: datetime) -> dict[str, Any]
             "entry_price": t["entry_price"], "exit_price": t["exit_price"], "pnl": pnl,
             "pnl_pct": round(pnl / cost * 100, 2) if pnl is not None and cost > 0 else None,
             "status": "CLOSED" if closed else "OPEN", "close_reason": t["close_reason"],
-            "close_text": EXIT_TEXT.get(t["close_reason"] or "", None), "why_entered": t["open_payload"],
+            "close_text": exit_text.get(t["close_reason"] or "", None), "why_entered": t["open_payload"],
         })
     done = [t for t in trades if t["status"] == "CLOSED"]
     wins = [t for t in done if (t["pnl"] or 0) > 0]
     return {
-        "lane": LANE, "fictional": fictional, "as_of": now.isoformat(), "rules": list(RULES), "limitations": list(LIMITATIONS),
-        "symbols": list(LANE_SYMBOLS),
+        "lane": lane, "fictional": fictional, "as_of": now.isoformat(), "rules": list(rules), "limitations": list(limitations),
+        "symbols": list(symbols),
         "summary": {"total": len(trades), "open": len(trades) - len(done), "closed": len(done), "wins": len(wins),
                     "win_rate_pct": round(len(wins) / len(done) * 100, 1) if done else None,
                     "realized_pnl": round(sum(t["pnl"] for t in done), 2),
                     "min_trades_for_evidence": 30},
         "trades": trades,
     }
+
+
+def build_report(store: Store, fictional: bool, now: datetime) -> dict[str, Any]:
+    return lane_report(store, LANE, fictional, now, rules=RULES, limitations=LIMITATIONS, symbols=LANE_SYMBOLS, exit_text=EXIT_TEXT)

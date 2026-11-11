@@ -119,8 +119,8 @@ class MarketDataProvider(ABC):
     def quotes_for(self, contracts: Sequence[OptionContract]) -> list[Quote]:
         """Current quotes for specific contracts (used to keep held positions marked)."""
 
-    def daily_bars(self, symbols: Sequence[str]) -> dict[str, list[Bar]]:
-        """About two months of daily bars per symbol, for activity ranking. Optional: raise if unsupported."""
+    def daily_bars(self, symbols: Sequence[str], months: int = 2) -> dict[str, list[Bar]]:
+        """Daily bars per symbol (about two months by default, more for swing research). Optional: raise if unsupported."""
         raise NotImplementedError(f"{self.name} cannot supply daily bars")
 
     def intraday_bars(self, symbol: str) -> list["IntradayBar"]:
@@ -181,12 +181,13 @@ class DemoDataProvider(MarketDataProvider):
             self._state[symbol] = closes
         return self._state[symbol]
 
-    def daily_bars(self, symbols: Sequence[str]) -> dict[str, list[Bar]]:
+    def daily_bars(self, symbols: Sequence[str], months: int = 2) -> dict[str, list[Bar]]:
         """Fictional bars with made-up volume, for exercising the scanner. Deterministic per symbol."""
         today = self._clock().date()
         days: list[date] = []
         d = today
-        while len(days) < 30:
+        want = 30 if months <= 2 else 21 * months
+        while len(days) < want:
             if d.weekday() < 5:
                 days.append(d)
             d -= timedelta(days=1)
@@ -377,10 +378,10 @@ class YahooDataProvider(MarketDataProvider):
             rows.extend(self._chain_rows(ticker, symbol, d))
         return MarketSnapshot(symbol, closes[-1], tuple(closes[-120:]), tuple(rows), self._clock(), self.name, False)
 
-    def daily_bars(self, symbols: Sequence[str]) -> dict[str, list[Bar]]:
+    def daily_bars(self, symbols: Sequence[str], months: int = 2) -> dict[str, list[Bar]]:
         import yfinance as yf
 
-        frame = yf.download(list(symbols), period="2mo", interval="1d", group_by="ticker", auto_adjust=False,
+        frame = yf.download(list(symbols), period=f"{max(1, min(int(months), 24))}mo", interval="1d", group_by="ticker", auto_adjust=False,
                             progress=False, threads=True)
         out: dict[str, list[Bar]] = {}
         for sym in symbols:

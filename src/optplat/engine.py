@@ -30,6 +30,7 @@ from .pricing import sell_limit_for
 from .risk import RiskPolicy
 from .scanner import Scanner
 from .shortterm import ShortTermLane
+from .swing import SwingLane
 from .strategy import Strategy
 
 SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
@@ -54,6 +55,7 @@ class EngineConfig:
     scan_interval_s: int = 0  # 0 = off; otherwise the most-active and unusual-activity scan runs this often
     committee_mode: str = "shadow"  # off | shadow (records its votes only) | active (its vote and size apply)
     shortterm_enabled: bool = False  # research lane: simulated intraday share trades on the underlying, no orders
+    swing_enabled: bool = False  # research lane: simulated multi-day share trades on daily bars, no orders
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -85,7 +87,7 @@ class EngineConfig:
         for name, value in asdict(self).items():
             if name == "watchlist":
                 continue
-            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots", "shortterm_enabled")):
+            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots", "shortterm_enabled", "swing_enabled")):
                 raise ValueError(f"{name} has the wrong type")
         checks = [
             (0 <= self.max_new_per_cycle <= 5, "max_new_per_cycle must be 0-5"),
@@ -141,6 +143,7 @@ class TradingEngine:
         self._last_fingerprint: dict[str, tuple[str, int]] = {}
         self.scanner = Scanner(provider, self.store, clock=clock)
         self.shortterm = ShortTermLane(provider, self.store, clock=clock)
+        self.swing = SwingLane(provider, self.store, clock=clock, calendar=self.calendar)
 
     # ---- config -------------------------------------------------------
     def config(self) -> EngineConfig:
@@ -397,6 +400,16 @@ class TradingEngine:
             if not session_status(self.clock())[0] and self._hours_enforced(cfg):
                 return None
             return self.shortterm.step()
+        except Exception:  # noqa: BLE001
+            return None
+
+    def maybe_swing(self, force: bool = False) -> Optional[dict[str, Any]]:
+        """One pass of the swing research lane when it is switched on. Throttled inside the lane. It never places an
+        order and never raises into the trading loop."""
+        try:
+            if not self.config().swing_enabled:
+                return None
+            return self.swing.step(force=force)
         except Exception:  # noqa: BLE001
             return None
 
@@ -738,6 +751,7 @@ class Runner:
                 self.last_success_at = self.engine.clock()
                 self.engine.maybe_scan()
                 self.engine.maybe_shortterm()
+                self.engine.maybe_swing()
             except Exception as exc:  # noqa: BLE001 - keep the loop alive; the error is surfaced in status
                 self.last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
             self._stop.wait(self.engine.config().interval_s)

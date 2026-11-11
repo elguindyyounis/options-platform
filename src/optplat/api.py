@@ -61,6 +61,7 @@ class EngineConfigBody(BaseModel):
     committee_mode: Optional[str] = None
     scan_interval_s: Optional[int] = None
     shortterm_enabled: Optional[bool] = None
+    swing_enabled: Optional[bool] = None
 
 
 class KillSwitchBody(BaseModel):
@@ -234,6 +235,19 @@ def create_app(
             if not cfg.shortterm_enabled:
                 raise HTTPException(status_code=409, detail="The short-term lane is switched off. Turn it on in Controls first.")
             return engine.maybe_shortterm() or {"note": "Market closed or no data: nothing evaluated"}
+
+        @app.get("/api/swing", dependencies=[Depends(auth)])
+        def swing_report() -> dict[str, Any]:
+            from .swing import build_report
+
+            return {**build_report(engine.store, engine.provider.fictional, engine.clock()),
+                    "enabled": engine.config().swing_enabled}
+
+        @app.post("/api/swing/step", dependencies=[Depends(auth)])
+        def swing_step() -> dict[str, Any]:
+            if not engine.config().swing_enabled:
+                raise HTTPException(status_code=409, detail="The swing lane is switched off. Turn it on in Controls first.")
+            return engine.maybe_swing(force=True) or {"note": "Nothing evaluated"}
 
         @app.get("/api/trades", dependencies=[Depends(auth)])
         def trades_list(limit: int = 300) -> dict[str, Any]:

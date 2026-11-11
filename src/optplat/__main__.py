@@ -98,6 +98,8 @@ def main() -> None:
             sys.exit("OPTPLAT_SCAN_EVERY_S must be 0 or a number of seconds from 600 to 86400")
     if os.environ.get("OPTPLAT_SHORTTERM", "") == "1":
         engine.set_config({"shortterm_enabled": True})  # research lane only: simulated share trades, no orders
+    if os.environ.get("OPTPLAT_SWING", "") == "1":
+        engine.set_config({"swing_enabled": True})  # research lane only: simulated share trades, no orders
     mode = os.environ.get("OPTPLAT_COMMITTEE", "")
     if mode:
         if mode not in ("off", "shadow", "active"):

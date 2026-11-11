@@ -184,6 +184,7 @@
     <div class="brand"><b>options-platform</b><small>Paper trading desk</small></div>
     <a class="nav" href="#/desk" data-page="desk">Desk</a>
     <a class="nav" href="#/trades" data-page="trades">Trades</a>
+    <a class="nav" href="#/swing" data-page="swing">Swing</a>
     <a class="nav" href="#/shortterm" data-page="shortterm">Short-term</a>
     <a class="nav" href="#/market" data-page="market">Market</a>
     <a class="nav" href="#/agents" data-page="agents">Agents</a>
@@ -262,6 +263,23 @@
           <input id="trade-search" type="text" placeholder="Search by symbol" aria-label="Search trades by symbol">
         </div>
         <div class="panel" style="padding:6px 8px"><div class="scroll" id="trade-table"></div></div>
+      </section>
+
+      <section id="view-swing" data-page="swing" data-question="What is the swing-trading experiment doing, and is it worth anything yet?" hidden>
+        <div>
+          <h1>Swing lane</h1>
+          <p id="sw-lede" class="lede"></p>
+        </div>
+        <div class="toolbar">
+          <button id="btn-sw-step" class="btn primary">Check now</button>
+          <span id="sw-status" class="muted"></span>
+        </div>
+        <div class="figures" id="sw-summary"></div>
+        <div class="panel"><h2>Simulated trades</h2><p class="q">Which shares did the rule buy, and how did each end?</p><div class="scroll" id="sw-table"></div></div>
+        <div class="grid2">
+          <div class="panel"><h2>The rule</h2><ul class="plain" id="sw-rules" style="margin-top:10px"></ul></div>
+          <div class="panel"><h2>What this cannot tell you</h2><ul class="plain" id="sw-limits" style="margin-top:10px"></ul></div>
+        </div>
       </section>
 
       <section id="view-shortterm" data-page="shortterm" data-question="What is the short-term day-trading experiment doing, and is it worth anything yet?" hidden>
@@ -352,6 +370,7 @@
             <label class="check"><input id="cfg-entries" type="checkbox"> Automatic entries</label>
             <label class="check"><input id="cfg-exits" type="checkbox"> Automatic exits</label>
             <label class="check"><input id="cfg-hours" type="checkbox"> Enforce market hours</label>
+            <label class="check"><input id="cfg-swing" type="checkbox"> Swing research lane</label>
             <label class="check"><input id="cfg-shortterm" type="checkbox"> Short-term research lane</label>
           </div>
           <div class="toolbar" style="margin-top:12px">

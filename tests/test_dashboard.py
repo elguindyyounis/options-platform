@@ -114,7 +114,7 @@ def test_equity_points_come_back_in_time_order_even_if_inserted_out_of_order():
 def test_every_nav_link_has_a_page_with_a_question(client):
     html = client[0].get("/").text
     pages = re.findall(r'<a class="nav" href="#/([a-z]+)" data-page="([a-z]+)"', html)
-    assert [p for p, _ in pages] == ["desk", "trades", "shortterm", "market", "agents", "research", "system"]
+    assert [p for p, _ in pages] == ["desk", "trades", "swing", "shortterm", "market", "agents", "research", "system"]
     for route, page in pages:
         assert route == page
         tag = re.search(rf'<section[^>]*data-page="{page}"[^>]*>', html)
@@ -151,3 +151,14 @@ def test_scan_and_trades_endpoints_are_what_the_dashboard_reads(client):
     assert set(scan) >= {"status", "result", "interval_s"}
     trades = c.get("/api/trades", headers=H).json()
     assert set(trades) >= {"summary", "trades", "fictional"} and trades["fictional"] is True
+
+
+def test_research_lane_pages_have_every_element_the_shared_renderer_writes(client):
+    html = client[0].get("/").text
+    for prefix in ("st", "sw"):
+        for part in ("lede", "status", "summary", "table", "rules", "limits"):
+            assert f'id="{prefix}-{part}"' in html, f"{prefix}-{part}"
+        assert f'id="btn-{prefix}-step"' in html
+    assert 'id="cfg-swing"' in html and 'id="cfg-shortterm"' in html
+    js = client[0].get("/static/app.js").text
+    assert "/api/swing" in js and "/api/shortterm" in js and "swing_enabled" in js

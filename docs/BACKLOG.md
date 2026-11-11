@@ -26,6 +26,9 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 2. **Use scan results.** Let unusual-activity and most-active names feed the committee's sentiment agent and, if the owner
    wants, an auto-managed watchlist (single stocks need a known earnings date). Record scan chains for replay.
+2b. **Swing lane, next steps.** Register it as a pre-registered experiment with pass criteria, compare it with the frozen
+   baseline on the same days, record daily bars for honest replay, and decide with the owner whether a version should trade
+   options with 7 to 45 days to expiry (that fits the risk policy; it needs an owner decision to promote).
 3. **Short-term lane, next steps.** The EMA9/VWAP lane exists (Done). Next: register it as a pre-registered
    experiment with pass criteria, record intraday bars for honest replay, and add a second rule to compare. Real intraday
    option fills need the owner to change the risk policy's 7-day minimum and a real-time quote source.
@@ -72,6 +75,7 @@ Existing items, in order:
 
 ## Done
 
+* Swing research lane: pullback-in-uptrend on daily bars, simulated share trades, own stops, earnings-aware, off by default.
 * Short-term research lane: EMA9/VWAP on 5-minute bars, simulated share trades in a separate ledger, off by default.
 * Dashboard v2: six pages, trade blotter with per-trade files (reasoning, agent votes, exit, audit trail), market scan
   views, agent record, phone layout. No PR chores.

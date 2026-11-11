@@ -2,6 +2,26 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: swing research lane (owner present, "start with swing trading")
+
+* `swing.py`: a research experiment on DAILY bars of the 74-name scan universe. Buy a pullback inside an uptrend
+  (20-day average above the 50-day, close above the 50-day, RSI(14) at or below 45 on one of the last 3 days, then
+  RSI rising and a higher close, skipping a day that moved more than 5%). Exit at a stop (2.5 daily standard
+  deviations, clamped 3% to 10%), a 1.5R target, a close below the 50-day average, or after 10 trading days. Simulated
+  share trades in the same separate ledger as the short-term lane (`lane_trades`); no orders, no broker, no change to
+  the options account or the risk policy. Off by default (`swing_enabled`); `./run.sh` switches it on.
+* Each trade stores its own stop, target and time limit when it opens, so editing a setting never moves an open trade.
+  Single stocks need a known earnings date with none inside the hold plus 14 days (unknown blocks the entry); funds are
+  exempt. A failed or empty feed means no entry. It runs at most hourly and judges each daily bar once.
+* `daily_bars(symbols, months=2)` gained a months argument (the scanner's default is unchanged). The shared ledger
+  report moved to `shortterm.lane_report`.
+* Dashboard: Swing page next to Short-term, one shared renderer, a Controls switch, `/api/swing` and
+  `POST /api/swing/step` (409 while off).
+* Tests: 381 pass (15 new for swing, including each exit reason, the throttle, the earnings rules and the API).
+* Not verified: Yahoo 6-month daily bars for 74 names in one call, and Yahoo earnings dates, against the live network.
+  Entries are simulated at the latest close, not the next open, and gaps are not modelled. The rule settings were
+  chosen before any result; owner, please review them. Nothing here is evidence of an edge.
+
 ## 2026-11-11: short-term research lane (owner present, direction given in chat)
 
 * Owner direction: a long-term portfolio plus a short-term day-trading strategy. The long-term book is the existing
