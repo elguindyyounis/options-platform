@@ -22,7 +22,7 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   risk policy's caps, which I did not touch. Raising a cap is a risk-policy change in `risk.py`.
 * Not built: scaling into or out of already-held positions (backlog), news sentiment (needs a data
   source), event calendar (needs a source). All thresholds in `agents.py` are experiment parameters.
-* Verified: 316 tests; the dashboard panel in headless Chromium with no page errors. Not verified: any
+* Verified: 315 tests; the dashboard panel in headless Chromium with no page errors. Not verified: any
   learning on real recorded data. It needs days of running before the weights mean anything.
 
 ## 2026-11-11: weekly research report (roadmap step 6, owner away)
