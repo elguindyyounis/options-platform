@@ -57,6 +57,7 @@ class EngineConfigBody(BaseModel):
     reentry_cooldown_s: Optional[int] = None
     record_snapshots: Optional[bool] = None
     snapshot_retention_days: Optional[int] = None
+    committee_mode: Optional[str] = None
 
 
 class KillSwitchBody(BaseModel):
@@ -204,6 +205,14 @@ def create_app(
             points = engine.store.list_equity(limit=max(2, min(limit, 2000)), fictional=fictional)
             return {"fictional": fictional, "points": [{"ts": p["ts"], "equity": p["equity"]} for p in points],
                     "summary": equity_summary(points)}
+
+        @app.get("/api/committee", dependencies=[Depends(auth)])
+        def committee_review() -> dict[str, Any]:
+            from . import committee
+
+            fictional = engine.provider.fictional
+            return {"mode": engine.config().committee_mode, "fictional": fictional,
+                    **committee.scorecard(engine.store, engine.clock(), fictional)}
 
         @app.get("/api/research/hypotheses", dependencies=[Depends(auth)])
         def hypotheses() -> list[dict[str, Any]]:

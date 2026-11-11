@@ -228,10 +228,36 @@
     ], list, "No experiments registered. Register one with: python -m optplat.research register (the baseline stays frozen).");
   }
 
+  const pctText = (v) => (v === null || v === undefined ? "n/a" : (v >= 0 ? "+" : "") + v + "%");
+  function renderCommittee(c, cfg) {
+    const sum = $("committee-summary");
+    sum.className = "verdict" + (c.mode === "off" ? "" : " ok");
+    const e = c.committee.WOULD_ENTER || { n: 0 }, r = c.committee.WOULD_REJECT || { n: 0 };
+    sum.textContent = "Mode " + c.mode + ". It uses " + Math.round(c.trust * 100) + "% of its allowed order size, and that share moves with its hit rate. " +
+      "Matured " + c.horizon_hours + "h outcomes: " + e.n + " entries" + (e.n ? " (" + pctText(e.mean_return_pct) + " avg)" : "") + ", " +
+      r.n + " rejections" + (r.n ? " (" + pctText(r.mean_return_pct) + " avg if taken)" : "") + ".";
+    const rows = Object.keys(c.weights).map((name) => {
+      const a = c.agents[name] || { votes: {}, descriptive_only: true };
+      const v = (s) => a.votes[s] ? a.votes[s].n + " calls, " + pctText(a.votes[s].mean_return_pct) + ", " + (a.votes[s].hit_rate === null ? "n/a" : Math.round(a.votes[s].hit_rate * 100) + "% up") : "none yet";
+      return { name, weight: c.weights[name], support: v("SUPPORT"), oppose: v("OPPOSE"), note: a.descriptive_only ? "too few outcomes to judge" : "" };
+    });
+    table($("committee-agents"), [
+      { label: "Agent", get: (x) => x.name }, { label: "Learned weight", get: (x) => Number(x.weight).toFixed(2) },
+      { label: "When it said SUPPORT", get: (x) => x.support }, { label: "When it said OPPOSE", get: (x) => x.oppose },
+      { label: "Note", get: (x) => x.note },
+    ], rows, "No agents");
+    const ul = $("committee-lessons"); ul.replaceChildren();
+    (c.lessons.length ? c.lessons : ["No matured mistakes to learn from yet."]).forEach((t) => ul.appendChild(el("li", t)));
+    table($("committee-history"), [
+      { label: "Time", get: (h) => h.ts.slice(0, 19) }, { label: "Agent", get: (h) => h.agent }, { label: "Change", get: (h) => h.note },
+    ], c.history, "No weight has moved yet");
+    if (document.activeElement !== $("cfg-committee")) $("cfg-committee").value = cfg.committee_mode;
+  }
+
   async function refresh() {
     if (!token) return;
     try {
-      const [health, status, portfolio, orders, report, decisions, eq, hyps] = await Promise.all([
+      const [health, status, portfolio, orders, report, decisions, eq, hyps, committee] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         api("/api/engine/status"),
         api("/api/portfolio"),
@@ -240,6 +266,7 @@
         api("/api/journal?limit=15"),
         api("/api/equity"),
         api("/api/research/hypotheses"),
+        api("/api/committee"),
       ]);
       pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
       pill("data", status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), status.data_source.fictional ? "warn" : "");
@@ -261,9 +288,10 @@
       renderResults(portfolio, report, eq);
       renderPositions(report, status.config);
       renderResearch(hyps);
+      renderCommittee(committee, status.config);
 
       const why = (d) => (d.payload.risk_failures && d.payload.risk_failures.length) ? d.payload.risk_failures.join("; ")
-        : (d.payload.why || d.payload.reason || (d.payload.score !== undefined ? "score " + Number(d.payload.score).toFixed(2) : ""));
+        : (d.payload.why || d.payload.reason || (d.payload.reasons && d.payload.reasons.join("; ")) || (d.payload.score !== undefined ? "score " + Number(d.payload.score).toFixed(2) : ""));
       table($("decisions"), [
         { label: "Time", get: (d) => d.ts.slice(0, 19) }, { label: "Type", get: (d) => d.kind },
         { label: "Contract", get: (d) => d.contract }, { label: "Outcome", get: (d) => d.disposition },
@@ -305,7 +333,7 @@
     method: "PUT",
     body: JSON.stringify({
       auto_entries: $("cfg-entries").checked, auto_exits: $("cfg-exits").checked,
-      enforce_market_hours: $("cfg-hours").checked,
+      enforce_market_hours: $("cfg-hours").checked, committee_mode: $("cfg-committee").value,
       watchlist: $("cfg-watch").value.split(/[,\s]+/).filter(Boolean),
     }),
   })));

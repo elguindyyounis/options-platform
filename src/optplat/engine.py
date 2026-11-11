@@ -16,6 +16,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
+from . import committee as cmt
+from .agents import Context
 from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
 from .market_clock import session_status
@@ -46,6 +48,7 @@ class EngineConfig:
     reentry_cooldown_s: int = 86400  # do not re-buy a contract within this long of selling it
     record_snapshots: bool = True  # keep every observed snapshot: the raw material for honest replay
     snapshot_retention_days: int = 30
+    committee_mode: str = "shadow"  # off | shadow (records its votes only) | active (its vote and size apply)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -89,6 +92,7 @@ class EngineConfig:
             (0 <= self.min_dte_to_hold <= 60, "min_dte_to_hold must be 0-60"),
             (0 <= self.reentry_cooldown_s <= 2_592_000, "reentry_cooldown_s must be 0-2592000"),
             (1 <= self.snapshot_retention_days <= 3650, "snapshot_retention_days must be 1-3650"),
+            (self.committee_mode in ("off", "shadow", "active"), "committee_mode must be off, shadow or active"),
         ]
         for ok, message in checks:
             if not ok:
@@ -195,6 +199,7 @@ class TradingEngine:
                 "errors": [],
             }
             self._guard(report, "snapshot prune", lambda: self._maybe_prune_snapshots(cfg, now))
+            self._maybe_learn(cfg, now)
             snapshots: dict[str, Optional[MarketSnapshot]] = {}
 
             if hasattr(self.provider, "advance"):
@@ -346,6 +351,43 @@ class TradingEngine:
             report["snapshots_recorded"] += 1
         except Exception as exc:  # noqa: BLE001
             report["errors"].append(f"record {snap.symbol}: {type(exc).__name__}: {str(exc)[:100]}")
+
+    def _committee_votes(self, cfg: EngineConfig, symbol: str, snap: MarketSnapshot, proposals: list[Any],
+                         positions: list[Position], account: Account, now: datetime) -> dict[Any, cmt.CommitteeDecision]:
+        """Ask the committee about the top candidates and journal every verdict. In shadow mode that is all it does."""
+        if cfg.committee_mode == "off":
+            return {}
+        votes: dict[Any, cmt.CommitteeDecision] = {}
+        try:
+            weights, trust = cmt.current(self.store, self.provider.fictional)
+        except Exception:  # noqa: BLE001
+            return {}
+        for p in proposals[: self.JOURNAL_MAX_CANDIDATES]:
+            cap = size_quantity(account, self.manager.policy, p.limit_price)
+            if cap < 1:
+                continue
+            try:
+                ctx = Context(snap, p, now, account, self.manager.policy, tuple(positions), cap,
+                              cfg.min_dte_to_hold, cfg.stop_loss_pct)
+                d = cmt.decide(ctx, weights, trust)
+            except Exception:  # noqa: BLE001 - no decision: shadow ignores it, active mode refuses the candidate
+                continue
+            votes[p.contract] = d
+            self._journal(cmt.KIND, symbol, d.disposition, p.contract, p.limit_price, d.to_payload(weights, trust), snap)
+        return votes
+
+    def _maybe_learn(self, cfg: EngineConfig, now: datetime) -> None:
+        """Refit agent weights and committee trust from matured outcomes, at most every 30 minutes."""
+        if cfg.committee_mode == "off":
+            return
+        try:
+            last = self.store.get_state("committee_last_learn", "")
+            if last and now - datetime.fromisoformat(last) < timedelta(minutes=30):
+                return
+            cmt.learn(self.store, now, self.provider.fictional)
+            self.store.set_state("committee_last_learn", now.isoformat())
+        except Exception:  # noqa: BLE001 - learning must never stop a cycle
+            pass
 
     def _maybe_prune_snapshots(self, cfg: EngineConfig, now: datetime) -> None:
         """Delete snapshots older than the retention window, at most once an hour."""
@@ -515,12 +557,28 @@ class TradingEngine:
                 report["entries"].append({"symbol": symbol, "result": "NO_PROPOSAL"})
                 continue
             account = self.manager.broker.get_account()
+            votes = self._committee_votes(cfg, symbol, snap, proposals, positions, account, now)
             chosen = None
+            declined = False
             for proposal in proposals:  # best first; take the first one that fits the size cap
                 quantity = size_quantity(account, self.manager.policy, proposal.limit_price)
-                if quantity >= 1:
-                    chosen = (proposal, quantity)
-                    break
+                if quantity < 1:
+                    continue
+                if cfg.committee_mode == "active":  # the committee may refuse, or take less. Never more than the cap
+                    d = votes.get(proposal.contract)
+                    if d is None or d.disposition != cmt.ENTER:
+                        declined = True
+                        continue
+                    quantity = min(quantity, d.quantity)
+                chosen = (proposal, quantity)
+                break
+            if chosen is None and declined:
+                report["entries"].append({"symbol": symbol, "result": "COMMITTEE_DECLINED"})
+                for p in proposals[: self.JOURNAL_MAX_CANDIDATES]:
+                    self._journal("ENTRY", symbol, "NOT_CHOSEN_COMMITTEE", p.contract, p.limit_price,
+                                  {"rationale": p.rationale, "score": p.score,
+                                   "why": "; ".join(votes[p.contract].reasons) if p.contract in votes else "not put to the committee: does not fit the size cap"}, snap)
+                continue
             if chosen is None:
                 for p in proposals[: self.JOURNAL_MAX_CANDIDATES]:
                     self._journal("ENTRY", symbol, "NOT_CHOSEN_SIZE_CAP", p.contract, p.limit_price,
@@ -549,6 +607,9 @@ class TradingEngine:
                 "limit_price": proposal.limit_price,
                 "rationale": proposal.rationale,
             }
+            if proposal.contract in votes:
+                item["committee"] = {"decision": votes[proposal.contract].disposition, "mode": cfg.committee_mode,
+                                     "reasons": list(votes[proposal.contract].reasons)}
             try:
                 order = self.manager.submit(intent)
             except ValueError as exc:

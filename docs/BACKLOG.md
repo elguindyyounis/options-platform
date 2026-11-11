@@ -24,14 +24,20 @@ and tests better approaches, with entries and exits automated in paper mode only
 1. **Schedule the weekly report.** `python -m optplat.weekly` exists; running it on a timer and where the
    owner reads it (file, email, notification) is the owner's choice.
 
+2. **Scale in and out of held positions.** The committee sizes new entries between 10% and 100% of the
+   engine cap and learns that share from outcomes. Trimming a loser or adding to a winner needs exit-manager
+   support (partial sell orders; adds must still pass the risk gate and its per-order and total-premium caps).
+3. **Agent coverage the owner can unblock.** News sentiment needs a data source; an event/earnings agent
+   needs a trustworthy calendar. Until then the skeptic lists both as unchecked in every verdict.
+
 Existing items, in order:
 
-2. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
+4. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
    default, with tests for ratchet behaviour and unobservable quotes.
-3. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
-4. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
+5. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
+6. **Storage hygiene.** Schema version table and a simple migration runner; indexes on
    `orders(state)`; paginate `list_orders`.
-5. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
+7. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
    they find without changing behaviour.
 
 ## Blocked on a human
@@ -92,3 +98,8 @@ Existing items, in order:
   summary of data health, paper results, decisions, forward outcomes and experiments, plus questions worth
   a pre-registered test (data reliability, a dominant risk rejection, ranking vs passed-over candidates),
   each with its evidence and sample-size caveat. It registers nothing and never proposes loosening a limit.
+* Agent committee (owner direction 2026-11-11: experimental, adaptive, no promotion step): `agents.py`
+  (technical, volatility, options-sentiment, execution, exposure, skeptic), `committee.py` (decision, sizing,
+  learning, scorecard, lessons), `committee_mode` off/shadow/active, `/api/committee`, dashboard panel.
+  Weights and trust are refit from 4 h outcomes of every journaled vote, including rejected candidates, and
+  every change is logged in `agent_weights`. Bounds: it can refuse or take less than the engine cap, never more.

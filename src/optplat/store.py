@@ -73,6 +73,16 @@ CREATE TABLE IF NOT EXISTS equity (
     fictional INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_equity_ts ON equity(ts);
+CREATE TABLE IF NOT EXISTS agent_weights (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    agent TEXT NOT NULL,
+    weight REAL NOT NULL,
+    n INTEGER NOT NULL,
+    accuracy REAL,
+    fictional INTEGER NOT NULL,
+    note TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS hypotheses (
     id TEXT PRIMARY KEY,
     registered_at TEXT NOT NULL,
@@ -278,6 +288,27 @@ class Store:
             cur = self._db.execute("DELETE FROM equity WHERE ts<?", (before.isoformat(),))
             self._db.commit()
             return cur.rowcount
+
+    # ---- learned agent weights: append-only audit trail, the latest row per agent is the live value ----
+    def record_agent_weight(self, ts: datetime, agent: str, weight: float, n: int, accuracy: Optional[float],
+                            fictional: bool, note: str) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO agent_weights (ts, agent, weight, n, accuracy, fictional, note) VALUES (?,?,?,?,?,?,?)",
+                (ts.isoformat(), agent, weight, n, accuracy, int(fictional), note[:300]))
+            self._db.commit()
+
+    def latest_agent_weights(self, fictional: bool) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM agent_weights WHERE fictional=? ORDER BY id", (int(fictional),)).fetchall()
+        return {r["agent"]: {"weight": r["weight"], "n": r["n"], "accuracy": r["accuracy"], "ts": r["ts"]} for r in rows}
+
+    def list_agent_weights(self, fictional: bool, limit: int = 50) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM agent_weights WHERE fictional=? ORDER BY id DESC LIMIT ?",
+                                    (int(fictional), max(1, min(limit, 500)))).fetchall()
+        return [{"ts": r["ts"], "agent": r["agent"], "weight": r["weight"], "n": r["n"], "accuracy": r["accuracy"],
+                 "note": r["note"]} for r in rows]
 
     # ---- pre-registered hypotheses (append-only: no update, no delete) -
     def register_hypothesis(self, registered_at: datetime, content_hash: str, payload: dict[str, Any]) -> str:

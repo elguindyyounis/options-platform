@@ -2,6 +2,29 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: agent committee that learns (owner present, direction given in chat)
+
+* Owner direction: agents that analyse, take and size trades, a skeptic that always argues against, and an
+  experimental, adaptive loop with no promotion step ("mistakes are fine as long as it learns").
+* Built: six deterministic agents (technical, volatility, options-sentiment, execution, exposure, skeptic),
+  a committee that combines them, and a learning step. Weights are a pure function of the last 500 journaled
+  votes scored at 4 h (SUPPORT is right if the contract's bid rose, OPPOSE if it did not), shrunk toward
+  neutral until an agent has about 30 outcomes. The committee's own trust starts at 50% of the allowed size
+  and follows its entry hit rate. Rejected candidates are scored too, so it learns without having to trade.
+* `committee_mode`: off, shadow (default; records votes only, so the frozen baseline and replays are
+  unchanged) or active (`./run.sh` sets it). Active mode can refuse a candidate or take less than the cap.
+* Bounds that stay in force: quantity never exceeds `size_quantity` (tested across extreme weights and
+  trust), every order still passes the risk gate, data-integrity vetoes are never softened by learning,
+  an agent that crashes vetoes, a crashing committee places nothing. Paper only.
+* Decisions for the owner to confirm: (1) the options-sentiment agent uses signals that are still
+  UNVALIDATED. It starts at weight 0.25 and has to earn influence, instead of waiting for
+  `VALIDATED_SIGNALS`. The baseline strategy still cannot use them. (2) "Grow a position" is bounded by the
+  risk policy's caps, which I did not touch. Raising a cap is a risk-policy change in `risk.py`.
+* Not built: scaling into or out of already-held positions (backlog), news sentiment (needs a data
+  source), event calendar (needs a source). All thresholds in `agents.py` are experiment parameters.
+* Verified: 316 tests; the dashboard panel in headless Chromium with no page errors. Not verified: any
+  learning on real recorded data. It needs days of running before the weights mean anything.
+
 ## 2026-11-11: weekly research report (roadmap step 6, owner away)
 
 * New `weekly.py` and `python -m optplat.weekly [--days N] [--fictional] [--out file]`. Opens the

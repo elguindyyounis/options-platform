@@ -53,6 +53,7 @@ fi
 
 export OPTPLAT_DATA="$mode"
 export OPTPLAT_OPEN_BROWSER=1
+export OPTPLAT_COMMITTEE="${OPTPLAT_COMMITTEE:-active}"  # agents vote and size paper entries; they learn from outcomes
 [ "$loop" = "1" ] && export OPTPLAT_AUTOSTART_LOOP=1
 if [ "$mode" = "yahoo" ]; then
   # Yahoo quotes carry no exchange timestamp, so the risk gate rejects them unless this is set. Typing "yahoo"

@@ -87,6 +87,11 @@ def main() -> None:
     # The demo market is fictional and runs at any hour, so market-hours enforcement is off by default there.
     default_cfg = EngineConfig(enforce_market_hours=(data != "demo"))
     engine = TradingEngine(manager, provider, LiquidTrendStrategy(), default_config=default_cfg)
+    mode = os.environ.get("OPTPLAT_COMMITTEE", "")
+    if mode:
+        if mode not in ("off", "shadow", "active"):
+            sys.exit("OPTPLAT_COMMITTEE must be off, shadow or active")
+        engine.set_config({"committee_mode": mode})  # saved with the other settings; the dashboard can change it later
     runner = Runner(engine)
     port = int(os.environ.get("OPTPLAT_PORT", "8800"))
     dashboard = f"http://127.0.0.1:{port}"
