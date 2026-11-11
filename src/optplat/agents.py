@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional, Sequence
 
+from .events import EventView
 from .marketdata import ChainRow, MarketSnapshot
 from .models import Account, Position, Right
 from .risk import RiskPolicy
@@ -33,6 +34,7 @@ class Context:
     size_cap: int  # the engine's own ceiling for this order: agents can only use less than this, never more
     min_dte_to_hold: int = 5
     stop_loss_pct: float = 30.0
+    events: Optional[EventView] = None  # None: no calendar was consulted at all
 
     @property
     def row(self) -> Optional[ChainRow]:
@@ -177,6 +179,43 @@ def exposure(ctx: Context) -> Verdict:
     return Verdict("exposure", GATE, ABSTAIN, reasons=("portfolio has room",), evidence=ev)
 
 
+EARNINGS_NEAR_DAYS = 5  # a report this close is mostly an implied-volatility trade, not a trend trade
+FOMC_NEAR_DAYS = 1
+
+
+def events(ctx: Context) -> Verdict:
+    """Earnings and FOMC decisions. Unknown earnings for a single stock is a hard veto: fail closed."""
+    ev = ctx.events
+    if ev is None:
+        return Verdict("events", GATE, OPPOSE, 1.0, ("no event calendar was consulted",), hard_veto=True)
+    today = ctx.now.date()
+    evidence: dict[str, Any] = {"is_etf": ev.is_etf, "earnings": [e.to_dict() for e in ev.earnings or []],
+                                "fomc": [e.to_dict() for e in ev.macro or []][:3]}
+    if ev.earnings is None:
+        return Verdict("events", GATE, OPPOSE, 1.0, ("earnings date unknown for a single stock: a report can gap the price and crush implied volatility",),
+                       evidence, hard_veto=True)
+    reasons: list[str] = []
+    veto, conf = False, 0.0
+    if ev.earnings:
+        nxt = min(ev.earnings, key=lambda e: e.day)
+        days = (nxt.day - today).days
+        evidence["days_to_earnings"] = days
+        if days <= EARNINGS_NEAR_DAYS:
+            return Verdict("events", GATE, OPPOSE, 1.0, (f"earnings in {days} day(s): implied-volatility crush and gap risk",), evidence, veto=True)
+        conf = 0.3
+        reasons.append(f"earnings in {days} days fall inside this option's life")
+    if ev.macro is None:
+        reasons.append("FOMC calendar does not cover these dates")
+    else:
+        soon = [e for e in ev.macro if 0 <= (e.day - today).days <= FOMC_NEAR_DAYS]
+        if soon:
+            conf = max(conf, 0.4)
+            reasons.append(f"FOMC decision on {soon[0].day.isoformat()}" + (" (tentative)" if soon[0].tentative else ""))
+    if conf > 0:
+        return Verdict("events", GATE, OPPOSE, conf, tuple(reasons), evidence)
+    return Verdict("events", GATE, ABSTAIN, reasons=tuple(reasons) or ("no scheduled earnings or FOMC decision in the way",), evidence=evidence)
+
+
 def skeptic(ctx: Context) -> Verdict:
     """Always argues against. Lists every objection, ranked; only a blocking one vetoes."""
     objections: list[tuple[str, str]] = []  # (severity, text)
@@ -203,7 +242,12 @@ def skeptic(ctx: Context) -> Verdict:
         objections.append(("blocking", "the snapshot is more than 15 minutes old"))
     if not ctx.snapshot.timestamp_verified:
         objections.append(("minor", "quote times are download times, not exchange times"))
-    objections.append(("minor", "no event calendar: earnings, dividends and macro events are not checked"))
+    if ctx.events is None:
+        objections.append(("major", "no event calendar was consulted: earnings and FOMC dates are unchecked"))
+    else:
+        objections.append(("minor", "CPI, jobs data, dividends and company news are not checked"))
+        if ctx.events.macro is None:
+            objections.append(("minor", "the FOMC table does not cover these dates"))
     objections.append(("minor", "the baseline strategy has no demonstrated edge"))
     rank = {"blocking": 0, "major": 1, "minor": 2}
     objections.sort(key=lambda o: rank[o[0]])
@@ -216,7 +260,7 @@ def skeptic(ctx: Context) -> Verdict:
 
 
 ANALYSTS = (technical, volatility, sentiment)
-CHECKERS = (execution, exposure, skeptic)
+CHECKERS = (execution, exposure, events, skeptic)
 
 
 def run_agent(fn: Any, ctx: Context) -> Verdict:

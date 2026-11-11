@@ -86,7 +86,10 @@ def main() -> None:
     manager = OrderManager(broker, store, policy)
     # The demo market is fictional and runs at any hour, so market-hours enforcement is off by default there.
     default_cfg = EngineConfig(enforce_market_hours=(data != "demo"))
-    engine = TradingEngine(manager, provider, LiquidTrendStrategy(), default_config=default_cfg)
+    from .events import EventCalendar, yahoo_earnings_dates
+
+    calendar = EventCalendar(earnings_source=yahoo_earnings_dates if data == "yahoo" else None)
+    engine = TradingEngine(manager, provider, LiquidTrendStrategy(), default_config=default_cfg, calendar=calendar)
     mode = os.environ.get("OPTPLAT_COMMITTEE", "")
     if mode:
         if mode not in ("off", "shadow", "active"):

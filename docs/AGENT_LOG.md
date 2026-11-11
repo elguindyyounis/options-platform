@@ -2,6 +2,23 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: event and earnings agent (owner present)
+
+* New `events.py` and an `events` gate in the committee. FOMC decision days for 2026 and 2027 come from
+  https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm (read today; the Fed marks 2027 tentative, and
+  the code marks those events tentative). Later years are unknown and answer None. Earnings dates come from Yahoo's
+  unofficial calendar through yfinance: no key or account, but unofficial and often estimates.
+* Rules: a calendar answers a list or None, and None is never "safe". An unknown earnings date for a single stock
+  is a hard veto that learning cannot soften. Funds (a listed set including SPY and QQQ) have no earnings. Earnings
+  within 5 days is a learnable veto; later earnings inside the option's life, or an FOMC decision today or
+  tomorrow, weigh against. The skeptic reports a missing calendar or table gap.
+* Consequence to expect: with the default SPY and QQQ watchlist the agent rarely matters. For single stocks, entries
+  need a known earnings date, and if Yahoo returns nothing the committee will decline them.
+* Verified: 327 tests, including the fail-closed cases and a fake `yfinance`. Not verified: the real Yahoo
+  earnings call from this environment (no network to it), or that its dates are right. The 5-day and 1-day
+  windows are my experiment parameters.
+* Not covered: CPI, jobs data, dividends, index events, news.
+
 ## 2026-11-11: agent committee that learns (owner present, direction given in chat)
 
 * Owner direction: agents that analyse, take and size trades, a skeptic that always argues against, and an

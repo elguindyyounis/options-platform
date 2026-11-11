@@ -21,6 +21,7 @@ from .agents import Context
 from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
 from .market_clock import session_status
+from .events import EventCalendar
 from .dataquality import check_snapshot, frozen_issue, quote_fingerprint
 from .marketdata import MarketDataProvider, MarketSnapshot, snapshot_to_dict
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
@@ -118,7 +119,9 @@ class TradingEngine:
         *,
         clock: Callable[[], datetime] = utcnow,
         default_config: Optional[EngineConfig] = None,
+        calendar: Optional[EventCalendar] = None,
     ) -> None:
+        self.calendar = calendar or EventCalendar(clock=clock)
         self.manager = manager
         self.provider = provider
         self.strategy = strategy
@@ -367,8 +370,9 @@ class TradingEngine:
             if cap < 1:
                 continue
             try:
+                view = self.calendar.view(symbol, now.date(), p.contract.expiry)
                 ctx = Context(snap, p, now, account, self.manager.policy, tuple(positions), cap,
-                              cfg.min_dte_to_hold, cfg.stop_loss_pct)
+                              cfg.min_dte_to_hold, cfg.stop_loss_pct, view)
                 d = cmt.decide(ctx, weights, trust)
             except Exception:  # noqa: BLE001 - no decision: shadow ignores it, active mode refuses the candidate
                 continue

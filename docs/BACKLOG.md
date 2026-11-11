@@ -27,8 +27,9 @@ and tests better approaches, with entries and exits automated in paper mode only
 2. **Scale in and out of held positions.** The committee sizes new entries between 10% and 100% of the
    engine cap and learns that share from outcomes. Trimming a loser or adding to a winner needs exit-manager
    support (partial sell orders; adds must still pass the risk gate and its per-order and total-premium caps).
-3. **Agent coverage the owner can unblock.** News sentiment needs a data source; an event/earnings agent
-   needs a trustworthy calendar. Until then the skeptic lists both as unchecked in every verdict.
+3. **Agent coverage the owner can unblock.** News sentiment needs a data source. The events agent covers
+   earnings and FOMC only; CPI, jobs data, dividends and index events need a source. Earnings dates come
+   from Yahoo's unofficial calendar and are unverified, so a paid or official earnings feed would be better.
 
 Existing items, in order:
 
@@ -50,6 +51,7 @@ Existing items, in order:
 * **Real broker adapter (IBKR paper).** Owner is implementing `broker/ibkr.py`. Do not start it.
 * **Licensed, timestamped options data.** Needs an account and budget decision.
 * **Earnings and event blackout.** Needs a trustworthy event-calendar source.
+* **FOMC table beyond 2027.** `events.py` fails closed for later dates. Add a year only from federalreserve.gov.
 * **2027 NYSE holiday table.** Needs an official source; the clock fails closed for unknown years.
 * **Risk-limit tuning, strategy promotion.** Owner decisions, driven by evidence from the research loop.
 
@@ -103,3 +105,7 @@ Existing items, in order:
   learning, scorecard, lessons), `committee_mode` off/shadow/active, `/api/committee`, dashboard panel.
   Weights and trust are refit from 4 h outcomes of every journaled vote, including rejected candidates, and
   every change is logged in `agent_weights`. Bounds: it can refuse or take less than the engine cap, never more.
+* Event and earnings agent: `events.py` (FOMC decision days from the Fed's published calendar, earnings from
+  Yahoo's unofficial calendar, unknown is never treated as safe) and the `events` gate in the committee: unknown
+  earnings for a single stock is a hard veto, earnings within 5 days is a learnable veto, later earnings and
+  an FOMC decision tomorrow weigh against; the skeptic now reports which calendar gaps remain.

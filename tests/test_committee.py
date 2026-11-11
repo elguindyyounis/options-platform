@@ -5,7 +5,10 @@ import pytest
 
 from helpers import NOW
 from optplat import committee as cmt
-from optplat.agents import ABSTAIN, OPPOSE, SUPPORT, Context, execution, exposure, run_agent, skeptic, technical, volatility
+from datetime import date
+
+from optplat.agents import ABSTAIN, OPPOSE, SUPPORT, Context, events, execution, exposure, run_agent, skeptic, technical, volatility
+from optplat.events import Event, EventCalendar, EventView, FOMC_DECISION_DAYS, yahoo_earnings_dates
 from optplat.marketdata import ChainRow, snapshot_to_dict
 from optplat.models import Account, OptionContract, Position, Right
 from optplat.risk import RiskPolicy
@@ -25,9 +28,12 @@ def calm(**row_kw):
     return replace(snap, closes=closes, underlying=closes[-1], rows=(row,))
 
 
-def ctx(snap=None, *, contract=CONTRACT, cap=10, positions=(), now=NOW, limit=5.10, account=ACCOUNT):
+QUIET = EventView(macro=(), earnings=(), is_etf=False)  # a stock with confirmed nothing scheduled
+
+
+def ctx(snap=None, *, contract=CONTRACT, cap=10, positions=(), now=NOW, limit=5.10, account=ACCOUNT, ev=QUIET):
     snap = snap or calm()
-    return Context(snap, Proposal(contract, limit, 90.0, {}), now, account, RiskPolicy(), tuple(positions), cap)
+    return Context(snap, Proposal(contract, limit, 90.0, {}), now, account, RiskPolicy(), tuple(positions), cap, events=ev)
 
 
 def with_row(snap, **kw):
@@ -263,3 +269,111 @@ def test_quantity_never_exceeds_the_cap_under_extreme_weights_and_trust():
     for cap, w, trust in itertools.product((1, 3, 50), (cmt.WEIGHT_MIN, 1.0, cmt.WEIGHT_MAX), (cmt.TRUST_MIN, 0.5, 1.0)):
         d = cmt.decide(ctx(cap=cap), {a: w for a in agents_}, trust)
         assert d.quantity <= cap and d.scale <= 1.0
+
+
+# ------------------------------------------------------------ events
+def E(kind, d, tentative=False):
+    return Event(kind, d, "test", tentative)
+
+
+def test_unknown_earnings_for_a_single_stock_is_a_hard_veto_but_not_for_an_etf():
+    unknown = events(ctx(ev=EventView(macro=(), earnings=None, is_etf=False)))
+    assert unknown.hard_veto and "unknown" in unknown.reasons[0]
+    assert not events(ctx(ev=EventView(macro=(), earnings=(), is_etf=True))).hard_veto
+    assert events(ctx(ev=None)).hard_veto  # no calendar consulted at all: fail closed
+
+
+def test_earnings_within_five_days_is_a_learnable_veto_and_later_earnings_only_weigh():
+    near = events(ctx(ev=EventView((), (E("EARNINGS", NOW.date() + timedelta(days=3)),), False)))
+    assert near.veto and not near.hard_veto and near.stance == OPPOSE
+    far = events(ctx(ev=EventView((), (E("EARNINGS", NOW.date() + timedelta(days=40)),), False)))
+    assert not far.veto and far.stance == OPPOSE and far.confidence < 0.5
+
+
+def test_an_fomc_decision_tomorrow_opposes_but_one_next_month_does_not():
+    soon = events(ctx(ev=EventView((E("FOMC", NOW.date() + timedelta(days=1), True),), (), True)))
+    assert soon.stance == OPPOSE and "tentative" in soon.reasons[0]
+    assert events(ctx(ev=EventView((E("FOMC", NOW.date() + timedelta(days=20)),), (), True))).stance == ABSTAIN
+
+
+def test_a_macro_calendar_that_does_not_cover_the_dates_says_so_rather_than_claiming_none():
+    cal = EventCalendar()
+    assert cal.macro(date(2026, 11, 16), date(2027, 3, 1)) is not None
+    assert cal.macro(date(2027, 11, 16), date(2028, 2, 1)) is None
+
+
+def test_calendar_dates_match_the_fed_table_and_mark_2027_tentative():
+    assert date(2026, 12, 9) in FOMC_DECISION_DAYS[2026] and len(FOMC_DECISION_DAYS[2026]) == 8
+    got = EventCalendar().macro(date(2027, 1, 1), date(2027, 2, 1))
+    assert [(e.day, e.tentative) for e in got] == [(date(2027, 1, 27), True)]
+
+
+def test_earnings_calendar_etfs_unknown_cache_and_failures():
+    calls = []
+
+    def source(sym):
+        calls.append(sym)
+        return {"AAPL": [date(2026, 12, 1)], "BAD": None}.get(sym)
+
+    cal = EventCalendar(earnings_source=source, clock=lambda: NOW)
+    assert cal.earnings("SPY", NOW.date(), NOW.date() + timedelta(days=90)) == []  # funds have no earnings
+    assert [e.day for e in cal.earnings("AAPL", NOW.date(), NOW.date() + timedelta(days=90))] == [date(2026, 12, 1)]
+    cal.earnings("AAPL", NOW.date(), NOW.date() + timedelta(days=90))
+    assert calls.count("AAPL") == 1  # cached
+    assert cal.earnings("BAD", NOW.date(), NOW.date() + timedelta(days=90)) is None
+    assert EventCalendar().earnings("AAPL", NOW.date(), NOW.date()) is None  # no source: unknown
+
+    def boom(sym):
+        raise RuntimeError("down")
+
+    assert EventCalendar(earnings_source=boom).earnings("AAPL", NOW.date(), NOW.date()) is None
+
+
+def test_yahoo_earnings_parsing_empty_and_failure_with_a_fake_library(monkeypatch):
+    import sys
+    import types
+    from datetime import datetime as dt
+
+    answers = {"GOOD": {"Earnings Date": [date(2026, 12, 3), dt(2027, 1, 5, 12, 0)]}, "EMPTY": {}, "NONE": None}
+
+    class FakeTicker:
+        def __init__(self, sym):
+            if sym == "BOOM":
+                raise RuntimeError("network")
+            self.calendar = answers[sym]
+
+    monkeypatch.setitem(sys.modules, "yfinance", types.SimpleNamespace(Ticker=FakeTicker))
+    assert yahoo_earnings_dates("GOOD") == [date(2026, 12, 3), date(2027, 1, 5)]
+    assert yahoo_earnings_dates("EMPTY") is None and yahoo_earnings_dates("NONE") is None  # cannot tell "none" from "unpublished"
+    assert yahoo_earnings_dates("BOOM") is None
+
+
+def test_the_skeptic_flags_a_missing_calendar():
+    v = skeptic(ctx(ev=None))
+    assert any("no event calendar" in o["text"] for o in v.evidence["objections"])
+
+
+def test_the_committee_rejects_a_single_stock_with_unknown_earnings_whatever_the_weights():
+    d = cmt.decide(ctx(ev=EventView((), None, False)), {"events": 0.25, "technical": 2.0}, 1.0)
+    assert d.disposition == cmt.REJECT and any("events" in r for r in d.reasons)
+
+
+def test_engine_passes_its_calendar_and_unknown_earnings_decline_the_entry():
+    engine, manager, _, provider, _ = build(auto_entries=True, committee_mode="active")
+    provider.set_snapshot(calm())
+    report = engine.run_cycle()  # default calendar has no earnings source and AAA is not a fund
+    assert manager.list() == [] and any(e.get("result") == "COMMITTEE_DECLINED" for e in report["entries"])
+    why = [d["payload"].get("why", "") for d in manager.store.list_decisions() if d["disposition"] == "NOT_CHOSEN_COMMITTEE"]
+    assert any("events" in w for w in why)
+
+
+def test_engine_enters_when_the_committee_agrees_and_never_above_the_baseline_quantity():
+    base, m_base, _, p_base, _ = build(auto_entries=True, committee_mode="off")
+    p_base.set_snapshot(calm())
+    base.run_cycle()
+    eng, mgr, _, prov, _ = build(auto_entries=True, committee_mode="active")
+    prov.set_snapshot(calm())
+    eng.calendar = EventCalendar(earnings_source=lambda s: [])
+    eng.run_cycle()
+    placed, baseline = mgr.list(), m_base.list()
+    assert len(placed) == 1 and baseline and placed[0].intent.quantity <= baseline[0].intent.quantity
