@@ -1,6 +1,7 @@
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
+  const PAGES = ["desk", "trades", "market", "agents", "research", "system"];
   let token = "";
   try { token = sessionStorage.getItem("optplat_token") || ""; } catch (e) { /* storage unavailable */ }
   // The launcher opens /#token=... . A URL fragment is never sent to the server. Read it once, keep it for this
@@ -11,49 +12,101 @@
     try { sessionStorage.setItem("optplat_token", token); } catch (e) { /* storage unavailable */ }
     try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* ignore */ }
   }
-  let killState = false;
-  let lastPoints = [];
+  const S = {
+    killState: false, lastPoints: [], core: null, connected: false,
+    trades: null, filter: "all", query: "", sort: { key: "entry_time", dir: -1 }, openTrade: null, opener: null,
+    scan: null, marketTab: "active", unusualFilter: "reviewable",
+  };
 
-  // Build DOM with textContent only: nothing from the API is ever parsed as HTML.
+  // ---------------------------------------------------------------- DOM helpers (textContent only)
   const el = (tag, text, cls) => {
     const e = document.createElement(tag);
     if (text !== undefined && text !== null) e.textContent = String(text);
     if (cls) e.className = cls;
     return e;
   };
+  const kids = (parent, list) => { list.forEach((c) => { if (c) parent.appendChild(c); }); return parent; };
   const money = (n) => (n === null || n === undefined ? "n/a" : Number(n).toLocaleString(undefined, { style: "currency", currency: "USD" }));
-  const setMsg = (text, cls) => { const m = $("msg"); m.textContent = text || ""; m.className = cls || "muted"; };
+  const shortMoney = (n) => Number(n).toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  const sgn = (n) => (n === null || n === undefined ? "n/a" : (n > 0 ? "+" : n < 0 ? "-" : "") + money(Math.abs(n)));
+  const pct = (v) => (v === null || v === undefined ? "n/a" : (v > 0 ? "+" : "") + Number(v).toFixed(2) + "%");
+  const num = (n) => (n === null || n === undefined ? "n/a" : Number(n).toLocaleString());
+  const tone = (n) => (n > 0 ? "gain" : n < 0 ? "loss" : "");
+  const fmtTime = (iso) => { const d = new Date(iso); return isNaN(d) ? String(iso) : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); };
+  const fmtDay = (iso) => { const d = new Date(iso + "T12:00:00"); return isNaN(d) ? String(iso) : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); };
+  const span = (text, cls) => el("span", text, cls);
+  function duration(sec) {
+    if (sec === null || sec === undefined) return "n/a";
+    const m = Math.floor(sec / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+    return d >= 1 ? d + "d " + (h % 24) + "h" : h >= 1 ? h + "h " + (m % 60) + "m" : Math.max(m, 0) + "m";
+  }
+  const words = (x) => { const t = String(x === null || x === undefined ? "" : x).toLowerCase().replace(/_/g, " "); return t.charAt(0).toUpperCase() + t.slice(1); };
+  function setMsg(text, cls) { const m = $("msg"); m.textContent = text || ""; m.className = cls || "muted"; }
+  function empty(container, title, hint) {
+    container.replaceChildren();
+    const d = el("div", null, "empty");
+    d.appendChild(el("b", title));
+    if (hint) d.appendChild(el("span", hint));
+    container.appendChild(d);
+  }
 
   async function api(path, opts) {
-    const r = await fetch(path, Object.assign({}, opts, {
-      headers: { "X-API-Token": token, "content-type": "application/json" },
-    }));
+    const r = await fetch(path, Object.assign({}, opts, { headers: { "X-API-Token": token, "content-type": "application/json" } }));
     let body = {};
     try { body = await r.json(); } catch (e) { /* empty body */ }
     if (!r.ok) {
-      const d = body.detail;
-      throw new Error(d ? (typeof d === "string" ? d : JSON.stringify(d)) : r.statusText);
+      const err = new Error(body.detail ? (typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail)) : r.statusText);
+      err.status = r.status;
+      throw err;
     }
     return body;
   }
 
-  function table(container, cols, rows, emptyText) {
+  function table(container, cols, rows, emptyTitle, emptyHint) {
+    if (!rows.length) { empty(container, emptyTitle, emptyHint); return; }
     container.replaceChildren();
-    if (!rows.length) { container.appendChild(el("div", emptyText, "muted")); return; }
-    const t = el("table");
-    const head = el("tr");
-    cols.forEach((c) => head.appendChild(el("th", c.label)));
+    const t = el("table"), head = el("tr");
+    cols.forEach((c) => head.appendChild(el("th", c.label, c.right ? "r" : "")));
     t.appendChild(head);
     rows.forEach((row) => {
       const tr = el("tr");
-      cols.forEach((c) => tr.appendChild(el("td", c.get(row))));
+      cols.forEach((c) => {
+        const td = el("td", null, c.right ? "r" : "");
+        const v = c.get(row);
+        if (v instanceof Node) td.appendChild(v); else td.textContent = v === null || v === undefined ? "" : String(v);
+        tr.appendChild(td);
+      });
       t.appendChild(tr);
     });
     container.appendChild(t);
   }
 
   function pill(id, text, cls) { const e = $(id); e.textContent = text; e.className = "pill " + (cls || ""); }
+  function chips(host, options, current, onPick, role) {
+    host.replaceChildren();
+    options.forEach((o) => {
+      const b = el("button", o.label, "chip");
+      b.type = "button";
+      b.setAttribute(role === "tab" ? "aria-selected" : "aria-pressed", String(o.id === current));
+      if (role === "tab") b.setAttribute("role", "tab");
+      b.addEventListener("click", () => onPick(o.id));
+      host.appendChild(b);
+    });
+  }
 
+  // ---------------------------------------------------------------- routing
+  const route = () => { const m = /^#\/([a-z]+)/.exec(location.hash); return m && PAGES.indexOf(m[1]) >= 0 ? m[1] : "desk"; };
+  function showPage() {
+    const page = route();
+    document.querySelectorAll("section[data-page]").forEach((s) => { s.hidden = !S.connected || s.getAttribute("data-page") !== page; });
+    $("view-connect").hidden = S.connected;
+    document.querySelectorAll("a.nav").forEach((a) => {
+      if (a.getAttribute("data-page") === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", market: "Market", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
+  }
+
+  // ---------------------------------------------------------------- equity chart (unchanged behaviour)
   const SVGNS = "http://www.w3.org/2000/svg";
   const svg = (tag, attrs, text) => {
     const e = document.createElementNS(SVGNS, tag);
@@ -71,15 +124,12 @@
     for (let v = first; v <= hi + step * 0.5; v += step) ticks.push(Math.round(v * 1e6) / 1e6);
     return ticks;
   }
-  const shortMoney = (n) => Number(n).toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-  const fmtTime = (iso) => { const d = new Date(iso); return isNaN(d) ? String(iso) : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); };
 
-  // Equity chart: one series, so no legend; the title line above names it. Built with createElementNS and
-  // textContent only. The crosshair is keyboard-reachable (arrow keys) and a table view carries the same data.
+  // One series, so no legend; the panel title names it. The crosshair is keyboard-reachable (arrow keys) and a
+  // table view carries the same data.
   function drawEquity(host, points) {
     host.replaceChildren();
-    if (points.length < 2) { host.appendChild(el("div", "Not enough history to draw a curve yet: it needs at least two completed cycles with trading allowed.", "muted")); return; }
-    // Draw at the real pixel width so text stays 11px on a phone instead of scaling down with a fixed canvas.
+    if (points.length < 2) { empty(host, "Not enough history to draw a curve yet", "It needs at least two completed cycles with trading allowed."); return; }
     const W = Math.max(300, Math.round(host.clientWidth || 720)), H = W < 520 ? 220 : 260;
     const m = { l: W < 520 ? 58 : 64, r: 70, t: 12, b: 26 };
     const xs = points.map((p) => new Date(p.ts).getTime()), ys = points.map((p) => Number(p.equity));
@@ -108,7 +158,7 @@
     root.appendChild(cross); root.appendChild(hot);
     const tip = el("div", null, "tip"); tip.hidden = true;
     const tv = el("strong"), tt = el("span"), tc = el("span");
-    tip.appendChild(tv); tip.appendChild(tt); tip.appendChild(tc);
+    kids(tip, [tv, tt, tc]);
     host.appendChild(root); host.appendChild(tip);
     let idx = last;
     const show = (i) => {
@@ -118,8 +168,7 @@
       hot.setAttribute("cx", cx); hot.setAttribute("cy", cy); hot.setAttribute("visibility", "visible");
       tv.textContent = money(ys[idx]);
       tt.textContent = fmtTime(points[idx].ts);
-      const delta = ys[idx] - start;
-      tc.textContent = " | " + (delta >= 0 ? "+" : "") + money(delta) + " vs first point";
+      tc.textContent = " | " + sgn(ys[idx] - start) + " vs first point";
       tip.hidden = false;
       const r = root.getBoundingClientRect(), hr = host.getBoundingClientRect();
       const px = (cx / W) * r.width + (r.left - hr.left);
@@ -143,15 +192,40 @@
     });
   }
 
-  function tile(label, value, sub) {
-    const t = el("div", null, "tile");
-    t.appendChild(el("div", label, "label")); t.appendChild(el("div", value, "value"));
-    if (sub) t.appendChild(el("div", sub, "sub"));
-    return t;
+  // ---------------------------------------------------------------- shared formatting for contracts
+  function ticket(t) {
+    const w = el("span", null, "ticket");
+    w.appendChild(el("span", t.symbol, "sym"));
+    w.appendChild(el("span", (t.right === "C" ? "Call " : "Put ") + t.strike, "leg " + (t.right === "C" ? "call" : "put")));
+    w.appendChild(el("span", fmtDay(t.expiry), "muted"));
+    return w;
   }
-  const pct = (v) => (v === null || v === undefined ? "n/a" : (v >= 0 ? "+" : "") + Number(v).toFixed(2) + "%");
+  const EXIT_TEXT = {
+    take_profit: "Take profit", stop_loss: "Stop loss", expiry_window: "Too close to expiry", max_days_held: "Held too long",
+  };
+  const exitLabel = (t) => (t.status === "OPEN" ? "Open" : t.status === "PARTIAL" ? "Partly closed" : (EXIT_TEXT[t.exit_reason] || t.exit_reason || "Closed"));
+  const EXIT_WHY = {
+    take_profit: "The bid reached the take-profit level, so the exit rule sold the position.",
+    stop_loss: "The bid fell to the stop-loss level, so the exit rule sold to limit the loss.",
+    expiry_window: "The contract came within the minimum days to expiry, so it was closed before expiry risk grows.",
+    max_days_held: "It had been held for the maximum number of days, so the time stop closed it.",
+  };
 
-  function renderTrust(health, status) {
+  // ---------------------------------------------------------------- Desk
+  function renderStrip(health, status, portfolio) {
+    pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
+    pill("data", status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), status.data_source.fictional ? "warn" : "");
+    pill("market", "market " + (status.market.open ? "open" : "closed") + ": " + status.market.reason, status.market.open ? "ok" : "");
+    S.killState = !!portfolio.kill_switch;
+    pill("kill", S.killState ? "KILL SWITCH ON" : "kill switch off", S.killState ? "bad" : "");
+    const rn = status.runner;
+    pill("runner", rn.stalled ? "LOOP STALLED: no good cycle for " + rn.seconds_since_success + "s" : (rn.running ? "loop running" : "loop stopped"),
+      rn.stalled ? "bad" : (rn.running ? "ok" : ""));
+    $("runner").title = rn.last_error ? "Last error: " + rn.last_error : "";
+    $("updated").textContent = "Updated " + new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  function renderTrust(status) {
     const reasons = [], cautions = [];
     const rn = status.runner, c = status.last_cycle, dq = Object.entries(status.data_quality.issues);
     if (rn.stalled) reasons.push("the loop has stalled");
@@ -178,140 +252,475 @@
       dq.length ? dq.map(([k, x]) => k.toLowerCase().replace(/_/g, " ") + " x" + x.items + " (" + x.severity + ")").join(", ") : "no issues");
   }
 
-  function renderResults(portfolio, report, eq) {
-    const a = portfolio.account, sm = eq.summary, t = $("tiles");
-    t.replaceChildren();
-    t.appendChild(tile("Equity", money(a.equity), "cash " + money(a.cash)));
-    t.appendChild(tile("Since first point", sm.change_pct === null ? "n/a" : pct(sm.change_pct), sm.points + " points" + (eq.fictional ? ", fictional data" : "")));
-    t.appendChild(tile("Drawdown now / worst", sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "% / -" + sm.max_drawdown_pct + "%", "from the peak"));
-    t.appendChild(tile("Closed trades", report.closed_trades, "realized " + money(report.realized_pnl) + (report.win_rate_pct === null ? "" : ", win rate " + report.win_rate_pct + "%")));
-    t.appendChild(tile("Open premium", money(a.open_premium), report.open.length + " position(s)"));
+  function fig(value, label, sub, cls) {
+    const f = el("div", null, "fig");
+    f.appendChild(el("div", value, "v num " + (cls || "")));
+    f.appendChild(el("div", label, "l"));
+    if (sub) f.appendChild(el("div", sub, "s"));
+    return f;
+  }
+
+  function renderDesk(portfolio, report, eq, status) {
+    const a = portfolio.account, sm = eq.summary;
+    const fict = eq.fictional ? " on fictional data" : "";
+    let head = "The paper account is worth " + money(a.equity) + fict;
+    if (sm.change_pct !== null && sm.change_pct !== 0) head += ", " + (sm.change_pct > 0 ? "up " : "down ") + Math.abs(sm.change_pct).toFixed(2) + "% since the first recorded point";
+    head += ". It holds " + report.open.length + " open position" + (report.open.length === 1 ? "" : "s") + " and has closed " + report.closed_trades + " trade" + (report.closed_trades === 1 ? "" : "s") + ".";
+    $("desk-headline").textContent = head;
     const need = Math.max(0, MIN_TRADES - report.closed_trades);
-    $("sample").textContent = need
-      ? "Not evidence yet: " + report.closed_trades + " closed trades, and at least " + MIN_TRADES + " are needed before any win rate or return means anything. " + report.caveat
-      : report.closed_trades + " closed trades is above the minimum sample, but it does not show an edge on its own. " + report.caveat;
-    lastPoints = eq.points;
+    $("desk-sub").textContent = "Everything on this page is the long-term book: options bought with at least a week to expiry and held until an exit rule fires. " +
+      (need ? "With " + report.closed_trades + " closed trades, none of these numbers is evidence yet; " + MIN_TRADES + " is the minimum." : "The sample is past the minimum, which still does not show an edge on its own.");
+    const t = $("tiles");
+    t.replaceChildren();
+    kids(t, [
+      fig(money(a.equity), "Equity", "cash " + money(a.cash)),
+      fig(pct(sm.change_pct), "Since first point", sm.points + " points", tone(sm.change_pct)),
+      fig(sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "%", "Drawdown now", "worst -" + (sm.max_drawdown_pct || 0) + "%"),
+      fig(sgn(report.realized_pnl), "Realized profit", report.closed_trades + " closed" + (report.win_rate_pct === null ? "" : ", " + report.win_rate_pct + "% winners"), tone(report.realized_pnl)),
+      fig(money(a.open_premium), "Open premium", report.open.length + " position(s)"),
+    ]);
+    $("sample").textContent = report.caveat;
+    S.lastPoints = eq.points;
     drawEquity($("equity-chart"), eq.points);
     table($("equity-table"), [
-      { label: "Time", get: (p) => p.ts.slice(0, 19) }, { label: "Equity", get: (p) => money(p.equity) },
+      { label: "Time", get: (p) => p.ts.slice(0, 19) }, { label: "Equity", right: true, get: (p) => money(p.equity) },
     ], eq.points.slice().reverse().slice(0, 200), "No equity points yet");
   }
 
-  // "SPY261218C00600000" -> { expiry, dte }. Anything unparseable is shown as unknown, never guessed.
+  // "SPY261218C00600000" -> days to expiry. Anything unparseable is shown as unknown, never guessed.
   function dteOf(contract, now) {
     const m = /^[A-Z.\-]{1,10}(\d{2})(\d{2})(\d{2})[CP]\d{8}$/.exec(contract || "");
     if (!m) return null;
     const exp = Date.UTC(2000 + Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    return Math.round((exp - today) / 86400000);
+    return Math.round((exp - Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) / 86400000);
   }
 
   function renderPositions(report, cfg) {
     const now = new Date();
     table($("positions"), [
-      { label: "Contract", get: (r) => r.contract }, { label: "Qty", get: (r) => r.quantity },
-      { label: "Avg cost", get: (r) => r.avg_cost },
-      { label: "Bid mark", get: (r) => r.mark === null ? "unobservable" : r.mark },
-      { label: "Unrealized", get: (r) => money(r.unrealized_pnl) },
-      { label: "Take profit at bid", get: (r) => cfg.auto_exits ? (r.avg_cost * (1 + cfg.take_profit_pct / 100)).toFixed(2) : "auto exits off" },
-      { label: "Stop at bid", get: (r) => cfg.auto_exits ? (r.avg_cost * (1 - cfg.stop_loss_pct / 100)).toFixed(2) : "auto exits off" },
-      { label: "Days to expiry", get: (r) => { const d = dteOf(r.contract, now); return d === null ? "unknown" : d + (d <= cfg.min_dte_to_hold ? " (forced exit zone)" : ""); } },
-    ], report.open, "No open positions");
+      { label: "Contract", get: (r) => el("span", r.contract, "mono") }, { label: "Qty", right: true, get: (r) => r.quantity },
+      { label: "Avg cost", right: true, get: (r) => r.avg_cost },
+      { label: "Bid mark", right: true, get: (r) => r.mark === null ? "unobservable" : r.mark },
+      { label: "Unrealized", right: true, get: (r) => r.unrealized_pnl === null ? "n/a" : span(sgn(r.unrealized_pnl), tone(r.unrealized_pnl)) },
+      { label: "Take profit at bid", right: true, get: (r) => cfg.auto_exits ? (r.avg_cost * (1 + cfg.take_profit_pct / 100)).toFixed(2) : "auto exits off" },
+      { label: "Stop at bid", right: true, get: (r) => cfg.auto_exits ? (r.avg_cost * (1 - cfg.stop_loss_pct / 100)).toFixed(2) : "auto exits off" },
+      { label: "Days to expiry", right: true, get: (r) => { const d = dteOf(r.contract, now); return d === null ? "unknown" : d + (d <= cfg.min_dte_to_hold ? " (forced exit zone)" : ""); } },
+    ], report.open, "No open positions", "When an entry fills it appears here with the prices that would close it.");
   }
 
+  function whyOf(d) {
+    const p = d.payload || {};
+    if (p.risk_failures && p.risk_failures.length) return p.risk_failures.join("; ");
+    return p.why || p.reason || (p.reasons && p.reasons.join("; ")) || (p.score !== undefined ? "score " + Number(p.score).toFixed(2) : "");
+  }
+  function renderDecisions(list) {
+    table($("decisions"), [
+      { label: "Time", get: (d) => fmtTime(d.ts) }, { label: "Type", get: (d) => words(d.kind) },
+      { label: "Contract", get: (d) => el("span", d.contract || "", "mono") }, { label: "Outcome", get: (d) => words(d.disposition) },
+      { label: "Why", get: whyOf },
+    ], list, "No decisions recorded yet", "Run one cycle from Controls to see what it considers.");
+  }
+
+  function renderOrders(orders) {
+    table($("orders"), [
+      { label: "Time", get: (o) => fmtTime(o.created_at) }, { label: "Side", get: (o) => o.intent.side },
+      { label: "Contract", get: (o) => o.intent.contract.underlying + " " + o.intent.contract.expiry + " " + o.intent.contract.right + o.intent.contract.strike },
+      { label: "Qty", right: true, get: (o) => o.filled_qty + "/" + o.intent.quantity }, { label: "Limit", right: true, get: (o) => o.intent.limit_price },
+      { label: "Fill", right: true, get: (o) => o.avg_fill_price === null ? "" : o.avg_fill_price },
+      { label: "State", get: (o) => o.state }, { label: "Why", get: (o) => o.risk_failures.join("; ") },
+    ], orders.slice(0, 30), "No orders yet");
+  }
+
+  function syncControls(status, cfg) {
+    $("cfg-entries").checked = status.config.auto_entries;
+    $("cfg-exits").checked = status.config.auto_exits;
+    $("cfg-hours").checked = status.market.hours_enforced;
+    $("cfg-hours").disabled = status.market.hours_enforced && !status.data_source.fictional; // real data: always on
+    if (document.activeElement !== $("cfg-watch")) $("cfg-watch").value = status.config.watchlist.join(", ");
+    const sel = $("cfg-scan"), v = String(cfg.scan_interval_s === undefined ? 0 : cfg.scan_interval_s);
+    if (document.activeElement !== sel) {
+      if (!Array.prototype.some.call(sel.options, (o) => o.value === v)) sel.appendChild(Object.assign(document.createElement("option"), { value: v, textContent: "every " + Math.round(Number(v) / 60) + " minutes" }));
+      sel.value = v;
+    }
+    if (document.activeElement !== $("cfg-committee")) $("cfg-committee").value = cfg.committee_mode;
+  }
+
+  // ---------------------------------------------------------------- Trades
+  const FILTERS = [
+    { id: "all", label: "All", test: () => true }, { id: "open", label: "Open", test: (t) => t.status !== "CLOSED" },
+    { id: "closed", label: "Closed", test: (t) => t.status === "CLOSED" },
+    { id: "winners", label: "Winners", test: (t) => t.status === "CLOSED" && t.pnl > 0 },
+    { id: "losers", label: "Losers", test: (t) => t.status === "CLOSED" && t.pnl <= 0 },
+  ];
+  const SORTS = {
+    entry_time: (t) => t.entry_time, symbol: (t) => t.symbol, pnl: (t) => (t.pnl === null ? -Infinity : t.pnl),
+    pnl_pct: (t) => (t.pnl_pct === null ? -Infinity : t.pnl_pct), held: (t) => (t.held_seconds === null ? Infinity : t.held_seconds),
+  };
+
+  function pnlCell(t) {
+    const w = el("span", null, "num");
+    if (t.pnl === null) { w.textContent = "unobservable"; w.className = "muted"; return w; }
+    w.appendChild(span(sgn(t.pnl), tone(t.pnl)));
+    const bar = el("span", null, "bar"), i = el("i", null, t.pnl >= 0 ? "up" : "down");
+    i.style.width = Math.min(50, Math.abs(t.pnl_pct || 0) / 2) + "%";
+    bar.appendChild(i);
+    w.appendChild(bar);
+    return w;
+  }
+  function statusTag(t) {
+    if (t.status !== "CLOSED") return el("span", exitLabel(t), "tag info");
+    return el("span", exitLabel(t), "tag " + (t.pnl > 0 ? "gain" : "loss"));
+  }
+
+  function renderTrades() {
+    const data = S.trades;
+    if (!data) return;
+    const sm = data.summary, f = $("trade-summary");
+    $("trade-lede").textContent = sm.total
+      ? sm.total + " trade" + (sm.total === 1 ? "" : "s") + " so far, each one a filled buy matched to the sells that closed it. Select a row to see why it was entered, what the agents said, and how it ended. " + sm.caveat
+      : "Nothing has traded yet. Entries need automatic entries switched on in Controls and a candidate that passes the risk gate, the agents and the data-quality check.";
+    f.replaceChildren();
+    kids(f, [
+      fig(String(sm.total), "Trades", sm.open + " open, " + sm.closed + " closed"),
+      fig(sm.win_rate_pct === null ? "n/a" : sm.win_rate_pct + "%", "Winners", sm.closed ? sm.wins + " of " + sm.closed + " closed" : "no closed trades"),
+      fig(sgn(sm.realized_pnl), "Realized", "from closed and partly closed", tone(sm.realized_pnl)),
+      fig(sgn(sm.unrealized_pnl), "Unrealized", sm.unobservable_open ? sm.unobservable_open + " open without a usable bid" : "marked at the bid", tone(sm.unrealized_pnl)),
+      fig(sm.best === null ? "n/a" : sgn(sm.best), "Best closed", sm.worst === null ? "" : "worst " + sgn(sm.worst), tone(sm.best)),
+    ]);
+    chips($("trade-filters"), FILTERS.map((x) => ({ id: x.id, label: x.label + " " + data.trades.filter(x.test).length })), S.filter, (id) => { S.filter = id; renderTrades(); });
+    const flt = FILTERS.find((x) => x.id === S.filter) || FILTERS[0], q = S.query.trim().toUpperCase();
+    const key = SORTS[S.sort.key], dir = S.sort.dir;
+    const rows = data.trades.filter(flt.test).filter((t) => !q || t.symbol.indexOf(q) >= 0 || t.contract.indexOf(q) >= 0)
+      .sort((x, y) => (key(x) < key(y) ? -dir : key(x) > key(y) ? dir : 0));
+    const host = $("trade-table");
+    if (!rows.length) {
+      empty(host, data.trades.length ? "No trades match this filter" : "No trades yet",
+        data.trades.length ? "Clear the search box or pick All." : "Run a cycle from Controls, or let the loop run during market hours.");
+      return;
+    }
+    host.replaceChildren();
+    if (window.matchMedia("(max-width:860px)").matches) {
+      // Phones: one card per trade instead of a table that would scroll sideways.
+      const sorter = el("select");
+      sorter.setAttribute("aria-label", "Sort trades");
+      [["entry_time", -1, "Newest first"], ["entry_time", 1, "Oldest first"], ["pnl", -1, "Best profit first"], ["pnl", 1, "Worst result first"]].forEach((o) => {
+        const opt = el("option", o[2]); opt.value = o[0] + ":" + o[1]; sorter.appendChild(opt);
+      });
+      sorter.value = S.sort.key + ":" + S.sort.dir;
+      sorter.addEventListener("change", () => { const v = sorter.value.split(":"); S.sort = { key: v[0], dir: Number(v[1]) }; renderTrades(); });
+      host.appendChild(sorter);
+      rows.forEach((x) => {
+        const card = el("div", null, "tcard");
+        card.tabIndex = 0; card.setAttribute("role", "button");
+        card.setAttribute("aria-label", "Open trade file for " + x.symbol + " " + (x.right === "C" ? "call " : "put ") + x.strike);
+        const top = el("div", null, "tc-top");
+        top.appendChild(ticket(x)); top.appendChild(statusTag(x));
+        const mid = el("div", null, "tc-mid");
+        mid.appendChild(el("span", x.pnl === null ? "Unobservable" : sgn(x.pnl), "tc-pnl num " + tone(x.pnl)));
+        if (x.pnl_pct !== null) mid.appendChild(el("span", pct(x.pnl_pct), "num " + tone(x.pnl_pct)));
+        const low = el("div", x.quantity + " at " + Number(x.entry_price).toFixed(2) + (x.exit_price !== null ? ", sold at " + Number(x.exit_price).toFixed(2) : (x.mark !== null ? ", bid " + Number(x.mark).toFixed(2) : ", no usable bid")) +
+          ". Opened " + fmtTime(x.entry_time) + ".", "muted");
+        kids(card, [top, mid, low]);
+        const open = () => openTrade(x.id, card);
+        card.addEventListener("click", open);
+        card.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+        host.appendChild(card);
+      });
+      return;
+    }
+    const t = el("table"), head = el("tr");
+    const col = (label, sortKey, right) => {
+      const th = el("th", null, right ? "r" : "");
+      if (sortKey) {
+        const b = el("button", label + (S.sort.key === sortKey ? (sortKey === "entry_time" ? (S.sort.dir > 0 ? " (oldest first)" : " (newest first)") : (S.sort.dir > 0 ? " (low to high)" : " (high to low)")) : ""));
+        b.type = "button";
+        th.setAttribute("aria-sort", S.sort.key === sortKey ? (S.sort.dir > 0 ? "ascending" : "descending") : "none");
+        b.addEventListener("click", () => { S.sort = { key: sortKey, dir: S.sort.key === sortKey ? -S.sort.dir : -1 }; renderTrades(); });
+        th.appendChild(b);
+      } else th.textContent = label;
+      head.appendChild(th);
+    };
+    col("Opened", "entry_time"); col("Contract", "symbol"); col("Qty", null, true); col("Entry", null, true); col("Exit or mark", null, true);
+    col("Profit or loss", "pnl", true); col("Return", "pnl_pct", true); col("Held", "held", true); col("Status", null);
+    t.appendChild(head);
+    const now = Date.now();
+    rows.forEach((x) => {
+      const tr = el("tr", null, "click");
+      tr.tabIndex = 0;
+      tr.setAttribute("aria-label", "Open trade file for " + x.symbol + " " + (x.right === "C" ? "call " : "put ") + x.strike);
+      const cell = (content, right) => { const td = el("td", null, right ? "r num" : ""); if (content instanceof Node) td.appendChild(content); else td.textContent = content; tr.appendChild(td); };
+      cell(fmtTime(x.entry_time)); cell(ticket(x)); cell(String(x.quantity), true); cell(Number(x.entry_price).toFixed(2), true);
+      cell(x.exit_price !== null ? Number(x.exit_price).toFixed(2) : (x.mark !== null ? Number(x.mark).toFixed(2) + " (mark)" : "unobservable"), true);
+      cell(pnlCell(x), true);
+      cell(x.pnl_pct === null ? "n/a" : span(pct(x.pnl_pct), tone(x.pnl_pct)), true);
+      cell(duration(x.held_seconds !== null ? x.held_seconds : Math.floor((now - new Date(x.entry_time).getTime()) / 1000)), true);
+      cell(statusTag(x));
+      const open = () => openTrade(x.id, tr);
+      tr.addEventListener("click", open);
+      tr.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+      t.appendChild(tr);
+    });
+    host.appendChild(t);
+  }
+
+  async function loadTrades() {
+    S.trades = await api("/api/trades?limit=500");
+    renderTrades();
+  }
+
+  // ---------------------------------------------------------------- Trade file drawer
+  const RATIONALE = {
+    trend: (v) => "Trend: " + v, sma20: (v) => "20-day average " + v, sma50: (v) => "50-day average " + v,
+    spread_pct: (v) => "Bid-ask spread " + v + "% of the ask", volume: (v) => "Contract volume " + num(v),
+    open_interest: (v) => "Open interest " + num(v), dte: (v) => v + " days to expiry", strategy: (v) => "Strategy " + v,
+  };
+  function voteChip(v) {
+    const s = v.stance === "SUPPORT" ? "s" : v.stance === "OPPOSE" ? "o" : "";
+    const word = v.stance === "SUPPORT" ? "supports" : v.stance === "OPPOSE" ? "opposes" : "abstains";
+    const c = el("span", v.agent + " " + word + (v.stance === "ABSTAIN" ? "" : " " + Math.round(v.confidence * 100) + "%"), "vote " + s);
+    c.title = (v.reasons || []).join("; ");
+    return c;
+  }
+  function section(title, nodes) {
+    const s = el("div");
+    s.appendChild(el("h3", title));
+    kids(s, nodes);
+    return s;
+  }
+  function renderTradeFile(t) {
+    $("drawer-title").textContent = t.symbol + " " + (t.right === "C" ? "call " : "put ") + t.strike + ", " + fmtDay(t.expiry);
+    $("drawer-sub").textContent = t.contract + " | " + exitLabel(t);
+    const body = $("drawer-body");
+    body.replaceChildren();
+    const res = el("div");
+    const big = el("div", t.pnl === null ? "Unobservable" : sgn(t.pnl), "result " + tone(t.pnl));
+    res.appendChild(big);
+    res.appendChild(el("div", (t.pnl_pct === null ? "No usable bid to mark this trade." : pct(t.pnl_pct) + " on " + money(t.entry_price * t.quantity * t.multiplier) + " paid")
+      + (t.status === "CLOSED" ? "" : " (still open, marked at the bid)"), "muted"));
+    body.appendChild(res);
+
+    const facts = el("dl", null, "facts");
+    const row = (k, v) => { facts.appendChild(el("dt", k)); facts.appendChild(el("dd", v)); };
+    row("Bought", t.quantity + " at " + Number(t.entry_price).toFixed(2) + " on " + fmtTime(t.entry_time));
+    t.exit_orders.forEach((x) => row("Sold", x.quantity + " at " + Number(x.price).toFixed(2) + " on " + fmtTime(x.time)));
+    if (t.remaining > 0) row("Still held", t.remaining + (t.mark !== null ? ", bid " + Number(t.mark).toFixed(2) : ", no usable bid"));
+    row("Held", duration(t.held_seconds !== null ? t.held_seconds : Math.floor((Date.now() - new Date(t.entry_time).getTime()) / 1000)));
+    body.appendChild(section("The trade", [facts]));
+
+    const why = [];
+    if (t.entry_reason && typeof t.entry_reason === "object") {
+      const ul = el("ul", null, "plain");
+      Object.keys(t.entry_reason).forEach((k) => ul.appendChild(el("li", RATIONALE[k] ? RATIONALE[k](t.entry_reason[k]) : k + ": " + t.entry_reason[k])));
+      why.push(ul);
+    } else why.push(el("p", "No entry reasoning was recorded for this order.", "muted"));
+    body.appendChild(section("Why it entered", why));
+
+    const c = t.committee, cm = [];
+    if (c) {
+      cm.push(el("p", "Net score " + Number(c.net_score).toFixed(2) + ", order size " + c.quantity + " contract" + (c.quantity === 1 ? "" : "s") + " at " + Math.round((c.scale || 0) * 100) + "% of the allowed size."));
+      const votes = el("div", null, "votes");
+      (c.verdicts || []).forEach((v) => votes.appendChild(voteChip(v)));
+      cm.push(votes);
+      const sk = (c.verdicts || []).find((v) => v.agent === "skeptic");
+      if (sk && sk.reasons.length) {
+        const ul = el("ul", null, "plain");
+        sk.reasons.forEach((r) => ul.appendChild(el("li", "Skeptic: " + r)));
+        cm.push(ul);
+      }
+    } else cm.push(el("p", "No committee vote was matched to this entry. The committee may have been off, or this trade is older than the committee.", "muted"));
+    body.appendChild(section("What the agents said", cm));
+
+    const end = [];
+    if (t.status === "CLOSED") {
+      end.push(el("p", EXIT_WHY[t.exit_reason] || ("Closed: " + (t.exit_reason || "reason not recorded") + ".")));
+    } else {
+      end.push(el("p", "Still open. It will close when the bid hits the take-profit or stop level, or when expiry gets too close.", "muted"));
+    }
+    body.appendChild(section("How it ended", end));
+
+    const trail = el("div");
+    trail.appendChild(el("p", "Loading the order trail", "muted"));
+    body.appendChild(section("Order trail", [trail]));
+    return trail;
+  }
+
+  async function openTrade(id, opener) {
+    const t = S.trades && S.trades.trades.find((x) => x.id === id);
+    if (!t) return;
+    S.openTrade = id; S.opener = opener || document.activeElement;
+    const trail = renderTradeFile(t);
+    $("scrim").hidden = false; $("drawer").hidden = false;
+    document.body.style.overflow = "hidden";
+    $("btn-drawer-close").focus();
+    try {
+      const d = await api("/api/trades/" + encodeURIComponent(id));
+      if (S.openTrade !== id) return;
+      trail.replaceChildren();
+      const ol = el("ol", null, "timeline");
+      (d.audit || []).forEach((e) => {
+        const li = el("li");
+        li.appendChild(el("time", fmtTime(e.ts)));
+        const p = e.payload || {};
+        const what = e.kind === "order_created" ? (p.intent ? (p.intent.side === "BUY_TO_OPEN" ? "Buy" : "Sell") + " order created, " + p.intent.quantity + " at limit " + p.intent.limit_price : "Order created")
+          : e.kind === "order_state" && p.state ? words(p.state) + (p.reason ? ": " + p.reason : "") : words(e.kind);
+        li.appendChild(el("span", what));
+        ol.appendChild(li);
+      });
+      if (ol.children.length) trail.appendChild(ol); else trail.appendChild(el("p", "No audit events recorded.", "muted"));
+    } catch (e) {
+      if (S.openTrade === id) { trail.replaceChildren(); trail.appendChild(el("p", "Could not load the order trail: " + e.message, "loss")); }
+    }
+  }
+  function closeTrade() {
+    if ($("drawer").hidden) return;
+    $("drawer").hidden = true; $("scrim").hidden = true; S.openTrade = null;
+    document.body.style.overflow = "";
+    if (S.opener && document.contains(S.opener)) S.opener.focus();
+    S.opener = null;
+  }
+  // Keep Tab inside the open drawer.
+  function trapFocus(ev) {
+    if ($("drawer").hidden || ev.key !== "Tab") return;
+    const items = $("drawer").querySelectorAll("button, [href], input, select, [tabindex]:not([tabindex='-1'])");
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (ev.shiftKey && document.activeElement === first) { last.focus(); ev.preventDefault(); }
+    else if (!ev.shiftKey && document.activeElement === last) { first.focus(); ev.preventDefault(); }
+  }
+
+  // ---------------------------------------------------------------- Market scan
+  const TABS = [{ id: "active", label: "Most active names" }, { id: "unusual", label: "Unusual options activity" }, { id: "options", label: "Option volume by name" }];
+  function renderMarket() {
+    const d = S.scan, res = d && d.result;
+    const st = d && d.status;
+    $("scan-lede").textContent = "A fixed list of about 75 liquid names ranked by dollar volume, and the option contracts trading far above their open interest. This is a screen for where to look, not a signal to trade.";
+    $("scan-status").textContent = !st ? "" : st.running ? "Scanning now" : st.last_scan_at ? "Last scan " + fmtTime(st.last_scan_at) + (d.interval_s ? ", repeats every " + Math.round(d.interval_s / 60) + " minutes" : ", automatic scanning is off") : "No scan has run yet";
+    $("btn-scan").disabled = !!(st && st.running);
+    chips($("market-tabs"), TABS, S.marketTab, (id) => { S.marketTab = id; renderMarket(); }, "tab");
+    $("scan-active-panel").hidden = S.marketTab !== "active";
+    $("scan-unusual-panel").hidden = S.marketTab !== "unusual";
+    $("scan-options-panel").hidden = S.marketTab !== "options";
+    const notes = $("scan-notes");
+    notes.replaceChildren();
+    ((res && res.limitations) || []).forEach((x) => notes.appendChild(el("li", x)));
+    if (res && res.fictional) notes.appendChild(el("li", "This scan ran on fictional demo data. The names and volumes are invented.", "warn"));
+    if (res && res.errors && res.errors.length) notes.appendChild(el("li", "Problems during the scan: " + res.errors.slice(0, 6).join("; ")));
+    if (!res) {
+      ["scan-active", "scan-unusual", "scan-options"].forEach((id) => empty($(id), "No scan yet", "Choose Scan now, or set a scan interval in Controls."));
+      return;
+    }
+    table($("scan-active"), [
+      { label: "Rank", right: true, get: (r) => r.rank }, { label: "Name", get: (r) => el("b", r.symbol) },
+      { label: "Close", right: true, get: (r) => money(r.close) },
+      { label: "Day change", right: true, get: (r) => span(pct(r.change_pct), tone(r.change_pct)) },
+      { label: "Dollar volume", right: true, get: (r) => "$" + (r.dollar_volume / 1e9 >= 1 ? (r.dollar_volume / 1e9).toFixed(1) + "B" : (r.dollar_volume / 1e6).toFixed(0) + "M") },
+      { label: "Volume vs usual", right: true, get: (r) => r.relative_volume === null ? "n/a" : span(r.relative_volume.toFixed(1) + "x", r.surge ? "tag warn" : "") },
+    ], res.active_names, "No ranked names", (res.errors || [])[0] || "The scan returned no daily bars.");
+
+    chips($("scan-filters"), [{ id: "reviewable", label: "Tradable by the rules" }, { id: "all", label: "Everything unusual" }], S.unusualFilter, (id) => { S.unusualFilter = id; renderMarket(); });
+    const un = res.unusual.filter((r) => S.unusualFilter === "all" || r.decision === "REVIEWABLE");
+    table($("scan-unusual"), [
+      { label: "Name", get: (r) => el("b", r.symbol) },
+      { label: "Contract", get: (r) => el("span", (r.right === "C" ? "Call " : "Put ") + r.strike + ", " + fmtDay(r.expiry) + " (" + r.dte + "d)", "") },
+      { label: "Volume", right: true, get: (r) => num(r.volume) },
+      { label: "Open interest", right: true, get: (r) => r.open_interest === null ? "missing" : (r.oi_state === "REPORTED_ZERO" ? "zero" : num(r.open_interest)) },
+      { label: "Volume / OI", right: true, get: (r) => r.volume_oi_ratio === null ? "no ratio" : r.volume_oi_ratio + "x" },
+      { label: "Spread", right: true, get: (r) => r.spread_pct.toFixed(1) + "%" },
+      { label: "Quoted turnover", right: true, get: (r) => "$" + num(r.quoted_turnover_usd) },
+      { label: "Status", get: (r) => r.decision === "REVIEWABLE" ? el("span", "Reviewable", "tag info") : el("span", "Watch only: " + r.why_observe_only, "tag") },
+    ], un, "Nothing unusual by these thresholds", "Thresholds: at least " + res.thresholds.min_volume + " contracts and volume at " + res.thresholds.min_volume_oi_ratio + "x open interest or more.");
+    table($("scan-options"), [
+      { label: "Name", get: (r) => el("b", r.symbol) }, { label: "Call volume", right: true, get: (r) => num(r.call_volume) },
+      { label: "Put volume", right: true, get: (r) => num(r.put_volume) },
+      { label: "Calls per put", right: true, get: (r) => r.call_put_ratio === null ? "no puts" : r.call_put_ratio },
+      { label: "Unusual contracts", right: true, get: (r) => r.unusual_count }, { label: "Contracts read", right: true, get: (r) => r.contracts },
+    ], res.option_names, "No option chains were read", (res.errors || [])[0] || "");
+  }
+  async function loadMarket() { S.scan = await api("/api/scan"); renderMarket(); }
+
+  // ---------------------------------------------------------------- Agents
+  const pctText = (v) => (v === null || v === undefined ? "n/a" : (v >= 0 ? "+" : "") + v + "%");
+  function renderCommittee(c, votes) {
+    const sum = $("committee-summary");
+    const e = c.committee.WOULD_ENTER || { n: 0 }, r = c.committee.WOULD_REJECT || { n: 0 };
+    sum.textContent = "The committee is in " + c.mode + " mode" + (c.mode === "shadow" ? " (it records votes but does not change orders)" : c.mode === "off" ? "" : "") + ". It uses " +
+      Math.round(c.trust * 100) + "% of its allowed order size, and that share moves with its hit rate. Matured " + c.horizon_hours + "h outcomes: " +
+      e.n + " entries" + (e.n ? " (" + pctText(e.mean_return_pct) + " avg)" : "") + ", " + r.n + " rejections" + (r.n ? " (" + pctText(r.mean_return_pct) + " avg if taken)" : "") + ".";
+    const rows = Object.keys(c.weights).map((name) => {
+      const a = c.agents[name] || { votes: {}, descriptive_only: true };
+      const v = (s) => a.votes[s] ? a.votes[s].n + " calls, " + pctText(a.votes[s].mean_return_pct) + " avg, " + (a.votes[s].hit_rate === null ? "n/a" : Math.round(a.votes[s].hit_rate * 100) + "% rose") : "none yet";
+      return { name, weight: c.weights[name], support: v("SUPPORT"), oppose: v("OPPOSE"), note: a.descriptive_only ? "too few outcomes to judge" : "" };
+    });
+    table($("committee-agents"), [
+      { label: "Agent", get: (x) => el("b", x.name) }, { label: "Learned weight", right: true, get: (x) => Number(x.weight).toFixed(2) },
+      { label: "After it supported", get: (x) => x.support }, { label: "After it opposed", get: (x) => x.oppose }, { label: "Note", get: (x) => x.note },
+    ], rows, "No agents");
+    const latest = [], seen = {};
+    votes.forEach((d) => { if (d.contract && !seen[d.contract] && latest.length < 8) { seen[d.contract] = 1; latest.push(d); } });
+    table($("committee-votes"), [
+      { label: "Time", get: (d) => fmtTime(d.ts) }, { label: "Contract", get: (d) => el("span", d.contract, "mono") },
+      { label: "Result", get: (d) => el("span", d.disposition === "WOULD_ENTER" ? "Would enter" : "Would reject", "tag " + (d.disposition === "WOULD_ENTER" ? "gain" : "")) },
+      { label: "How each voted", get: (d) => { const w = el("div", null, "votes"); ((d.payload && d.payload.verdicts) || []).forEach((v) => w.appendChild(voteChip(v))); return w; } },
+      { label: "Net", right: true, get: (d) => d.payload && d.payload.net_score !== undefined ? Number(d.payload.net_score).toFixed(2) : "" },
+    ], latest, "No votes recorded yet", "Votes appear after the first cycle that finds a candidate.");
+    const ul = $("committee-lessons"); ul.replaceChildren();
+    (c.lessons.length ? c.lessons : ["No matured mistakes to learn from yet. Outcomes are scored four hours after each vote."]).forEach((t) => ul.appendChild(el("li", t)));
+    table($("committee-history"), [
+      { label: "Time", get: (h) => fmtTime(h.ts) }, { label: "Agent", get: (h) => h.agent }, { label: "Change", get: (h) => h.note },
+    ], c.history, "No weight has moved yet");
+  }
+  async function loadAgents() {
+    const [c, votes] = await Promise.all([api("/api/committee"), api("/api/journal?kind=COMMITTEE&limit=200")]);
+    renderCommittee(c, votes);
+  }
+
+  // ---------------------------------------------------------------- Research
   function renderResearch(list) {
     table($("research"), [
       { label: "Id", get: (h) => h.id }, { label: "Hypothesis", get: (h) => h.statement },
       { label: "Status", get: (h) => h.status + (h.intact ? "" : " (RECORD TAMPERED)") },
       { label: "Min trades", get: (h) => (h.criteria.min_trades || "") + " total / " + (h.criteria.min_oos_trades || "") + " out-of-sample" },
-      { label: "Evaluations", get: (h) => h.evaluations },
-    ], list, "No experiments registered. Register one with: python -m optplat.research register (the baseline stays frozen).");
+      { label: "Evaluations", right: true, get: (h) => h.evaluations },
+    ], list, "No experiments registered", "Register one with: python -m optplat.research register. The baseline stays frozen.");
   }
+  async function loadResearch() { renderResearch(await api("/api/research/hypotheses")); }
 
-  const pctText = (v) => (v === null || v === undefined ? "n/a" : (v >= 0 ? "+" : "") + v + "%");
-  function renderCommittee(c, cfg) {
-    const sum = $("committee-summary");
-    sum.className = "verdict" + (c.mode === "off" ? "" : " ok");
-    const e = c.committee.WOULD_ENTER || { n: 0 }, r = c.committee.WOULD_REJECT || { n: 0 };
-    sum.textContent = "Mode " + c.mode + ". It uses " + Math.round(c.trust * 100) + "% of its allowed order size, and that share moves with its hit rate. " +
-      "Matured " + c.horizon_hours + "h outcomes: " + e.n + " entries" + (e.n ? " (" + pctText(e.mean_return_pct) + " avg)" : "") + ", " +
-      r.n + " rejections" + (r.n ? " (" + pctText(r.mean_return_pct) + " avg if taken)" : "") + ".";
-    const rows = Object.keys(c.weights).map((name) => {
-      const a = c.agents[name] || { votes: {}, descriptive_only: true };
-      const v = (s) => a.votes[s] ? a.votes[s].n + " calls, " + pctText(a.votes[s].mean_return_pct) + ", " + (a.votes[s].hit_rate === null ? "n/a" : Math.round(a.votes[s].hit_rate * 100) + "% up") : "none yet";
-      return { name, weight: c.weights[name], support: v("SUPPORT"), oppose: v("OPPOSE"), note: a.descriptive_only ? "too few outcomes to judge" : "" };
-    });
-    table($("committee-agents"), [
-      { label: "Agent", get: (x) => x.name }, { label: "Learned weight", get: (x) => Number(x.weight).toFixed(2) },
-      { label: "When it said SUPPORT", get: (x) => x.support }, { label: "When it said OPPOSE", get: (x) => x.oppose },
-      { label: "Note", get: (x) => x.note },
-    ], rows, "No agents");
-    const ul = $("committee-lessons"); ul.replaceChildren();
-    (c.lessons.length ? c.lessons : ["No matured mistakes to learn from yet."]).forEach((t) => ul.appendChild(el("li", t)));
-    table($("committee-history"), [
-      { label: "Time", get: (h) => h.ts.slice(0, 19) }, { label: "Agent", get: (h) => h.agent }, { label: "Change", get: (h) => h.note },
-    ], c.history, "No weight has moved yet");
-    if (document.activeElement !== $("cfg-committee")) $("cfg-committee").value = cfg.committee_mode;
+  // ---------------------------------------------------------------- refresh loop
+  async function loadPage() {
+    const page = route();
+    if (page === "trades") await loadTrades();
+    else if (page === "market") await loadMarket();
+    else if (page === "agents") await loadAgents();
+    else if (page === "research") await loadResearch();
   }
 
   async function refresh() {
-    if (!token) return;
+    if (!token) { S.connected = false; showPage(); return; }
     try {
-      const [health, status, portfolio, orders, report, decisions, eq, hyps, committee] = await Promise.all([
+      const [health, status, portfolio, orders, report, decisions, eq] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
-        api("/api/engine/status"),
-        api("/api/portfolio"),
-        api("/api/paper/orders"),
-        api("/api/report"),
-        api("/api/journal?limit=15"),
-        api("/api/equity"),
-        api("/api/research/hypotheses"),
-        api("/api/committee"),
+        api("/api/engine/status"), api("/api/portfolio"), api("/api/paper/orders"), api("/api/report"),
+        api("/api/journal?limit=15"), api("/api/equity"),
       ]);
-      pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
-      pill("data", status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), status.data_source.fictional ? "warn" : "");
-      pill("market", "market " + (status.market.open ? "open" : "closed") + ": " + status.market.reason, status.market.open ? "ok" : "");
-      killState = !!portfolio.kill_switch;
-      pill("kill", killState ? "KILL SWITCH ON" : "kill switch off", killState ? "bad" : "");
-      const rn = status.runner;
-      pill("runner",
-        rn.stalled ? "LOOP STALLED: no good cycle for " + rn.seconds_since_success + "s" : (rn.running ? "loop running" : "loop stopped"),
-        rn.stalled ? "bad" : (rn.running ? "ok" : ""));
-      $("runner").title = rn.last_error ? "Last error: " + rn.last_error : "";
-      $("cfg-entries").checked = status.config.auto_entries;
-      $("cfg-exits").checked = status.config.auto_exits;
-      $("cfg-hours").checked = status.market.hours_enforced;
-      $("cfg-hours").disabled = status.market.hours_enforced && !status.data_source.fictional; // real data: always on
-      if (document.activeElement !== $("cfg-watch")) $("cfg-watch").value = status.config.watchlist.join(", ");
-
-      renderTrust(health, status);
-      renderResults(portfolio, report, eq);
+      S.connected = true; S.core = { status, report };
+      showPage();
+      renderStrip(health, status, portfolio);
+      renderTrust(status);
+      renderDesk(portfolio, report, eq, status);
       renderPositions(report, status.config);
-      renderResearch(hyps);
-      renderCommittee(committee, status.config);
-
-      const why = (d) => (d.payload.risk_failures && d.payload.risk_failures.length) ? d.payload.risk_failures.join("; ")
-        : (d.payload.why || d.payload.reason || (d.payload.reasons && d.payload.reasons.join("; ")) || (d.payload.score !== undefined ? "score " + Number(d.payload.score).toFixed(2) : ""));
-      table($("decisions"), [
-        { label: "Time", get: (d) => d.ts.slice(0, 19) }, { label: "Type", get: (d) => d.kind },
-        { label: "Contract", get: (d) => d.contract }, { label: "Outcome", get: (d) => d.disposition },
-        { label: "Why", get: why },
-      ], decisions, "No decisions recorded yet");
-
-      table($("orders"), [
-        { label: "Time", get: (o) => o.created_at.slice(0, 19) }, { label: "Side", get: (o) => o.intent.side },
-        { label: "Contract", get: (o) => o.intent.contract.underlying + " " + o.intent.contract.expiry + " " + o.intent.contract.right + o.intent.contract.strike },
-        { label: "Qty", get: (o) => o.filled_qty + "/" + o.intent.quantity }, { label: "Limit", get: (o) => o.intent.limit_price },
-        { label: "Fill", get: (o) => o.avg_fill_price === null ? "" : o.avg_fill_price },
-        { label: "State", get: (o) => o.state }, { label: "Why", get: (o) => o.risk_failures.join("; ") },
-      ], orders.slice(0, 30), "No orders yet");
+      renderDecisions(decisions);
+      renderOrders(orders);
+      syncControls(status, status.config);
+      await loadPage();
       setMsg("");
     } catch (e) {
-      setMsg("Error: " + e.message, "bad");
+      if (e.status === 401 || e.status === 403) { S.connected = false; showPage(); setMsg("The token was not accepted. Paste the one the server printed.", "loss"); }
+      else if (S.connected) { $("updated").textContent = "Could not refresh: " + e.message; }
+      else setMsg("Error: " + e.message, "loss");
     }
   }
 
-  async function act(fn) { try { await fn(); } catch (e) { setMsg("Error: " + e.message, "bad"); } await refresh(); }
+  async function act(fn) { try { await fn(); } catch (e) { $("updated").textContent = "Error: " + e.message; } await refresh(); }
 
   $("btn-connect").addEventListener("click", () => {
     token = $("token").value.trim();
@@ -328,21 +737,42 @@
   $("btn-start").addEventListener("click", () => act(() => api("/api/engine/start", { method: "POST" })));
   $("btn-stop").addEventListener("click", () => act(() => api("/api/engine/stop", { method: "POST" })));
   $("btn-kill").addEventListener("click", () => act(() =>
-    api("/api/risk/kill-switch", { method: "POST", body: JSON.stringify({ active: !killState, reason: "dashboard" }) })));
+    api("/api/risk/kill-switch", { method: "POST", body: JSON.stringify({ active: !S.killState, reason: "dashboard" }) })));
   $("btn-save").addEventListener("click", () => act(() => api("/api/engine/config", {
     method: "PUT",
     body: JSON.stringify({
       auto_entries: $("cfg-entries").checked, auto_exits: $("cfg-exits").checked,
       enforce_market_hours: $("cfg-hours").checked, committee_mode: $("cfg-committee").value,
+      scan_interval_s: Number($("cfg-scan").value),
       watchlist: $("cfg-watch").value.split(/[,\s]+/).filter(Boolean),
     }),
   })));
+  $("btn-scan").addEventListener("click", () => act(async () => {
+    await api("/api/scan/run", { method: "POST" });
+    // The scan runs in the background; check back every few seconds until it finishes.
+    let tries = 0;
+    const poll = async () => {
+      tries += 1;
+      try { await loadMarket(); } catch (e) { return; }
+      if (S.scan && S.scan.status.running && tries < 30) setTimeout(poll, 3000);
+    };
+    setTimeout(poll, 2000);
+  }));
+  $("trade-search").addEventListener("input", (ev) => { S.query = ev.target.value; renderTrades(); });
+  $("btn-drawer-close").addEventListener("click", closeTrade);
+  $("scrim").addEventListener("click", closeTrade);
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeTrade(); trapFocus(ev); });
+  const phone = window.matchMedia("(max-width:860px)");
+  const onBreak = () => { if (S.trades && route() === "trades") renderTrades(); };
+  if (phone.addEventListener) phone.addEventListener("change", onBreak); else if (phone.addListener) phone.addListener(onBreak);
+  window.addEventListener("hashchange", () => { showPage(); if (S.connected && route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); if (S.connected) loadPage().catch((e) => { $("updated").textContent = "Error: " + e.message; }); });
 
   let resizeTimer = null;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { if (!$("equity-chart").hidden) drawEquity($("equity-chart"), lastPoints); }, 150);
+    resizeTimer = setTimeout(() => { if (route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); }, 150);
   });
+  showPage();
   refresh();
   setInterval(refresh, 10000);
 })();

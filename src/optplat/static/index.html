@@ -3,154 +3,367 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <title>options-platform</title>
 <style>
-  :root { color-scheme: light dark; --bg:#fff; --fg:#1b1b1f; --mut:#6b6b76; --line:#dcdce2; --card:#f6f6f9;
-          --ok:#13763a; --bad:#b42318; --warn:#9a5b00; --accent:#2457d6; --series-1:#2a78d6; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#111114; --fg:#ececf1; --mut:#9b9ba6; --line:#2b2b33; --card:#19191e;
-            --ok:#4cc17a; --bad:#ff7b72; --warn:#e3b341; --accent:#7aa2ff; --series-1:#3987e5; }
+  /* Ink and paper: a dark ledger by default, a cool paper theme when the system asks for light. */
+  :root {
+    color-scheme: dark;
+    --bg:#10151c; --surface:#161d27; --raised:#1d2733; --line:#2a3646; --line-soft:#212c3a;
+    --fg:#e8e6df; --mut:#98a2b0; --accent:#6aa6f0; --series-1:#3987e5;
+    --gain:#4cc38a; --loss:#ef7a63; --warn:#e6b04b; --gain-bg:rgba(76,195,138,.13); --loss-bg:rgba(239,122,99,.13);
+    --warn-bg:rgba(230,176,75,.14); --info-bg:rgba(106,166,240,.14);
+    --serif:ui-serif,"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
-  * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.45 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--fg); }
-  header { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-  h1 { font-size:16px; margin:0 12px 0 0; }
-  main { padding:16px; max-width:1100px; margin:0 auto; display:grid; gap:14px; }
-  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:0 0 8px; }
-  .pill { display:inline-block; padding:2px 9px; border-radius:99px; border:1px solid var(--line); font-size:12px; }
-  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
-  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  button { font:inherit; padding:5px 11px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  button.danger { border-color:var(--bad); color:var(--bad); }
-  input[type=text], input[type=password] { font:inherit; padding:5px 8px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); min-width:220px; }
-  table { border-collapse:collapse; width:100%; }
-  th, td { text-align:left; padding:4px 8px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; vertical-align:top; }
-  th { color:var(--mut); font-weight:600; font-size:12px; }
-  .scroll { overflow-x:auto; }
-  main > section { min-width:0; }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg:#f3f5f8; --surface:#ffffff; --raised:#eef1f5; --line:#d5dce6; --line-soft:#e4e9f0;
+      --fg:#17202b; --mut:#5a6676; --accent:#1f5fbf; --series-1:#2a78d6;
+      --gain:#167a4a; --loss:#c4452d; --warn:#9a6a00; --gain-bg:rgba(22,122,74,.10); --loss-bg:rgba(196,69,45,.10);
+      --warn-bg:rgba(154,106,0,.12); --info-bg:rgba(31,95,191,.10);
+    }
+  }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; font:14px/1.5 var(--sans); background:var(--bg); color:var(--fg); }
+  [hidden] { display:none !important; }
+  h1, h2, h3, p { margin:0; }
+  a { color:var(--accent); }
+  button, input, select { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+
+  /* shell */
+  .shell { display:grid; grid-template-columns:208px minmax(0,1fr); min-height:100vh; }
+  .rail { position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:2px; padding:18px 12px; border-right:1px solid var(--line); background:var(--surface); }
+  .brand { padding:2px 10px 18px; }
+  .brand b { display:block; font:600 16px var(--serif); letter-spacing:.01em; }
+  .brand small { color:var(--mut); font-size:12px; }
+  .rail a.nav { display:block; padding:9px 12px; border-radius:6px; color:var(--mut); text-decoration:none; border-left:3px solid transparent; font-weight:500; }
+  .rail a.nav:hover { background:var(--raised); color:var(--fg); }
+  .rail a.nav[aria-current="page"] { color:var(--fg); background:var(--raised); border-left-color:var(--series-1); }
+  .rail-foot { margin-top:auto; padding:12px 10px 0; border-top:1px solid var(--line-soft); color:var(--mut); font-size:12px; }
+  .main { min-width:0; }
+  .strip { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 24px; background:var(--bg); border-bottom:1px solid var(--line-soft); }
+  .strip .grow { flex:1; }
+  .content { width:100%; max-width:1180px; margin:0 auto; padding:26px 24px 64px; }
+  .content > section { display:grid; gap:20px; min-width:0; }
+
+  /* type */
+  h1 { font:600 26px/1.25 var(--serif); letter-spacing:.005em; }
+  h1.headline { font-size:clamp(22px,3.2vw,32px); line-height:1.3; max-width:30em; }
+  h2 { font:600 15px var(--sans); }
+  .lede { color:var(--mut); max-width:46em; font-size:14.5px; line-height:1.6; }
+  .q { color:var(--mut); font-size:12.5px; margin:2px 0 10px; }
   .muted { color:var(--mut); }
+  .num { font-variant-numeric:tabular-nums; }
+  .serif { font-family:var(--serif); }
+  .mono { font-family:var(--mono); font-size:12.5px; }
+  .gain { color:var(--gain); } .loss { color:var(--loss); } .warn { color:var(--warn); }
+
+  /* surfaces */
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:16px 18px; min-width:0; }
+  .grid2 { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr); gap:20px; }
+  .verdict { padding:10px 14px; border-radius:6px; border:1px solid var(--line); background:var(--raised); font-size:13.5px; }
+  .verdict.ok { background:var(--gain-bg); border-color:transparent; } .verdict.warn { background:var(--warn-bg); border-color:transparent; }
+  .verdict.bad { background:var(--loss-bg); border-color:transparent; }
   #msg { min-height:1.4em; }
-  .q { color:var(--mut); font-size:12.5px; margin:-4px 0 10px; }
-  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:10px; margin-bottom:12px; }
-  .tile { padding:2px 0; } .tile .label { color:var(--mut); font-size:12px; }
-  .tile .value { font-size:20px; font-weight:600; font-variant-numeric:tabular-nums; }
-  .tile .sub { color:var(--mut); font-size:12px; }
-  .verdict { font-weight:600; margin-bottom:8px; }
-  dl.facts { display:grid; grid-template-columns:max-content 1fr; gap:3px 14px; margin:0; }
-  dl.facts dt { color:var(--mut); } dl.facts dd { margin:0; }
+
+  /* figures: plain label under a serif value, not a card per number */
+  .figures { display:grid; grid-template-columns:repeat(auto-fit,minmax(138px,1fr)); gap:18px 22px; }
+  .fig .v { font:600 22px/1.2 var(--serif); font-variant-numeric:tabular-nums; }
+  .fig .l { color:var(--mut); font-size:12.5px; margin-top:2px; }
+  .fig .s { color:var(--mut); font-size:12px; }
+  dl.facts { display:grid; grid-template-columns:max-content 1fr; gap:6px 18px; margin:0; }
+  dl.facts dt { color:var(--mut); } dl.facts dd { margin:0; overflow-wrap:anywhere; }
+
+  /* controls */
+  .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .btn { padding:7px 13px; border-radius:6px; border:1px solid var(--line); background:var(--raised); font-weight:500; }
+  .btn:hover { border-color:var(--mut); }
+  .btn.primary { background:var(--series-1); border-color:var(--series-1); color:#fff; }
+  .btn.danger { border-color:var(--loss); color:var(--loss); background:transparent; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .linkbtn { border:none; background:none; color:var(--accent); padding:0; margin-top:8px; text-decoration:underline; text-underline-offset:3px; }
+  input[type=text], input[type=password], select { padding:7px 10px; border-radius:6px; border:1px solid var(--line); background:var(--bg); min-width:0; }
+  input[type=text], input[type=password] { min-width:230px; }
+  label.check { display:inline-flex; align-items:center; gap:7px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { padding:5px 11px; border-radius:99px; border:1px solid var(--line); background:transparent; color:var(--mut); font-size:13px; }
+  .chip[aria-pressed="true"], .chip[aria-selected="true"] { background:var(--info-bg); border-color:var(--series-1); color:var(--fg); }
+
+  /* status pills and tags */
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:99px; border:1px solid var(--line); font-size:12.5px; color:var(--mut); background:var(--surface); }
+  .pill.ok { color:var(--gain); } .pill.bad { color:var(--loss); border-color:var(--loss); } .pill.warn { color:var(--warn); }
+  .tag { display:inline-block; padding:1px 8px; border-radius:4px; font-size:12px; font-weight:600; background:var(--raised); color:var(--mut); white-space:nowrap; }
+  .tag.gain { background:var(--gain-bg); color:var(--gain); } .tag.loss { background:var(--loss-bg); color:var(--loss); }
+  .tag.warn { background:var(--warn-bg); color:var(--warn); } .tag.info { background:var(--info-bg); color:var(--accent); }
+
+  /* tables */
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line-soft); vertical-align:middle; font-variant-numeric:tabular-nums; }
+  th { color:var(--mut); font-weight:500; font-size:12.5px; white-space:nowrap; position:sticky; top:0; background:var(--surface); }
+  th button { background:none; border:none; padding:0; color:inherit; font-weight:inherit; }
+  td.r, th.r { text-align:right; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:var(--raised); }
+  .scroll { overflow-x:auto; }
+  .empty { padding:22px 8px; color:var(--mut); }
+  .empty b { display:block; color:var(--fg); font-weight:600; margin-bottom:2px; }
+  .ticket { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+  .ticket .sym { font:600 14px var(--mono); }
+  .ticket .leg { font-size:13px; } .ticket .leg.call { color:var(--gain); } .ticket .leg.put { color:var(--loss); }
+  .bar { display:inline-block; width:56px; height:6px; background:var(--raised); border-radius:3px; position:relative; vertical-align:middle; margin-left:8px; }
+  .bar i { position:absolute; top:0; bottom:0; border-radius:3px; }
+  .bar i.up { left:50%; background:var(--gain); } .bar i.down { right:50%; background:var(--loss); }
+  .bar::after { content:""; position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:var(--mut); opacity:.6; }
+
+  /* trade cards on phones */
+  .tcard { display:grid; gap:6px; padding:14px 12px; border-bottom:1px solid var(--line-soft); cursor:pointer; }
+  .tcard:last-child { border-bottom:0; }
+  .tcard:active { background:var(--raised); }
+  .tc-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .tc-mid { display:flex; align-items:baseline; gap:12px; }
+  .tc-pnl { font:600 22px/1.2 var(--serif); }
+  #trade-table select { margin:8px 8px 4px; }
+
+  /* chart */
   .viz { position:relative; }
   .viz svg { display:block; width:100%; height:auto; overflow:visible; touch-action:pan-y; }
   .viz svg:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
-  .viz .grid { stroke:var(--line); stroke-width:1; }
+  .viz .grid { stroke:var(--line-soft); stroke-width:1; }
   .viz .ref { stroke:var(--mut); stroke-width:1; opacity:.55; }
   .viz .line { fill:none; stroke:var(--series-1); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
   .viz .area { fill:var(--series-1); opacity:.10; }
-  .viz .dot { fill:var(--series-1); stroke:var(--card); stroke-width:2; }
+  .viz .dot { fill:var(--series-1); stroke:var(--surface); stroke-width:2; }
   .viz .cross { stroke:var(--mut); stroke-width:1; }
-  .viz text { fill:var(--mut); font-size:11px; font-variant-numeric:tabular-nums; }
+  .viz text { fill:var(--mut); font-size:11px; font-variant-numeric:tabular-nums; font-family:var(--sans); }
   .viz text.end { fill:var(--fg); font-weight:600; }
-  .viz .tip { position:absolute; pointer-events:none; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:5px 9px; font-size:12px; white-space:nowrap; }
-  .viz .tip strong { display:block; font-size:14px; font-variant-numeric:tabular-nums; }
+  .viz .tip { position:absolute; pointer-events:none; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12px; white-space:nowrap; z-index:2; }
+  .viz .tip strong { display:block; font:600 15px var(--serif); font-variant-numeric:tabular-nums; }
   .viz .tip span { color:var(--mut); }
-  h3.sub { font-size:12.5px; margin:14px 0 6px; color:var(--mut); font-weight:600; }
-  ul.lessons { margin:0; padding-left:18px; } ul.lessons li { margin:2px 0; }
-  .linkbtn { border:none; background:none; color:var(--accent); padding:0; margin-top:6px; }
+
+  /* agents */
+  .votes { display:flex; flex-wrap:wrap; gap:5px; }
+  .vote { display:inline-flex; align-items:center; gap:4px; padding:1px 8px; border-radius:4px; font-size:12px; background:var(--raised); color:var(--mut); }
+  .vote.s { background:var(--gain-bg); color:var(--gain); } .vote.o { background:var(--loss-bg); color:var(--loss); }
+  ul.plain { margin:0; padding-left:18px; } ul.plain li { margin:3px 0; }
+  details.notes { color:var(--mut); } details.notes summary { cursor:pointer; color:var(--fg); }
+
+  /* trade file drawer */
+  #scrim { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:20; }
+  .drawer { position:fixed; top:0; right:0; bottom:0; width:min(560px,100vw); z-index:21; background:var(--surface); border-left:1px solid var(--line); overflow-y:auto; box-shadow:-12px 0 32px rgba(0,0,0,.28); }
+  .drawer > header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:20px 22px 14px; position:sticky; top:0; background:var(--surface); border-bottom:1px solid var(--line-soft); }
+  .drawer .body { padding:18px 22px 40px; display:grid; gap:22px; }
+  .drawer h3 { font:600 14px var(--sans); margin-bottom:8px; }
+  .result { font:600 34px/1.1 var(--serif); font-variant-numeric:tabular-nums; }
+  .timeline { list-style:none; margin:0; padding:0; border-left:2px solid var(--line); }
+  .timeline li { position:relative; padding:0 0 12px 16px; }
+  .timeline li::before { content:""; position:absolute; left:-6px; top:6px; width:10px; height:10px; border-radius:50%; background:var(--series-1); border:2px solid var(--surface); }
+  .timeline time { color:var(--mut); font-size:12px; display:block; }
+
+  /* phones: the rail becomes a bottom bar */
+  @media (max-width:860px) {
+    .shell { display:block; }
+    .rail { position:fixed; top:auto; bottom:0; left:0; right:0; height:auto; z-index:10; flex-direction:row; justify-content:space-around; padding:6px 4px calc(6px + env(safe-area-inset-bottom)); border-right:0; border-top:1px solid var(--line); }
+    .brand, .rail-foot { display:none; }
+    .rail a.nav { flex:1; text-align:center; padding:9px 2px; font-size:12.5px; border-left:0; border-top:3px solid transparent; }
+    .rail a.nav[aria-current="page"] { border-top-color:var(--series-1); border-left-color:transparent; }
+    .strip { padding:8px 14px; }
+    .content { padding:18px 14px 96px; }
+    .grid2 { grid-template-columns:1fr; }
+    input[type=text], input[type=password] { min-width:0; flex:1; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>options-platform</h1>
-  <span id="mode" class="pill">not connected</span>
-  <span id="data" class="pill"></span>
-  <span id="market" class="pill"></span>
-  <span id="kill" class="pill"></span>
-</header>
-<main>
-  <section id="connect" data-plumbing="Connection to the local server">
-    <h2>Connect</h2>
-    <div class="row">
-      <input id="token" type="password" placeholder="Paste the token printed in the terminal" autocomplete="off">
-      <button id="btn-connect" class="primary">Connect</button>
-    </div>
-    <div id="msg" class="muted"></div>
-  </section>
+<div class="shell">
+  <nav class="rail" aria-label="Sections">
+    <div class="brand"><b>options-platform</b><small>Paper trading desk</small></div>
+    <a class="nav" href="#/desk" data-page="desk">Desk</a>
+    <a class="nav" href="#/trades" data-page="trades">Trades</a>
+    <a class="nav" href="#/market" data-page="market">Market</a>
+    <a class="nav" href="#/agents" data-page="agents">Agents</a>
+    <a class="nav" href="#/research" data-page="research">Research</a>
+    <a class="nav" href="#/system" data-page="system">Controls</a>
+    <div class="rail-foot">Paper trading only. No live orders exist in this app.</div>
+  </nav>
 
-  <section data-question="Is it running, and what is it allowed to do?">
-    <h2>Controls</h2>
-    <p class="q">Is it running, and what is it allowed to do?</p>
-    <div class="row">
-      <button id="btn-cycle" class="primary">Run one cycle</button>
-      <button id="btn-start">Start loop</button>
-      <button id="btn-stop">Stop loop</button>
+  <div class="main">
+    <header class="strip">
+      <span id="mode" class="pill">connecting</span>
+      <span id="data" class="pill"></span>
+      <span id="market" class="pill"></span>
+      <span id="kill" class="pill"></span>
       <span id="runner" class="pill"></span>
-      <button id="btn-kill" class="danger">Toggle kill switch</button>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <label><input id="cfg-entries" type="checkbox"> Automatic entries</label>
-      <label><input id="cfg-exits" type="checkbox"> Automatic exits</label>
-      <label><input id="cfg-hours" type="checkbox"> Enforce market hours</label>
-      <label>Agent committee <select id="cfg-committee"><option value="off">off</option><option value="shadow">shadow (records only)</option><option value="active">active</option></select></label>
-      <input id="cfg-watch" type="text" placeholder="Watchlist: SPY, QQQ">
-      <button id="btn-save">Save settings</button>
-      <span id="cfg-dirty" class="muted"></span>
-    </div>
-    <p class="muted" style="margin:8px 0 0">Entries cannot be enabled without exits. Everything here is paper trading.</p>
-  </section>
+      <span class="grow"></span>
+      <span id="updated" class="muted"></span>
+    </header>
 
-  <section data-question="Can I trust the numbers on this page right now?">
-    <h2>Can I trust this right now?</h2>
-    <p class="q">Can I trust the numbers on this page right now?</p>
-    <div id="trust-verdict" class="verdict"></div>
-    <dl class="facts" id="trust"></dl>
-  </section>
+    <main class="content">
+      <section id="view-connect" data-plumbing="Connection to the local server" hidden>
+        <h1>Connect</h1>
+        <p class="lede">The launcher opens this page already connected. If you started the server yourself, paste the token it printed in the terminal.</p>
+        <div class="toolbar">
+          <input id="token" type="password" placeholder="Token from the terminal" autocomplete="off" aria-label="API token">
+          <button id="btn-connect" class="btn primary">Connect</button>
+        </div>
+        <div id="msg" class="muted" role="status"></div>
+      </section>
 
-  <section data-question="Is the paper account growing, and is there enough history for that to mean anything?">
-    <h2>Account and results</h2>
-    <p class="q">Is the paper account growing, and is there enough history for that to mean anything?</p>
-    <div class="tiles" id="tiles"></div>
-    <div id="sample" class="muted"></div>
-    <div class="viz" id="equity-chart"></div>
-    <button class="linkbtn" id="btn-table" type="button">Show as table</button>
-    <div class="scroll" id="equity-table" hidden></div>
-  </section>
+      <section id="view-desk" data-page="desk" data-question="How is the paper account doing, and can I trust the numbers?" hidden>
+        <div>
+          <h1 id="desk-headline" class="headline">Loading the desk</h1>
+          <p id="desk-sub" class="lede"></p>
+        </div>
+        <div id="trust-verdict" class="verdict"></div>
+        <div class="grid2">
+          <div class="panel">
+            <h2>Account value</h2>
+            <p class="q">Is the paper account growing, and is there enough history to mean anything?</p>
+            <div class="viz" id="equity-chart"></div>
+            <button class="linkbtn" id="btn-table" type="button">Show as table</button>
+            <div class="scroll" id="equity-table" hidden></div>
+            <p id="sample" class="muted" style="margin-top:10px"></p>
+          </div>
+          <div class="panel">
+            <h2>Account figures</h2>
+            <div class="figures" id="tiles" style="margin-top:14px"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Open positions</h2>
+          <p class="q">What do I hold, and what would make each position exit?</p>
+          <div class="scroll" id="positions"></div>
+        </div>
+        <div class="panel">
+          <h2>Latest decisions</h2>
+          <p class="q">Why did it act, or not? Includes candidates it passed on.</p>
+          <div class="scroll" id="decisions"></div>
+        </div>
+        <div class="panel">
+          <h2>System health</h2>
+          <p class="q">Loop, data source, last cycle and data quality.</p>
+          <dl class="facts" id="trust"></dl>
+        </div>
+      </section>
 
-  <section data-question="What do I hold, and what would make each position exit?">
-    <h2>Open positions</h2>
-    <p class="q">What do I hold, and what would make each position exit?</p>
-    <div class="scroll" id="positions"></div>
-  </section>
+      <section id="view-trades" data-page="trades" data-question="What did the platform trade, why, and how did each trade end?" hidden>
+        <div>
+          <h1>Trades</h1>
+          <p id="trade-lede" class="lede"></p>
+        </div>
+        <div class="figures" id="trade-summary"></div>
+        <div class="toolbar">
+          <div class="chips" id="trade-filters" role="group" aria-label="Filter trades"></div>
+          <input id="trade-search" type="text" placeholder="Search by symbol" aria-label="Search trades by symbol">
+        </div>
+        <div class="panel" style="padding:6px 8px"><div class="scroll" id="trade-table"></div></div>
+      </section>
 
-  <section data-question="Why did it act, or not?">
-    <h2>Latest decisions</h2>
-    <p class="q">Why did it act, or not? Includes candidates it passed on.</p>
-    <div class="scroll" id="decisions"></div>
-  </section>
+      <section id="view-market" data-page="market" data-question="Where is the activity today, and is any of it tradable?" hidden>
+        <div>
+          <h1>Market activity</h1>
+          <p id="scan-lede" class="lede"></p>
+        </div>
+        <div class="toolbar">
+          <button id="btn-scan" class="btn primary">Scan now</button>
+          <span id="scan-status" class="muted"></span>
+        </div>
+        <div class="chips" id="market-tabs" role="tablist" aria-label="Market views"></div>
+        <div class="panel" id="scan-active-panel"><div class="scroll" id="scan-active"></div></div>
+        <div class="panel" id="scan-unusual-panel" hidden>
+          <div class="chips" id="scan-filters" role="group" aria-label="Filter unusual activity" style="margin-bottom:12px"></div>
+          <div class="scroll" id="scan-unusual"></div>
+        </div>
+        <div class="panel" id="scan-options-panel" hidden><div class="scroll" id="scan-options"></div></div>
+        <details class="notes panel">
+          <summary>What this can and cannot tell you</summary>
+          <ul class="plain" id="scan-notes" style="margin-top:10px"></ul>
+        </details>
+      </section>
 
-  <section data-question="What did the broker actually do with my orders?">
-    <h2>Orders</h2>
-    <p class="q">What did the broker actually do with the orders sent?</p>
-    <div class="scroll" id="orders"></div>
-  </section>
+      <section id="view-agents" data-page="agents" data-question="Are the agents learning, and which of them is actually right?" hidden>
+        <div>
+          <h1>Agents</h1>
+          <p id="committee-summary" class="lede"></p>
+        </div>
+        <div class="panel">
+          <h2>Record by agent</h2>
+          <p class="q">What happened after each agent said support or oppose?</p>
+          <div class="scroll" id="committee-agents"></div>
+        </div>
+        <div class="panel">
+          <h2>Latest votes</h2>
+          <p class="q">What did each agent say about the newest candidates?</p>
+          <div class="scroll" id="committee-votes"></div>
+        </div>
+        <div class="grid2">
+          <div class="panel"><h2>Lessons from mistakes</h2><ul class="plain" id="committee-lessons" style="margin-top:10px"></ul></div>
+          <div class="panel"><h2>Recent weight changes</h2><div class="scroll" id="committee-history" style="margin-top:10px"></div></div>
+        </div>
+      </section>
 
-  <section data-question="Are the agents learning, and which of them is actually right?">
-    <h2>Agent committee</h2>
-    <p class="q">Are the agents learning, and which of them is actually right?</p>
-    <div id="committee-summary" class="verdict"></div>
-    <div class="scroll" id="committee-agents"></div>
-    <h3 class="sub">What it learned from its mistakes</h3>
-    <ul id="committee-lessons" class="lessons"></ul>
-    <h3 class="sub">Recent weight changes</h3>
-    <div class="scroll" id="committee-history"></div>
-  </section>
+      <section id="view-research" data-page="research" data-question="Is any challenger beating the frozen baseline, with enough trades to mean it?" hidden>
+        <div>
+          <h1>Research</h1>
+          <p class="lede">The baseline strategy is frozen. A challenger only counts if its hypothesis and pass criteria were written down before its results existed.</p>
+        </div>
+        <div class="panel"><h2>Experiments</h2><div class="scroll" id="research" style="margin-top:10px"></div></div>
+      </section>
 
-  <section data-question="Is any challenger beating the frozen baseline, with enough trades to mean it?">
-    <h2>Experiments</h2>
-    <p class="q">Is any challenger beating the frozen baseline, with enough trades to mean it?</p>
-    <div class="scroll" id="research"></div>
-  </section>
-</main>
+      <section id="view-system" data-page="system" data-question="Is it running, and what is it allowed to do?" hidden>
+        <div>
+          <h1>Controls</h1>
+          <p class="lede">Entries cannot be switched on without exits. Everything here is paper trading, and the kill switch stops all new entries.</p>
+        </div>
+        <div class="panel">
+          <h2>Run</h2>
+          <div class="toolbar" style="margin-top:12px">
+            <button id="btn-cycle" class="btn primary">Run one cycle</button>
+            <button id="btn-start" class="btn">Start loop</button>
+            <button id="btn-stop" class="btn">Stop loop</button>
+            <button id="btn-kill" class="btn danger">Toggle kill switch</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Settings</h2>
+          <div class="toolbar" style="margin-top:12px">
+            <label class="check"><input id="cfg-entries" type="checkbox"> Automatic entries</label>
+            <label class="check"><input id="cfg-exits" type="checkbox"> Automatic exits</label>
+            <label class="check"><input id="cfg-hours" type="checkbox"> Enforce market hours</label>
+          </div>
+          <div class="toolbar" style="margin-top:12px">
+            <label class="check">Agent committee
+              <select id="cfg-committee"><option value="off">off</option><option value="shadow">shadow (records only)</option><option value="active">active</option></select>
+            </label>
+            <label class="check">Market scan
+              <select id="cfg-scan"><option value="0">off</option><option value="900">every 15 minutes</option><option value="1800">every 30 minutes</option><option value="3600">every hour</option></select>
+            </label>
+            <input id="cfg-watch" type="text" placeholder="Watchlist: SPY, QQQ" aria-label="Watchlist">
+            <button id="btn-save" class="btn">Save settings</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Orders</h2>
+          <p class="q">What did the broker actually do with the orders sent?</p>
+          <div class="scroll" id="orders"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="scrim" hidden></div>
+<aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
+  <header>
+    <div><h2 id="drawer-title" style="font:600 18px var(--serif)"></h2><div id="drawer-sub" class="muted"></div></div>
+    <button id="btn-drawer-close" class="btn" type="button">Close</button>
+  </header>
+  <div class="body" id="drawer-body"></div>
+</aside>
 <script src="/static/app.js"></script>
 </body>
 </html>

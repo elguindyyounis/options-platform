@@ -2,6 +2,26 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-11: dashboard v2, with a trade blotter and trade files (owner present)
+
+* The dashboard is now six pages behind a left rail (a bottom bar on phones): Desk, Trades, Market, Agents,
+  Research, Controls. Routing uses the URL fragment, and the `#token=` fragment is still read first and scrubbed.
+* Trades page: every trade from `/api/trades` in a filterable, searchable, sortable blotter (cards on phones).
+  Selecting a row opens a trade file: result, what was bought and sold, the entry reasoning, how each agent voted
+  (with the skeptic's objections), why it exited in plain words, and the order audit trail. Esc closes it, focus
+  is trapped while it is open and returned to the row afterwards.
+* Market page shows the scan: most active names, unusual options activity (filterable to what the rules allow
+  it to review) and option volume by name, with the limitations in a disclosure. Agents page shows the record
+  per agent, the latest votes, lessons and weight changes. Scan interval is now a control.
+* `/api/journal` gained an optional `kind` filter (upper-case letters only, 422 otherwise). No auth change.
+* DOM is still built with `textContent` only. All data in the screenshots was fictional demo data.
+* Tests: 354 pass (4 new for the pages, safety behaviours of the script, the journal filter and the endpoints the
+  page reads). No existing assertion was changed.
+* Verified in headless Chromium at 1280 and 390 px, light and dark: no JS errors, no horizontal overflow on any
+  page, drawer open/close/focus, filters and search. Not verified: Safari, a real screen reader, the live Yahoo
+  scan (the demo provider has no unusual contracts, so the unusual table was checked with two invented rows).
+* Owner direction noted: a long-term portfolio plus a short-term day-trading lane. See backlog item 3.
+
 ## 2026-11-11: most-active names, unusual options activity and a trade ledger (owner present)
 
 * `scanner.py`: ranks a FIXED universe of about 75 liquid names and funds by dollar volume and relative volume

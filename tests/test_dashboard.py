@@ -108,3 +108,46 @@ def test_equity_points_come_back_in_time_order_even_if_inserted_out_of_order():
     store.record_equity(t - timedelta(days=2), 1.0, 0, 0, False)
     store.record_equity(t - timedelta(days=1), 2.0, 0, 0, False)
     assert [p["equity"] for p in store.list_equity()] == [1.0, 2.0, 3.0]
+
+
+# ------------------------------------------------------------ dashboard v2: pages, trades, scan
+def test_every_nav_link_has_a_page_with_a_question(client):
+    html = client[0].get("/").text
+    pages = re.findall(r'<a class="nav" href="#/([a-z]+)" data-page="([a-z]+)"', html)
+    assert [p for p, _ in pages] == ["desk", "trades", "market", "agents", "research", "system"]
+    for route, page in pages:
+        assert route == page
+        tag = re.search(rf'<section[^>]*data-page="{page}"[^>]*>', html)
+        assert tag and "data-question=" in tag.group(0), page
+
+
+def test_dashboard_keeps_the_safety_behaviours_in_the_script(client):
+    js = client[0].get("/static/app.js").text
+    assert "LOOP STALLED" in js and "history.replaceState" in js and "X-API-Token" in js
+    assert "/api/trades" in js and "/api/scan" in js and "kind=COMMITTEE" in js
+    # the trade file is a real dialog that traps focus and closes on Escape
+    html = client[0].get("/").text
+    assert 'role="dialog"' in html and 'aria-modal="true"' in html
+    assert '"Escape"' in js and "trapFocus" in js
+    assert "No live orders exist" in html
+
+
+def test_journal_can_be_filtered_by_kind_and_rejects_odd_values(client):
+    c, engine = client
+    for kind in ("COMMITTEE", "ENTRY"):
+        engine.store.record_decision(NOW, "SPY", kind, "WOULD_REJECT", "SPY  261218C00600000", "t", 1.0, None, True, {"net_score": 0.1})
+    only = c.get("/api/journal?kind=COMMITTEE", headers=H).json()
+    assert len(only) == 1 and only[0]["kind"] == "COMMITTEE"
+    assert len(c.get("/api/journal", headers=H).json()) == 2  # no filter: unchanged behaviour
+    assert c.get("/api/journal?kind=x;drop", headers=H).status_code == 422
+    assert c.get("/api/journal?kind=lower", headers=H).status_code == 422
+    assert c.get("/api/journal?kind=COMMITTEE").status_code == 401
+
+
+def test_scan_and_trades_endpoints_are_what_the_dashboard_reads(client):
+    c, _ = client
+    assert c.get("/api/scan").status_code == 401 and c.get("/api/trades").status_code == 401
+    scan = c.get("/api/scan", headers=H).json()
+    assert set(scan) >= {"status", "result", "interval_s"}
+    trades = c.get("/api/trades", headers=H).json()
+    assert set(trades) >= {"summary", "trades", "fictional"} and trades["fictional"] is True

@@ -20,12 +20,19 @@ def _decision_by_order(store: Any, kind: str) -> dict[str, dict[str, Any]]:
     return {d["order_id"]: d for d in store.list_decisions(kind=kind, limit=2000) if d.get("order_id")}
 
 
-def _committee_for(store: Any, contract: str, before: datetime) -> Optional[dict[str, Any]]:
+def _committee_index(store: Any) -> dict[str, list[dict[str, Any]]]:
+    """Committee votes grouped by contract, oldest first: read once, not once per trade."""
+    index: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for d in store.list_decisions(kind="COMMITTEE", newest_first=False, limit=5000):
+        index[d["contract"]].append(d)
+    return index
+
+
+def _committee_for(index: dict[str, list[dict[str, Any]]], contract: str, before: datetime) -> Optional[dict[str, Any]]:
     best = None
-    for d in store.list_decisions(kind="COMMITTEE", limit=2000):
-        if d["contract"] == contract and datetime.fromisoformat(d["ts"]) <= before:
-            if best is None or d["ts"] > best["ts"]:
-                best = d
+    for d in index.get(contract, ()):
+        if datetime.fromisoformat(d["ts"]) <= before:
+            best = d  # the list is oldest first, so the last match is the latest vote at or before the entry
     return best
 
 
@@ -35,6 +42,7 @@ def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
     # recorded sequence for orders with the same timestamp, so an exit is never processed before its own entry.
     orders = [o for o in reversed(store.list_orders(limit=2000)) if o.state in FILLED_STATES and o.filled_qty > 0 and o.avg_fill_price]
     entry_decisions, exit_decisions = _decision_by_order(store, "ENTRY"), _decision_by_order(store, "EXIT")
+    committee_index = _committee_index(store)
     lots: dict[str, list[dict[str, Any]]] = defaultdict(list)
     trades: list[dict[str, Any]] = []
     for o in orders:
@@ -80,7 +88,7 @@ def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
         last_exit = t["exit_orders"][-1] if t["exit_orders"] else None
         ed = exit_decisions.get(last_exit["order_id"]) if last_exit else None
         en = entry_decisions.get(t["id"])
-        committee = _committee_for(store, t["contract"], entry_order.updated_at)
+        committee = _committee_for(committee_index, t["contract"], entry_order.updated_at)
         held_to = datetime.fromisoformat(last_exit["time"]) if (last_exit and rem == 0) else None
         t.update({
             "status": status, "remaining": rem, "mark": mark, "realized_pnl": realized, "unrealized_pnl": unrealized,

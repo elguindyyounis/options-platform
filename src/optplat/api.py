@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import re
 from datetime import date
 from typing import Any
 
@@ -189,8 +190,10 @@ def create_app(
             return {**engine.status(), "runner": runner.status() if runner else {"running": False}}
 
         @app.get("/api/journal", dependencies=[Depends(auth)])
-        def journal(limit: int = 50) -> list[dict[str, Any]]:
-            return engine.store.list_decisions(limit=max(1, min(limit, 500)))
+        def journal(limit: int = 50, kind: Optional[str] = None) -> list[dict[str, Any]]:
+            if kind is not None and not re.fullmatch(r"[A-Z_]{1,24}", kind):
+                raise HTTPException(status_code=422, detail="kind must be upper-case letters and underscores")
+            return engine.store.list_decisions(kind=kind, limit=max(1, min(limit, 500)))
 
         @app.get("/api/journal/summary", dependencies=[Depends(auth)])
         def journal_report() -> dict[str, Any]:
