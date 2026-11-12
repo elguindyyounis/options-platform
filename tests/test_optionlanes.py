@@ -448,6 +448,7 @@ def test_switching_the_lanes_on_runs_them_and_every_trade_is_labelled_fictional_
     body = c.get("/api/optlanes", headers=H).json()
     assert body["enabled"] is True and all(l["fictional"] is True for l in body["lanes"])
     assert all(l["rules"] and l["limitations"] and l["params"] for l in body["lanes"])
+    assert all(l["last_check"] and {"opened", "closed", "errors", "skips"} <= set(l["last_check"]) for l in body["lanes"])  # "why no trades?" is answerable
     for p in ol.ALL_PARAMS:
         for t in engine.store.lane_trades(p.lane, True, 100):
             assert t["fictional"] == 1
@@ -524,3 +525,11 @@ def test_entries_record_their_size_against_the_contract_and_the_flow_lane_double
         return t["quantity"], t["open_payload"]["budget_usd"]
     (q1, b1), (q2, b2) = qty_for(False), qty_for(True)
     assert b2 == 2 * b1 and q2 >= 2 * q1 - 1
+
+
+def test_a_lane_remembers_what_its_last_check_did_and_why_it_did_not_trade():
+    now = datetime(2026, 11, 12, 15, 0, tzinfo=timezone.utc)
+    lane, prov, store, _ = make(replace(ol.FLOW, budget_usd=20000.0), now=now)
+    lane.step(force=True)  # no scan results exist, so the flow lane has nothing to act on
+    saved = json.loads(store.get_state(f"optlane_last_result:{lane.p.lane}", ""))
+    assert saved["opened"] == 0 and saved["at"] == now.isoformat() and "errors" in saved and "skips" in saved

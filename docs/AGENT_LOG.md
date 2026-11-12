@@ -13,6 +13,8 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   `describe_exc` puts the message and file:line in scan and lane errors. The engine status carries `clock` and the dashboard's
   trust panel shows it. `choose_port` lets the platform run beside the alerter and refuses a second copy on the same database.
 * No risk limit, tolerance, auth check or default changed. The 5 s clock tolerance is untouched. 484 tests pass.
+* Option lanes now save what their last check did, including errors and skip reasons, and the Options page shows it under
+  "Last check". The live database had no record of why the swing and flow option lanes made no trades.
 * Not verified: any of this on the owner's Mac or live Yahoo data; resting (unfilled) orders are not restored; why the owner could
   not open both apps (ports never clashed by default, so the cause is unconfirmed).
 

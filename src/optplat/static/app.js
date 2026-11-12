@@ -863,6 +863,17 @@
       { label: "What it means", get: (r) => r.means }, { label: "Test next", get: (r) => r.try_next },
     ], dg.tags, "No post-mortems yet", "Each closed trade is reviewed automatically when it closes.");
     $("op-digest-note").textContent = dg.note + " " + dg.trades_reviewed + " closed trades reviewed.";
+    const lc = $("op-last"), ck = lane.last_check;
+    lc.replaceChildren();
+    if (!ck) lc.appendChild(el("li", "Not checked yet since the platform started."));
+    else {
+      lc.appendChild(el("li", "Looked at " + ck.at.slice(0, 19).replace("T", " ") + " UTC: opened " + ck.opened + ", closed " + ck.closed + "."));
+      ck.errors.forEach((x) => lc.appendChild(el("li", "Problem: " + x, "warn")));
+      if (ck.error_count > ck.errors.length) lc.appendChild(el("li", "and " + (ck.error_count - ck.errors.length) + " more problems.", "warn"));
+      ck.skips.forEach((x) => lc.appendChild(el("li", "Skipped: " + x)));
+      if (ck.skip_count > ck.skips.length) lc.appendChild(el("li", "and " + (ck.skip_count - ck.skips.length) + " more skipped."));
+      if (!ck.errors.length && !ck.skips.length && !ck.opened && !ck.closed) lc.appendChild(el("li", "No signal met this lane's rules, so nothing was tried."));
+    }
     const r = $("op-rules"), l = $("op-limits");
     r.replaceChildren(); l.replaceChildren();
     lane.rules.forEach((x) => r.appendChild(el("li", x)));

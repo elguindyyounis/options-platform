@@ -356,8 +356,19 @@ class OptionLane:
             try:
                 {"short": self._step_short, "swing": self._step_swing, "flow": self._step_flow}[self.p.kind](now, out)
             except Exception as exc:  # noqa: BLE001 - a research lane must never raise into the engine
-                out["errors"].append(f"{type(exc).__name__}: {str(exc)[:100]}")
+                out["errors"].append(describe_exc(exc))
+            self._remember(out)
             return out
+
+    def _remember(self, out: dict[str, Any]) -> None:
+        """Keep what the last check did and why it did not trade, so the dashboard can answer "why no trades?"."""
+        try:
+            self.store.set_state(f"optlane_last_result:{self.p.lane}", json.dumps({
+                "at": out["at"], "opened": len(out["opened"]), "closed": len(out["closed"]), "skipped": out.get("skipped", 0),
+                "errors": [str(e)[:220] for e in out["errors"][:8]], "error_count": len(out["errors"]),
+                "skips": [str(x)[:160] for x in out["skips"][:8]], "skip_count": len(out["skips"])}))
+        except Exception:  # noqa: BLE001 - bookkeeping must never stop a lane
+            pass
 
     def _step_short(self, now: datetime, out: dict[str, Any]) -> None:
         p = self.p
@@ -549,7 +560,8 @@ class OptionLanes:
         lanes, closed_all = [], []
         for p in ALL_PARAMS:
             rep = lane_report(self.store, p.lane, fict, now, rules=rules_text(p), limitations=LIMITATIONS, symbols=p.symbols or UNIVERSE, exit_text=EXIT_TEXT)
-            lanes.append({**rep, "label": p.label, "kind": p.kind, "why": p.why, "experimental": p.experimental,
+            raw = self.store.get_state(f"optlane_last_result:{p.lane}", "")
+            lanes.append({**rep, "last_check": json.loads(raw) if raw else None, "label": p.label, "kind": p.kind, "why": p.why, "experimental": p.experimental,
                           "params": {"budget_usd": p.budget_usd, "max_open": p.max_open, "dte": [p.dte_min, p.dte_max], "otm_pct": p.otm_pct,
                                      "stop_pct": p.stop_pct, "target_pct": p.target_pct, "both_ways": p.both_ways}})
             closed_all += self.store.lane_trades(p.lane, fict, 500)
