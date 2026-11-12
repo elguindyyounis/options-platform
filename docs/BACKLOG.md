@@ -21,6 +21,9 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 ## Next up
 
+0. **Challenger agent's list.** The open challenges (counterfactual journal, display-only GEX, frozen baseline, stressed lane P&L,
+   signal provenance doc) live in `docs/CHALLENGES.md`; the daily agent takes one per run.
+
 1. **Schedule the weekly report.** `python -m optplat.weekly` exists; running it on a timer and where the
    owner reads it (file, email, notification) is the owner's choice.
 
@@ -75,6 +78,8 @@ Existing items, in order:
 
 ## Done
 
+* Alerter comparison (owner request 2026-11-12): `docs/COMPARISON_ALERTER.md`, liquidity tiers and exit stress in post-mortems
+  (`liquidity.py`), and `docs/CHALLENGES.md` as the log for the daily challenger agent. Open challenges are listed there.
 * Options-first research (owner request 2026-11-12): scanner v2 (200-name sector-mapped universe, very-low-open-interest rule,
   weekly expirations, last-trade buy/sell inference, next-day open-interest confirmation with a day-by-day memory), sector
   heat map and sentiment, five simulated option lanes (short-term base and aggressive, swing base and aggressive, unusual

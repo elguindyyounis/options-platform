@@ -2,6 +2,16 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+
+## 2026-11-12: alerter comparison and liquidity stress
+
+* Compared the owner's `options-alerter` repo with this platform (`docs/COMPARISON_ALERTER.md`) and started
+  `docs/CHALLENGES.md`, the log for a daily challenger agent.
+* Ported liquidity tiers and an exit-stress scenario (`src/optplat/liquidity.py`) into post-mortems, with a new
+  `EXIT_STRESS_FLIPS_RESULT` tag. No risk limit, budget or default was changed. 472 tests pass.
+* Not verified: the alerter's own tests (not run), the alerter modules listed as unread in the comparison, and
+  any live Yahoo data. Lane P&L still uses the bid; only the post-mortem shows the stressed view.
+
 ## 2026-11-12: bigger sizes and stacking in the option lanes (owner request)
 
 * Owner asked for larger size caps and for positions to stack on one name. In the option lanes only: aggressive lanes now

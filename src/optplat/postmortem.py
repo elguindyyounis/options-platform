@@ -12,6 +12,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+from .liquidity import liquidity_tier, stress_exit
+
 MIN_TRADES_FOR_PATTERN = 5
 
 # tag -> (what it means in a sentence, what to test next)
@@ -41,6 +43,8 @@ CAUSES: dict[str, tuple[str, str]] = {
                 "Compare stacked trades with first entries: if stacks lose more, stacking is not paying."),
     "OVERSIZED_FOR_LIQUIDITY": ("The size was a large share of the contract's volume or open interest, so a real order would probably have moved the price or not filled.",
                                 "Cap size at a share of volume, and see whether the result survives."),
+    "EXIT_STRESS_FLIPS_RESULT": ("It made money at the bid, but not once a less friendly exit is assumed (wide spread, size against volume and open interest).",
+                                 "Treat the gain as optimistic; test a tighter spread limit or smaller size and see if it survives."),
     "BIG_WIN": ("A large gain from a long-shot structure.", "Check how many similar trades lost; one big win is not an edge."),
     "UNMARKED": ("No usable quote at the close, so it was closed at the intrinsic value.", "Check the data feed for this contract."),
 }
@@ -71,6 +75,11 @@ def post_mortem(trade: dict[str, Any], exit_price: float, reason: str, closed_at
     spread_in = p.get("spread_pct")
     friction_pct = ((spread_in or 0) + (close_info.get("spread_pct") or 0)) + (fees / cost * 100 if cost > 0 else 0)
 
+    spread_out = close_info.get("spread_pct") if close_info.get("spread_pct") is not None else spread_in
+    stress = stress_exit(exit_price, qty, p.get("volume"), p.get("open_interest"), spread_out)
+    stress_net = (stress["price"] - entry) * qty * mult - fees
+    stress_net_pct = stress_net / cost * 100 if cost > 0 else 0.0
+
     tags: list[str] = []
     won = net > 0
     if reason == "target":
@@ -98,6 +107,8 @@ def post_mortem(trade: dict[str, Any], exit_price: float, reason: str, closed_at
         tags.append("EARNINGS_GAMBLE")
     tags.append({"vwap_lost": "VWAP_LOST", "flat_by_close": "FLAT_BY_CLOSE", "carried_over": "FLAT_BY_CLOSE", "trend_break": "TREND_BREAK", "time": "TIME_STOP",
                  "expiry_near": "EXPIRY_NEAR", "expired_unmarked": "UNMARKED"}.get(reason, ""))
+    if won and stress_net <= 0:
+        tags.append("EXIT_STRESS_FLIPS_RESULT")
     if won and net_pct >= 100:
         tags.append("BIG_WIN")
     tags = [t for t in dict.fromkeys(tags) if t]
@@ -107,7 +118,8 @@ def post_mortem(trade: dict[str, Any], exit_price: float, reason: str, closed_at
     headline = (f"{'Won' if won else 'Lost'} {abs(net_pct):.0f}% on {name}: {gross_pct:+.0f}% on the premium before fees, closed on "
                 f"{reason.replace('_', ' ')}.{moved}")
     shown = [t for t in tags if t in CAUSES][:4]
-    return {"tags": tags, "headline": headline, "net_pct": round(net_pct, 1), "gross_pct": round(gross_pct, 1),
+    return {"tags": tags, "headline": headline, "net_pct": round(net_pct, 1), "stress_net_pct": round(stress_net_pct, 1), "stress_concession_pct": stress["concession_pct"],
+            "liquidity_tier": liquidity_tier(p.get("volume"), p.get("open_interest"), spread_in), "gross_pct": round(gross_pct, 1),
             "underlying_move_pct": None if move is None else round(move, 2), "held_hours": None if held_h is None else round(held_h, 1),
             "lessons": [CAUSES[t][0] for t in shown], "try_next": [CAUSES[t][1] for t in shown]}
 
