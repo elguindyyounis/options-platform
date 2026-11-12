@@ -18,6 +18,7 @@ from typing import Any, Callable, Optional
 
 from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
+from .liquidity import entry_liquidity_review
 from .market_clock import session_status
 from .marketdata import MarketDataProvider, MarketSnapshot
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
@@ -398,6 +399,16 @@ class TradingEngine:
                 "quantity": quantity,
                 "limit_price": proposal.limit_price,
                 "rationale": proposal.rationale,
+                # Display only: never consulted by risk, sizing or order submission.
+                "liquidity_review": entry_liquidity_review(
+                    quantity=quantity,
+                    volume=proposal.rationale.get("volume"),
+                    open_interest=proposal.rationale.get("open_interest"),
+                    bid=proposal.rationale.get("bid"),
+                    ask=proposal.rationale.get("ask"),
+                    limit_price=proposal.limit_price,
+                    multiplier=proposal.contract.multiplier,
+                ),
             }
             try:
                 order = self.manager.submit(intent)

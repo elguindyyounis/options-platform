@@ -37,11 +37,16 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Record the liquidity review with the order/audit log and show it on the dashboard (display only).
+* Owner decision: gate entries on participation of reported volume/OI (alerter uses 10%).
+
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-12 (branch `agent/2026-11-12-liquidity-review`): display-only entry liquidity review and bid-concession exit stress in the engine entry report (`liquidity.py`). No gate or size changed.
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.

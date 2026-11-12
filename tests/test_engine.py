@@ -273,3 +273,14 @@ def test_runner_starts_runs_a_cycle_and_stops():
     assert engine.last_cycle() is not None and runner.running()
     runner.stop()
     assert not runner.running() and runner.last_error is None
+
+
+def test_entry_report_carries_display_only_liquidity_review():
+    engine, manager, broker, provider, _ = build(auto_entries=True)
+    item = engine.run_cycle()["entries"][0]
+    review = item["liquidity_review"]
+    assert review["quantity"] == item["quantity"]
+    assert [s["scenario"] for s in review["scenarios"]] == ["BASE_BID", "THIN_MARKET", "STRESSED_EXIT"]
+    assert "Display only" in review["limits"]
+    # The review must not alter what traded: same fill as before it existed.
+    assert item["result"] == "FILLED" and len(broker.get_positions()) == 1

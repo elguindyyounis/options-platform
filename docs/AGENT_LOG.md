@@ -23,3 +23,15 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-12: daily challenger run, liquidity review (agent)
+
+* First challenger run: `COMPARISON_ALERTER.md` and `CHALLENGES.md` did not exist, so created them.
+  Read alerter `liquidity.py`, `entry_quality.py`, `paper_engine.py`, `core.py`; alerter HEAD `9210fd8`.
+* Added `src/optplat/liquidity.py`: display-only participation vs reported volume/OI and a
+  bid-concession exit stress, attached to each entry item in the cycle report. Strategy rationale now
+  also carries bid/ask. No risk limit, sizing, default or order path changed.
+* Verified: `python -m pytest -q` 151 passed (144 baseline + 7 new), baseline was green.
+* Not verified: that the stress heuristic resembles real fills (it is unfitted); dashboard display;
+  anything on real data or the owner's database. Order `note` still truncates rationale at 200 chars
+  (logged as challenge 3).

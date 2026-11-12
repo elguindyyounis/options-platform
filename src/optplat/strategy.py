@@ -99,6 +99,8 @@ class LiquidTrendStrategy(Strategy):
                         "sma20": round(sma20, 2),
                         "sma50": round(sma50, 2),
                         "spread_pct": round(spread, 2),
+                        "bid": row.bid,
+                        "ask": row.ask,
                         "volume": row.volume,
                         "open_interest": row.open_interest,
                         "dte": dte,
