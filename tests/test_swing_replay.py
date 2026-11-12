@@ -48,3 +48,17 @@ def test_replay_runs_on_demo_data_and_renders_text():
     text = rp.render(rep)
     assert "FICTIONAL" in text and "buying and holding" in text and "not evidence" in text
     assert rep["replay"]["days"] > 100
+
+
+def test_a_thin_history_is_visible_in_the_report():
+    bars = history()
+    rep = rp.replay({"SPY": bars[:70], "QQQ": []}, True, ("SPY", "QQQ"))
+    r = rep["replay"]
+    assert r["symbols"] == ["SPY"] and r["funds_asked"] == 2 and r["bars_max"] == 70 and r["days"] == 70 - sw.MIN_BARS
+    assert "1 of 2 funds" in rp.render(rep)
+
+
+def test_yahoo_periods_are_values_yahoo_documents():
+    from optplat.marketdata import yahoo_period
+
+    assert [yahoo_period(m) for m in (1, 2, 6, 7, 12, 13, 24, 99, 0)] == ["1mo", "2mo", "6mo", "1y", "1y", "2y", "2y", "2y", "1mo"]

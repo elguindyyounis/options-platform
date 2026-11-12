@@ -2,6 +2,20 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-12: "it only did one trade" (owner's real run, read from their database copy with their permission)
+
+* The owner's real database showed the swing lane working on real Yahoo data: 72 of 74 names judged on the 2026-11-11
+  bar and 2 on 2026-11-10, with 2 open trades (UNH, PFE, both from the 11-10 bar). The short-term lane made 4 real-data
+  trades on 11-11 (QQQ, NVDA and TSLA closed on target or VWAP, SPY closed flat by the close). So the live lanes are
+  trading; the rule is selective, about 1 to 2 signals a day across 74 names.
+* The replay's "one trade" output was not seen. A likely cause: `daily_bars(..., months=12)` sent Yahoo the period
+  `12mo`, which is not a documented value (`6mo` and `2mo` had worked live). It now maps long spans to `1y` or `2y`.
+  The replay also prints how many funds had data and how many bars each had, so a thin result explains itself.
+* Separate finding in the same database: the latest scan read 0 option chains because every one was rejected by the
+  data-quality gate (NVDA, QQQ, SPY and others). It ran about 06:57 UTC, with the market closed, which would explain
+  empty quotes, but that is unconfirmed. Worth re-checking during market hours.
+* Tests: 387 pass (2 new). Not verified: the replay on real bars.
+
 ## 2026-11-11: swing replay (owner agreed the rule settings and asked for simulated trades now)
 
 * The owner approved the swing settings as written. This sandbox cannot reach Yahoo (the request returns nothing and

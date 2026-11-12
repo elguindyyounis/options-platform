@@ -107,6 +107,15 @@ class IntradayBar:
     volume: float
 
 
+def yahoo_period(months: int) -> str:
+    """A period string Yahoo is documented to accept. Up to six months the 'Nmo' form is used (it is what the scanner
+    already ran on); longer spans use the documented year forms, which round up rather than guess at '12mo'."""
+    m = max(1, min(int(months), 24))
+    if m <= 6:
+        return f"{m}mo"
+    return "1y" if m <= 12 else "2y"
+
+
 class MarketDataProvider(ABC):
     name: str = "abstract"
     fictional: bool = False
@@ -381,7 +390,7 @@ class YahooDataProvider(MarketDataProvider):
     def daily_bars(self, symbols: Sequence[str], months: int = 2) -> dict[str, list[Bar]]:
         import yfinance as yf
 
-        frame = yf.download(list(symbols), period=f"{max(1, min(int(months), 24))}mo", interval="1d", group_by="ticker", auto_adjust=False,
+        frame = yf.download(list(symbols), period=yahoo_period(months), interval="1d", group_by="ticker", auto_adjust=False,
                             progress=False, threads=True)
         out: dict[str, list[Bar]] = {}
         for sym in symbols:

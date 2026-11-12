@@ -38,7 +38,8 @@ class _Feed(MarketDataProvider):
 
 
 def replay(bars: dict[str, list[Bar]], fictional: bool, symbols: Optional[Sequence[str]] = None) -> dict[str, Any]:
-    names = tuple(s for s in (symbols or swing.SYMBOLS) if s in ETFS and bars.get(s))
+    wanted = tuple(s for s in (symbols or swing.SYMBOLS) if s in ETFS)
+    names = tuple(s for s in wanted if bars.get(s))
     days = sorted({b.day for s in names for b in bars[s]})
     store, feed = Store(":memory:"), _Feed(bars, fictional)
     box = [datetime(2000, 1, 1, tzinfo=timezone.utc)]
@@ -59,7 +60,8 @@ def replay(bars: dict[str, list[Bar]], fictional: bool, symbols: Optional[Sequen
             bh.append((inside[-1].close / inside[0].close - 1) * 100)
     report["replay"] = {
         "from": window[0].isoformat() if window else None, "to": window[-1].isoformat() if window else None,
-        "symbols": list(names), "days": len(window),
+        "symbols": list(names), "days": len(window), "funds_asked": len(wanted),
+        "bars_min": min((len(bars[s]) for s in names), default=0), "bars_max": max((len(bars[s]) for s in names), default=0),
         "mean_return_pct": round(sum(rets) / len(rets), 2) if rets else None,
         "worst_pct": min(rets) if rets else None, "best_pct": max(rets) if rets else None,
         "mean_days_held": round(sum(held) / len(held), 1) if held else None,
@@ -71,7 +73,7 @@ def replay(bars: dict[str, list[Bar]], fictional: bool, symbols: Optional[Sequen
 
 def render(rep: dict[str, Any]) -> str:
     r, s = rep["replay"], rep["summary"]
-    lines = [f"Swing replay {r['from']} to {r['to']} on {len(r['symbols'])} funds" + ("  (FICTIONAL demo data)" if rep["fictional"] else ""),
+    lines = [f"Swing replay {r['from']} to {r['to']} on {len(r['symbols'])} of {r['funds_asked']} funds ({r['days']} days, {r['bars_min']} to {r['bars_max']} bars each)" + ("  (FICTIONAL demo data)" if rep["fictional"] else ""),
              f"  trades {s['total']}  open {s['open']}  closed {s['closed']}  winners {s['wins']}  win rate {s['win_rate_pct']}%",
              f"  realized {s['realized_pnl']:+.2f}  mean trade {r['mean_return_pct']}%  best {r['best_pct']}%  worst {r['worst_pct']}%  mean days held {r['mean_days_held']}",
              f"  for comparison, buying and holding the same funds over the same window: {r['buy_and_hold_mean_pct']}% on average",
