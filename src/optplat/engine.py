@@ -22,7 +22,8 @@ from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
 from .market_clock import session_status
 from .events import EventCalendar
-from .dataquality import check_snapshot, frozen_issue, quote_fingerprint
+from .dataquality import MAX_FUTURE_SKEW_S, check_snapshot, frozen_issue, quote_fingerprint
+from .diagnostics import clock_status
 from .marketdata import MarketDataProvider, MarketSnapshot, snapshot_to_dict
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
 from .orders import OrderManager
@@ -182,6 +183,7 @@ class TradingEngine:
             "strategy": {"name": self.strategy.name, "version": self.strategy.version},
             "kill_switch": self.manager.kill_switch_active(),
             "last_cycle": self.last_cycle(),
+            "clock": clock_status((self.last_cycle() or {}).get("clock_ahead_s"), MAX_FUTURE_SKEW_S),
             "recorder": self.store.snapshot_stats(),
             "data_quality": {
                 "window_hours": 24,
@@ -329,6 +331,8 @@ class TradingEngine:
     def _vet(self, snap: MarketSnapshot, report: dict[str, Any]) -> Optional[MarketSnapshot]:
         """Run the data-quality gate. A rejected snapshot is treated exactly like a failed data fetch."""
         result = check_snapshot(snap, self._cycle_now)
+        ahead = (snap.as_of - self._cycle_now).total_seconds()
+        report["clock_ahead_s"] = max(ahead, report.get("clock_ahead_s", ahead))
         issues = list(result.issues)
         fp = quote_fingerprint(snap)
         prev, n = self._last_fingerprint.get(snap.symbol, ("", 0))

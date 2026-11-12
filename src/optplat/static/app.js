@@ -235,6 +235,7 @@
     if (!status.market.open) cautions.push("market is closed");
     if (!status.config.record_snapshots) cautions.push("snapshot recording is off");
     if (dq.some(([, v]) => v.severity === "reject")) reasons.push("snapshots were rejected as bad data");
+    if (status.clock && status.clock.warning) reasons.push(status.clock.warning);
     const v = $("trust-verdict");
     if (reasons.length) { v.textContent = "Do not rely on it yet: " + reasons.concat(cautions).join("; ") + "."; v.className = "verdict bad"; }
     else if (cautions.length) { v.textContent = "Usable with care: " + cautions.join("; ") + "."; v.className = "verdict warn"; }
@@ -246,6 +247,7 @@
     if (rn.last_error) row("Last loop error", rn.last_error);
     row("Last cycle", c ? c.started_at.slice(0, 19) + (c.entries_note ? ". " + c.entries_note : "") : "none yet");
     if (c && c.errors.length) row("Cycle errors", c.errors.join("; "));
+    row("Computer clock", status.clock && status.clock.behind_s != null ? (status.clock.behind_s >= 1 ? status.clock.behind_s + "s behind the market data" : "in step with the market data") : "not measured yet");
     row("Data source", status.data_source.name + (status.data_source.fictional ? " (FICTIONAL)" : ""));
     row("Market", (status.market.open ? "open" : "closed") + ": " + status.market.reason);
     row("Recorded snapshots", rec.real + " real, " + rec.fictional + " fictional" + (rec.newest ? ", latest " + rec.newest.slice(0, 19) : ""));

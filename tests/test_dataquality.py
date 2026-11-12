@@ -163,3 +163,15 @@ def test_replay_applies_the_same_gate_so_decisions_match_live():
              "payload": snapshot_to_dict(bad)}]
     result = run_replay(rows, config={"auto_entries": True})
     assert any("rejected (BAD_UNDERLYING" in e for e in result.cycles[0]["errors"]) and result.report["closed_trades"] == 0
+
+
+def test_the_status_tells_the_owner_when_the_computers_clock_runs_behind_the_quotes():
+    engine, manager, broker, provider, clock = build()
+    provider._clock = lambda: clock.now + timedelta(seconds=9)  # the quotes run 9s ahead of this computer's clock
+    engine.run_cycle()
+    status = engine.status()["clock"]
+    assert status["behind_s"] == 9.0 and status["tolerance_s"] == 5
+    assert "being rejected" in status["warning"] and "Set time and date automatically" in status["warning"]
+    provider._clock = lambda: clock.now
+    engine.run_cycle()
+    assert engine.status()["clock"]["warning"] is None

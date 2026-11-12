@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Callable, Optional, Sequence
 
 from .dataquality import check_snapshot
+from .diagnostics import describe_exc
 from .market_clock import HOLIDAYS, NY, OPEN, session_status
 from .marketdata import Bar, MarketDataProvider, MarketSnapshot
 from .models import Right, utcnow
@@ -382,7 +383,7 @@ class Scanner:
                 checked = check_snapshot(self.provider.snapshot_window(sym, SCAN_MIN_DTE, SCAN_MAX_DTE, SCAN_EXPIRIES), now)
             except Exception as exc:  # noqa: BLE001
                 failed += 1
-                out["errors"].append(f"{sym}: chain unavailable ({type(exc).__name__})")
+                out["errors"].append(f"{sym}: chain unavailable ({describe_exc(exc)})")
                 continue
             if checked.snapshot is None:
                 failed += 1

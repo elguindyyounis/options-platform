@@ -139,6 +139,16 @@ Environment variables (see `.env.example`):
 | `OPTPLAT_OPEN_BROWSER` | `1` opens the dashboard, already connected, when the server is ready. `./run.sh` sets it |
 | `OPTPLAT_AUTOSTART_LOOP` | `1` starts the cycle loop at launch. Does not change the saved entries setting |
 
+### Running beside the options-alerter
+
+The two apps use different ports (the alerter 8787, this platform 8800) and different databases, so both can run at once in
+separate Terminal windows. If another program is already on 8800 the platform picks the next free port and prints it. If the
+platform itself is already running it refuses to start a second copy, because two engines on one database would trade
+everything twice; open the page that is already running instead.
+
+The token changes every start. To keep one you can paste any time, put `export OPTPLAT_API_TOKEN=<16 or more random characters>`
+in your shell profile. A page opened without the launcher (a new tab or a bookmark) asks for it.
+
 ## Run with free online data (Yahoo)
 
 `./run.sh yahoo` does everything below for you. By hand:

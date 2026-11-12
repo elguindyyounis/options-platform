@@ -6,7 +6,7 @@ unfilled. It never invents a fill from a missing quote.
 from __future__ import annotations
 
 import threading
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from ..models import (
     STATUS_CANCELLED,
@@ -16,6 +16,7 @@ from ..models import (
     BrokerOrderStatus,
     Mode,
     OptionContract,
+    Order,
     OrderIntent,
     Position,
     Quote,
@@ -37,6 +38,54 @@ class SimBroker(BrokerAdapter):
         self._positions: dict[OptionContract, list[float]] = {}  # contract -> [qty, avg_cost]
         self._seq = 0
         self._lock = threading.RLock()
+
+    # ---- restart recovery ----------------------------------------------
+    def restore(self, orders: Iterable[Order]) -> dict[str, Any]:
+        """Rebuild cash and positions by replaying the FILLED orders saved in the database. Pass them as ``Store.list_orders`` returns them (newest first);
+        they are replayed oldest first, and orders with the same timestamp keep their stored order.
+
+        This broker keeps everything in memory, so without this a restart silently forgot open positions and reset
+        cash to the starting amount, which hid real simulated losses. Anything that does not add up (a sell with
+        nothing to sell, a fill with no price) is reported in ``warnings`` and skipped, never guessed. Resting
+        orders are not restored: they have no fill to replay."""
+        warnings: list[str] = []
+        applied = 0
+        with self._lock:
+            for order in sorted(reversed(list(orders)), key=lambda o: o.created_at):
+                if order.state.value != STATUS_FILLED:
+                    continue
+                intent = order.intent
+                if not order.broker_order_id or not order.avg_fill_price or order.filled_qty <= 0:
+                    warnings.append(f"order {order.id[:8]} is FILLED but has no broker id, price or quantity; skipped")
+                    continue
+                qty, avg = self._positions.get(intent.contract, [0, 0.0])
+                mult = intent.contract.multiplier
+                price, n = float(order.avg_fill_price), int(order.filled_qty)
+                if intent.side is Side.SELL_TO_CLOSE:
+                    if qty < n:
+                        warnings.append(f"order {order.id[:8]} sells {n} {intent.contract.occ_symbol.strip()} but only {int(qty)} are held; skipped")
+                        continue
+                    self.cash += price * mult * n
+                    if qty - n > 0:
+                        self._positions[intent.contract] = [qty - n, avg]
+                    else:
+                        self._positions.pop(intent.contract, None)
+                else:
+                    self.cash -= price * mult * n
+                    self._positions[intent.contract] = [qty + n, (avg * qty + price * n) / (qty + n)]
+                self._orders[order.broker_order_id] = {
+                    "id": order.broker_order_id, "client_id": intent.idempotency_key, "intent": intent,
+                    "status": STATUS_FILLED, "filled_qty": n, "avg_fill_price": price,
+                }
+                self._by_client[intent.idempotency_key] = order.broker_order_id
+                try:
+                    self._seq = max(self._seq, int(order.broker_order_id.rsplit("-", 1)[-1]))
+                except ValueError:
+                    pass
+                applied += 1
+            if self.cash < 0:
+                warnings.append(f"cash is negative after replay ({self.cash:,.2f}); the order history may be incomplete")
+            return {"orders_replayed": applied, "open_positions": len(self._positions), "cash": round(self.cash, 2), "warnings": warnings}
 
     # ---- test / demo hooks -------------------------------------------
     def set_quote(self, quote: Quote) -> None:

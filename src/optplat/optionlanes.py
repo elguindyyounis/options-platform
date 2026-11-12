@@ -24,6 +24,7 @@ from typing import Any, Callable, Optional, Sequence
 from . import shortterm as st_mod
 from . import swing as sw_mod
 from .dataquality import check_snapshot
+from .diagnostics import describe_exc
 from .events import ETFS, EventCalendar
 from .market_clock import NY
 from .marketdata import ChainRow, MarketDataProvider, MarketSnapshot
@@ -302,7 +303,7 @@ class OptionLane:
         try:
             chk = check_snapshot(self.feed.window(sym, p.dte_min, p.dte_max, 3), now)
         except Exception as exc:  # noqa: BLE001
-            out["errors"].append(f"{sym}: chain unavailable ({type(exc).__name__})")
+            out["errors"].append(f"{sym}: chain unavailable ({describe_exc(exc)})")
             return None
         if chk.snapshot is None:
             out["errors"].append(f"{sym}: chain rejected by the data-quality gate ({chk.issues[-1].kind if chk.issues else 'unknown'})")

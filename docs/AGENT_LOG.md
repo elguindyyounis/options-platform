@@ -3,6 +3,19 @@
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
 
+
+## 2026-11-13: restart recovery, error text, clock warning, side-by-side ports
+
+* Read-only look at the owner's database found: the simulated broker forgot a filled SPY put on restart (equity reset to
+  exactly 100,000), scans read 0 chains because the Mac clock ran 7 to 11 s behind quote timestamps (gate limit 5 s), and one
+  chain error showed only its type.
+* `SimBroker.restore` replays FILLED orders at startup (cash and positions); impossible histories are warned about and skipped.
+  `describe_exc` puts the message and file:line in scan and lane errors. The engine status carries `clock` and the dashboard's
+  trust panel shows it. `choose_port` lets the platform run beside the alerter and refuses a second copy on the same database.
+* No risk limit, tolerance, auth check or default changed. The 5 s clock tolerance is untouched. 484 tests pass.
+* Not verified: any of this on the owner's Mac or live Yahoo data; resting (unfilled) orders are not restored; why the owner could
+  not open both apps (ports never clashed by default, so the cause is unconfirmed).
+
 ## 2026-11-12: alerter comparison and liquidity stress
 
 * Compared the owner's `options-alerter` repo with this platform (`docs/COMPARISON_ALERTER.md`) and started

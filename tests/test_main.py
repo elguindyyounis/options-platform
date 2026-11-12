@@ -124,3 +124,58 @@ def test_open_when_ready_gives_up_quietly_if_the_server_never_starts(monkeypatch
     monkeypatch.setattr(entry.webbrowser, "open", lambda url: opened.append(url))
     entry._open_when_ready("http://x", port, timeout_s=0.6)
     assert opened == []
+
+
+def _listener(handler=None):
+    import http.server
+    import threading
+
+    class Quiet(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = (handler or b"<title>some other app</title>")
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), Quiet)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def test_a_free_port_is_used_as_asked():
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    assert entry.choose_port(port) == port
+
+
+def test_a_port_taken_by_another_app_moves_to_the_next_free_one(capsys):
+    other = _listener()  # stands in for the options-alerter on 8787
+    try:
+        port = other.server_address[1]
+        chosen = entry.choose_port(port)
+        assert chosen != port and port < chosen <= port + 20
+        assert f"another program" in capsys.readouterr().out
+    finally:
+        other.shutdown()
+
+
+def test_a_second_copy_of_the_platform_refuses_to_start_on_the_same_database():
+    me = _listener(b"<html><title>options-platform</title></html>")
+    try:
+        with pytest.raises(SystemExit) as stop:
+            entry.choose_port(me.server_address[1])
+        assert "already running" in str(stop.value) and "twice" in str(stop.value)
+    finally:
+        me.shutdown()
+
+
+def test_a_bad_port_setting_is_explained(monkeypatch):
+    monkeypatch.setenv("OPTPLAT_PORT", "eighty")
+    with pytest.raises(SystemExit) as stop:
+        entry.main()
+    assert "OPTPLAT_PORT" in str(stop.value)

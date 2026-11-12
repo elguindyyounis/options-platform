@@ -8,6 +8,7 @@ import socket
 import sys
 import threading
 import time
+import urllib.request
 import webbrowser
 
 import uvicorn
@@ -46,7 +47,50 @@ def _start_browser_opener(url: str, port: int) -> None:
     threading.Thread(target=_open_when_ready, args=(url, port), name="optplat-open-browser", daemon=True).start()
 
 
+def _port_is_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+def _is_this_dashboard(port: int) -> bool:
+    """True when whatever owns the port serves this platform's dashboard page."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1.5) as response:  # noqa: S310 - fixed localhost URL
+            return b"<title>options-platform</title>" in response.read(8192)
+    except Exception:  # noqa: BLE001 - anything else on the port is simply "not this"
+        return False
+
+
+def choose_port(preferred: int, search: int = 20) -> int:
+    """Pick the port to serve on, so this platform can run beside other local apps (the options-alerter uses 8787).
+
+    * free: use it;
+    * already serving this dashboard: stop with a clear message, because a second engine on the same database would
+      place every simulated trade twice;
+    * taken by something else: use the next free port and say so."""
+    if _port_is_free(preferred):
+        return preferred
+    if _is_this_dashboard(preferred):
+        sys.exit(f"The platform is already running at http://127.0.0.1:{preferred}. Open that page instead (its token is in the "
+                 "terminal that started it), or stop it first. Not starting a second copy: two engines on one database "
+                 "would trade everything twice.")
+    for candidate in range(preferred + 1, preferred + search + 1):
+        if _port_is_free(candidate):
+            print(f"Port {preferred} is used by another program, so the dashboard will be on port {candidate} instead.", flush=True)
+            return candidate
+    sys.exit(f"Ports {preferred} to {preferred + search} are all busy. Set OPTPLAT_PORT to a free port.")
+
+
 def main() -> None:
+    try:
+        port = choose_port(int(os.environ.get("OPTPLAT_PORT", "8800")))
+    except ValueError:
+        sys.exit("OPTPLAT_PORT must be a number")
     token = os.environ.get("OPTPLAT_API_TOKEN", "")
     if not token:
         # Show the one-off token in the terminal that started the server, so it can be pasted into the dashboard.
@@ -84,6 +128,15 @@ def main() -> None:
 
     store = Store(os.environ.get("OPTPLAT_DB", "optplat.db"))
     manager = OrderManager(broker, store, policy)
+    if isinstance(broker, SimBroker):
+        # The simulated broker lives in memory. Replay the saved fills so a restart does not forget open positions
+        # or reset cash (which would hide real simulated losses).
+        restored = broker.restore(store.list_orders(limit=1_000_000))
+        store.audit("broker_restore", None, restored)
+        print(f"Restored simulated account from {restored['orders_replayed']} filled orders: "
+              f"{restored['open_positions']} open positions, cash ${restored['cash']:,.2f}.", flush=True)
+        for w in restored["warnings"]:
+            print(f"WARNING (restore): {w}", flush=True)
     # The demo market is fictional and runs at any hour, so market-hours enforcement is off by default there.
     default_cfg = EngineConfig(enforce_market_hours=(data != "demo"))
     from .events import EventCalendar, yahoo_earnings_dates
@@ -108,7 +161,6 @@ def main() -> None:
             sys.exit("OPTPLAT_COMMITTEE must be off, shadow or active")
         engine.set_config({"committee_mode": mode})  # saved with the other settings; the dashboard can change it later
     runner = Runner(engine)
-    port = int(os.environ.get("OPTPLAT_PORT", "8800"))
     dashboard = f"http://127.0.0.1:{port}"
     print(f"Dashboard: {dashboard}   broker={which}   data={data}", flush=True)
     if data == "demo":
