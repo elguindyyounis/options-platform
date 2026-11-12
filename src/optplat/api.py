@@ -62,6 +62,7 @@ class EngineConfigBody(BaseModel):
     scan_interval_s: Optional[int] = None
     shortterm_enabled: Optional[bool] = None
     swing_enabled: Optional[bool] = None
+    option_lanes_enabled: Optional[bool] = None
 
 
 class KillSwitchBody(BaseModel):
@@ -248,6 +249,17 @@ def create_app(
             if not engine.config().swing_enabled:
                 raise HTTPException(status_code=409, detail="The swing lane is switched off. Turn it on in Controls first.")
             return engine.maybe_swing(force=True) or {"note": "Nothing evaluated"}
+
+        @app.get("/api/optlanes", dependencies=[Depends(auth)])
+        def optlanes_report() -> dict[str, Any]:
+            return {**engine.option_lanes.reports(engine.clock()), "enabled": engine.config().option_lanes_enabled}
+
+        @app.post("/api/optlanes/step", dependencies=[Depends(auth)])
+        def optlanes_step() -> dict[str, Any]:
+            if not engine.config().option_lanes_enabled:
+                raise HTTPException(status_code=409, detail="The options lanes are switched off. Turn them on in Controls first.")
+            res = engine.maybe_option_lanes(force=True)
+            return {"lanes": res} if res is not None else {"note": "Market closed or no data: nothing evaluated"}
 
         @app.get("/api/trades", dependencies=[Depends(auth)])
         def trades_list(limit: int = 300) -> dict[str, Any]:

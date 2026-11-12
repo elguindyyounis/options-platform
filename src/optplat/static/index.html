@@ -129,6 +129,26 @@
   .tc-pnl { font:600 22px/1.2 var(--serif); }
   #trade-table select { margin:8px 8px 4px; }
 
+  /* heat map and expandable trades */
+  .sector { border-top:1px solid var(--line-soft); padding:12px 0 4px; }
+  .sector:first-child { border-top:0; padding-top:0; }
+  .sector > header { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; margin-bottom:8px; }
+  .sector > header b { font-weight:600; }
+  .tiles { display:flex; flex-wrap:wrap; gap:6px; }
+  .tile { min-width:74px; padding:5px 8px; border-radius:6px; border:1px solid var(--line-soft); background:var(--raised); font-size:12.5px; line-height:1.3; font-variant-numeric:tabular-nums; }
+  .tile b { display:block; font-weight:600; }
+  .tile small { color:var(--mut); font-size:11.5px; }
+  .tile.up { background:color-mix(in srgb, var(--gain) var(--k, 10%), var(--raised)); }
+  .tile.down { background:color-mix(in srgb, var(--loss) var(--k, 10%), var(--raised)); }
+  details.pm { border-bottom:1px solid var(--line-soft); }
+  details.pm:last-child { border-bottom:0; }
+  details.pm > summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; padding:11px 4px; cursor:pointer; list-style:none; }
+  details.pm > summary::-webkit-details-marker { display:none; }
+  details.pm > summary::before { content:"+"; color:var(--mut); width:12px; font-family:var(--mono); }
+  details.pm[open] > summary::before { content:"-"; }
+  details.pm .pm-body { padding:2px 4px 16px 28px; display:grid; gap:12px; }
+  details.pm .pm-money { margin-left:auto; font:600 15px var(--serif); font-variant-numeric:tabular-nums; }
+
   /* chart */
   .viz { position:relative; }
   .viz svg { display:block; width:100%; height:auto; overflow:visible; touch-action:pan-y; }
@@ -167,9 +187,9 @@
   /* phones: the rail becomes a bottom bar */
   @media (max-width:860px) {
     .shell { display:block; }
-    .rail { position:fixed; top:auto; bottom:0; left:0; right:0; height:auto; z-index:10; flex-direction:row; justify-content:space-around; padding:6px 4px calc(6px + env(safe-area-inset-bottom)); border-right:0; border-top:1px solid var(--line); }
+    .rail { position:fixed; top:auto; bottom:0; left:0; right:0; height:auto; z-index:10; flex-direction:row; justify-content:flex-start; overflow-x:auto; padding:6px 4px calc(6px + env(safe-area-inset-bottom)); border-right:0; border-top:1px solid var(--line); }
     .brand, .rail-foot { display:none; }
-    .rail a.nav { flex:1; text-align:center; padding:9px 2px; font-size:12.5px; border-left:0; border-top:3px solid transparent; }
+    .rail a.nav { flex:0 0 auto; text-align:center; padding:9px 12px; font-size:12.5px; border-left:0; border-top:3px solid transparent; }
     .rail a.nav[aria-current="page"] { border-top-color:var(--series-1); border-left-color:transparent; }
     .strip { padding:8px 14px; }
     .content { padding:18px 14px 96px; }
@@ -184,6 +204,7 @@
     <div class="brand"><b>options-platform</b><small>Paper trading desk</small></div>
     <a class="nav" href="#/desk" data-page="desk">Desk</a>
     <a class="nav" href="#/trades" data-page="trades">Trades</a>
+    <a class="nav" href="#/options" data-page="options">Options</a>
     <a class="nav" href="#/swing" data-page="swing">Swing</a>
     <a class="nav" href="#/shortterm" data-page="shortterm">Short-term</a>
     <a class="nav" href="#/market" data-page="market">Market</a>
@@ -265,6 +286,29 @@
         <div class="panel" style="padding:6px 8px"><div class="scroll" id="trade-table"></div></div>
       </section>
 
+      <section id="view-options" data-page="options" data-question="Do simulated option trades beat shares on the same ideas, and what do the losses teach?" hidden>
+        <div>
+          <h1>Options lanes</h1>
+          <p id="op-lede" class="lede"></p>
+        </div>
+        <div class="toolbar">
+          <button id="btn-op-step" class="btn primary">Check now</button>
+          <span id="op-status" class="muted"></span>
+        </div>
+        <div class="panel"><h2>Which version is working?</h2><p class="q">Every lane on the same terms. The two share lanes are the benchmark for the same ideas.</p><div class="scroll" id="op-compare"></div></div>
+        <div class="panel">
+          <div class="chips" id="op-tabs" role="tablist" aria-label="Options lanes"></div>
+          <p id="op-why" class="lede" style="margin-top:12px"></p>
+          <div class="figures" id="op-summary" style="margin-top:14px"></div>
+        </div>
+        <div class="panel"><h2>Simulated trades</h2><p class="q">Open a trade to see why it entered and, once it has closed, what the post-mortem found.</p><div id="op-trades"></div></div>
+        <div class="panel"><h2>What the trades keep teaching</h2><p class="q">Causes tagged on every closed trade across the five lanes. A cause is only a pattern once it has enough trades behind it.</p><div class="scroll" id="op-digest"></div><p id="op-digest-note" class="muted" style="margin-top:10px"></p></div>
+        <div class="grid2">
+          <div class="panel"><h2>The rules of this lane</h2><ul class="plain" id="op-rules" style="margin-top:10px"></ul></div>
+          <div class="panel"><h2>What this cannot tell you</h2><ul class="plain" id="op-limits" style="margin-top:10px"></ul></div>
+        </div>
+      </section>
+
       <section id="view-swing" data-page="swing" data-question="What is the swing-trading experiment doing, and is it worth anything yet?" hidden>
         <div>
           <h1>Swing lane</h1>
@@ -308,7 +352,10 @@
           <button id="btn-scan" class="btn primary">Scan now</button>
           <span id="scan-status" class="muted"></span>
         </div>
+        <div class="figures" id="scan-sentiment"></div>
         <div class="chips" id="market-tabs" role="tablist" aria-label="Market views"></div>
+        <div class="panel" id="scan-heat-panel" hidden><h2>Sector heat map</h2><p class="q">Latest completed day against the one before. Arrows and signs carry the direction; the shading only adds weight.</p><div id="scan-heat"></div></div>
+        <div class="panel" id="scan-follow-panel" hidden><h2>Did yesterday's unusual contracts stick?</h2><p class="q">Open interest is reported once a day. If it rose by about the volume that traded, the trades mostly opened positions.</p><div class="scroll" id="scan-follow"></div></div>
         <div class="panel" id="scan-active-panel"><div class="scroll" id="scan-active"></div></div>
         <div class="panel" id="scan-unusual-panel" hidden>
           <div class="chips" id="scan-filters" role="group" aria-label="Filter unusual activity" style="margin-bottom:12px"></div>
@@ -370,8 +417,9 @@
             <label class="check"><input id="cfg-entries" type="checkbox"> Automatic entries</label>
             <label class="check"><input id="cfg-exits" type="checkbox"> Automatic exits</label>
             <label class="check"><input id="cfg-hours" type="checkbox"> Enforce market hours</label>
-            <label class="check"><input id="cfg-swing" type="checkbox"> Swing research lane</label>
-            <label class="check"><input id="cfg-shortterm" type="checkbox"> Short-term research lane</label>
+            <label class="check"><input id="cfg-swing" type="checkbox"> Swing research lane (shares)</label>
+            <label class="check"><input id="cfg-optlanes" type="checkbox"> Options research lanes</label>
+            <label class="check"><input id="cfg-shortterm" type="checkbox"> Short-term research lane (shares)</label>
           </div>
           <div class="toolbar" style="margin-top:12px">
             <label class="check">Agent committee

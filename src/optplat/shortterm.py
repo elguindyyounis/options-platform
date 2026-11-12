@@ -177,31 +177,57 @@ class ShortTermLane:
 
 def lane_report(store: Store, lane: str, fictional: bool, now: datetime, *, rules: Sequence[str], limitations: Sequence[str],
                 symbols: Sequence[str], exit_text: dict[str, str]) -> dict[str, Any]:
-    """The ledger of one research lane as the dashboard reads it. Shared by the short-term and swing lanes."""
+    """The ledger of one research lane as the dashboard reads it. Shared by the share lanes and the option lanes.
+
+    An option trade carries ``multiplier`` (100) and fees in its payloads; a share trade has neither, so its numbers
+    are unchanged. Open option trades show an unrealised figure from the last mark the lane stored, when there is one."""
     rows = store.lane_trades(lane, fictional, 500)
     trades = []
     for t in rows:
         closed = t["closed_at"] is not None
-        pnl = round((t["exit_price"] - t["entry_price"]) * t["quantity"], 2) if closed else None
-        cost = t["entry_price"] * t["quantity"]
+        op, cp = t["open_payload"], t["close_payload"] or {}
+        mult = op.get("multiplier", 1)
+        fees = op.get("fees_open", 0.0) + cp.get("fees_close", 0.0)
+        cost = t["entry_price"] * t["quantity"] * mult
+        pnl = round((t["exit_price"] - t["entry_price"]) * t["quantity"] * mult - fees, 2) if closed else None
+        mark = None if closed else _mark_of(store, t["id"])
+        unreal = None
+        if mark is not None and mark.get("bid") is not None:
+            unreal = round((mark["bid"] - t["entry_price"]) * t["quantity"] * mult - op.get("fees_open", 0.0) - t["quantity"] * op.get("fee_per_contract", 0.0), 2)
         trades.append({
             "id": t["id"], "symbol": t["symbol"], "opened_at": t["opened_at"], "closed_at": t["closed_at"], "quantity": t["quantity"],
             "entry_price": t["entry_price"], "exit_price": t["exit_price"], "pnl": pnl,
             "pnl_pct": round(pnl / cost * 100, 2) if pnl is not None and cost > 0 else None,
             "status": "CLOSED" if closed else "OPEN", "close_reason": t["close_reason"],
-            "close_text": exit_text.get(t["close_reason"] or "", None), "why_entered": t["open_payload"],
+            "close_text": exit_text.get(t["close_reason"] or "", None), "why_entered": op,
+            "contract": op.get("contract"), "multiplier": mult, "fees": round(fees, 2) if closed else None,
+            "mark_bid": None if mark is None else mark.get("bid"), "mark_at": None if mark is None else mark.get("at"),
+            "unrealized_pnl": unreal, "unrealized_pnl_pct": round(unreal / cost * 100, 2) if unreal is not None and cost > 0 else None,
+            "postmortem": cp.get("postmortem"),
         })
     done = [t for t in trades if t["status"] == "CLOSED"]
     wins = [t for t in done if (t["pnl"] or 0) > 0]
+    rets = [t["pnl_pct"] for t in done if t["pnl_pct"] is not None]
     return {
         "lane": lane, "fictional": fictional, "as_of": now.isoformat(), "rules": list(rules), "limitations": list(limitations),
         "symbols": list(symbols),
         "summary": {"total": len(trades), "open": len(trades) - len(done), "closed": len(done), "wins": len(wins),
                     "win_rate_pct": round(len(wins) / len(done) * 100, 1) if done else None,
                     "realized_pnl": round(sum(t["pnl"] for t in done), 2),
+                    "avg_return_pct": round(sum(rets) / len(rets), 2) if rets else None,
+                    "unrealized_pnl": round(sum(t["unrealized_pnl"] or 0 for t in trades if t["status"] == "OPEN"), 2),
                     "min_trades_for_evidence": 30},
         "trades": trades,
     }
+
+
+def _mark_of(store: Store, trade_id: int) -> Optional[dict[str, Any]]:
+    import json
+    raw = store.get_state(f"lane_mark:{trade_id}", "")
+    try:
+        return json.loads(raw) if raw else None
+    except ValueError:
+        return None
 
 
 def build_report(store: Store, fictional: bool, now: datetime) -> dict[str, Any]:

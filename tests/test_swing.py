@@ -238,3 +238,13 @@ def test_api_requires_the_token_and_refuses_a_step_while_off(client):
     assert client.put("/api/engine/config", headers=H, json={"swing_enabled": True}).status_code == 200
     assert client.post("/api/swing/step", headers=H).status_code == 200
     assert client.get("/api/swing", headers=H).json()["enabled"] is True
+
+
+def test_no_one_sector_may_fill_the_book():
+    bars = mk(pullback_rets())
+    n = first_signal(bars)
+    now = [after(bars, n)]
+    names = ("XLF", "XLE", "XLK", "XLV")   # four sector funds: same signal, same sector, and funds are exempt from the earnings check
+    ln = lane(Feed({s: bars[:n] for s in names}), now, symbols=names)
+    out = ln.step()
+    assert len(out["opened"]) == sw.MAX_PER_SECTOR == 2 and out["skipped"] == 2

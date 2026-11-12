@@ -94,6 +94,14 @@ CREATE TABLE IF NOT EXISTS lane_trades (
     fictional INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_lane_trades_lane ON lane_trades(lane, id);
+CREATE TABLE IF NOT EXISTS unusual_history (
+    day TEXT NOT NULL,
+    contract TEXT NOT NULL,
+    fictional INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (day, contract, fictional)
+);
 CREATE TABLE IF NOT EXISTS agent_weights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,
@@ -323,6 +331,38 @@ class Store:
             r = self._db.execute("SELECT payload FROM scan_results WHERE fictional=? ORDER BY id DESC LIMIT 1",
                                  (int(fictional),)).fetchone()
         return json.loads(r["payload"]) if r else None
+
+    # ---- unusual option contracts, remembered by New York trading day so the next day can confirm them ----
+    def record_unusual(self, day: str, fictional: bool, rows: list[dict[str, Any]]) -> None:
+        """Keep the highest-volume sighting of each contract for the day (volume only grows through the session)."""
+        with self._lock:
+            for r in rows:
+                cur = self._db.execute("SELECT payload FROM unusual_history WHERE day=? AND contract=? AND fictional=?",
+                                       (day, r["contract"], int(fictional))).fetchone()
+                if cur and json.loads(cur["payload"]).get("volume", 0) >= r["volume"]:
+                    continue
+                self._db.execute("INSERT OR REPLACE INTO unusual_history (day, contract, fictional, symbol, payload) VALUES (?,?,?,?,?)",
+                                 (day, r["contract"], int(fictional), r["symbol"], json.dumps(r, default=str)))
+            self._db.execute("DELETE FROM unusual_history WHERE day < date(?, '-30 day')", (day,))
+            self._db.commit()
+
+    def unusual_before(self, day: str, fictional: bool) -> dict[str, dict[str, Any]]:
+        """The newest earlier sighting of every contract, keyed by contract, each with its day."""
+        with self._lock:
+            rows = self._db.execute("SELECT day, contract, payload FROM unusual_history WHERE day < ? AND fictional=? ORDER BY day",
+                                    (day, int(fictional))).fetchall()
+        out: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            out[r["contract"]] = {**json.loads(r["payload"]), "day": r["day"]}
+        return out
+
+    def unusual_streak(self, day: str, fictional: bool, contract: str) -> int:
+        """How many earlier trading days in a row (ending at the newest earlier day) this contract was unusual."""
+        with self._lock:
+            days = [r["day"] for r in self._db.execute(
+                "SELECT day FROM unusual_history WHERE contract=? AND fictional=? AND day<? ORDER BY day DESC",
+                (contract, int(fictional), day)).fetchall()]
+        return len(days)
 
     # ---- research lanes that simulate trades outside the options account (the short-term lane) ----
     def lane_open(self, lane: str, symbol: str, ts: datetime, price: float, quantity: int, fictional: bool,

@@ -1,0 +1,525 @@
+"""Options research lanes: the same ideas as the share lanes, expressed as simulated long calls and puts.
+
+What this is: five experiments in their own ledger (``lane_trades``), apart from the options account. A signal on
+the underlying (an EMA9 / VWAP cross, a daily pullback, or unusual flow that stuck into the next day) buys ONE
+simulated call or put, filled from the real chain quote at the ask and closed at the bid, with a per-contract fee.
+Risk on each trade is the premium paid, so nothing here sells an option or can lose more than it cost.
+
+What it is not: an order path. It places no orders, touches no broker, no risk limit and no options position, and
+it does not change the engine's ``RiskPolicy`` (which still keeps real entries at 7+ days to expiry). The
+"aggressive" variants are looser on purpose, to collect more and different losses to learn from. The results
+prove nothing until a pre-registered test says otherwise, and demo data is labelled fictional everywhere.
+
+Anything unknown (no bars, no chain, a failed fetch, no usable quote, an unknown earnings date where the lane
+requires one) means no entry. A trade that cannot be marked stays open and is reported, never guessed closed.
+"""
+from __future__ import annotations
+
+import json
+import threading
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from typing import Any, Callable, Optional, Sequence
+
+from . import shortterm as st_mod
+from . import swing as sw_mod
+from .dataquality import check_snapshot
+from .events import ETFS, EventCalendar
+from .market_clock import NY
+from .marketdata import ChainRow, MarketDataProvider, MarketSnapshot
+from .models import OptionContract, Right, utcnow
+from .postmortem import digest, post_mortem
+from .scanner import SECTOR_OF, UNIVERSE, session_day
+from .shortterm import lane_report
+from .store import Store
+
+MULTIPLIER = 100
+FEE_PER_CONTRACT = 0.65          # each way, per contract
+RUN_EVERY = {"short": timedelta(seconds=120), "swing": timedelta(minutes=60), "flow": timedelta(minutes=30)}
+MAX_ENTRIES_PER_STEP = 3
+MAX_CHAIN_READS_PER_STEP = 8
+MAX_STRIKE_MISS_PCT = 5.0        # the chosen strike may sit this far (of spot) from the target before the lane gives up
+SCAN_MAX_AGE = timedelta(hours=20)
+
+
+@dataclass(frozen=True)
+class Params:
+    lane: str
+    label: str
+    kind: str                    # "short" | "swing" | "flow"
+    why: str
+    budget_usd: float            # premium spent per trade, at most
+    max_open: int
+    max_per_sector: int
+    dte_min: int
+    dte_max: int
+    otm_pct: float               # how far out of the money the strike is aimed, in percent of spot
+    max_spread_pct: float
+    min_oi: int
+    min_volume: int
+    min_ask: float
+    stop_pct: float              # premium loss (from the ask paid) that closes the trade
+    target_pct: float
+    max_hold_bars: int           # trading days for swing and flow; unused for short-term
+    experimental: bool           # looser entry rules, on purpose
+    both_ways: bool              # may buy puts as well as calls
+    earnings_gate: bool          # single stocks need a known, clear earnings calendar
+    symbols: tuple[str, ...]
+
+
+EXTRA_SHORT = ("AMD", "META", "AMZN", "MSFT", "GOOGL", "PLTR", "COIN", "SMCI", "MU", "AVGO")
+
+SHORT_BASE = Params("shortterm-options-base", "Short-term options, base", "short",
+                    "EMA9 crossing above the session VWAP buys a call, crossing below buys a put. Weekly expiry, at the money.",
+                    500, 3, 2, 2, 10, 0.0, 12.0, 100, 10, 0.20, 30, 50, 0, False, True, False, st_mod.LANE_SYMBOLS)
+SHORT_AGGR = Params("shortterm-options-aggr", "Short-term options, aggressive", "short",
+                    "The same signal on more names, with expiry as short as today, a strike slightly out of the money, a wider spread allowed, a bigger size and wider stop and target.",
+                    1000, 5, 3, 0, 4, 0.5, 20.0, 25, 5, 0.10, 40, 100, 0, True, True, False, st_mod.LANE_SYMBOLS + EXTRA_SHORT)
+SWING_BASE = Params("swing-options-base", "Swing options, base", "swing",
+                    "The swing pullback rule, expressed as a call 30 to 60 days out at the money instead of shares.",
+                    1000, 5, 2, 30, 60, 0.0, 12.0, 100, 10, 0.50, 40, 80, 10, False, False, True, sw_mod.SYMBOLS)
+SWING_AGGR = Params("swing-options-aggr", "Swing options, aggressive", "swing",
+                    "A looser pullback rule (no 20/50-day filter, RSI at or below 50, moves up to 8% allowed), plus puts on a bounce in a downtrend, "
+                    "shorter expiry, a strike out of the money, earnings allowed and recorded.",
+                    2000, 8, 3, 14, 35, 3.0, 20.0, 25, 5, 0.30, 50, 120, 8, True, True, False, sw_mod.SYMBOLS)
+FLOW = Params("flow-options", "Unusual flow that stuck", "flow",
+              "When a contract had a very high volume to open interest ratio and its open interest rose the next day, buy a call (if the read is bullish) or a put (if bearish) on the same name.",
+              1000, 6, 2, 21, 60, 1.0, 15.0, 50, 5, 0.30, 50, 100, 10, True, True, False, ())
+ALL_PARAMS = (SHORT_BASE, SHORT_AGGR, SWING_BASE, SWING_AGGR, FLOW)
+
+EXIT_TEXT = {
+    "stop": "The option's bid fell to the stop set when the trade opened.",
+    "target": "The option's bid reached the profit target set when the trade opened.",
+    "vwap_lost": "The underlying closed back through the session VWAP, against the position.",
+    "flat_by_close": "Closed before the end of the session: the short-term lanes never hold overnight.",
+    "carried_over": "Found open from an earlier day and closed at the first usable quote.",
+    "trend_break": "The underlying closed through its 50-day average, against the position.",
+    "time": "The holding limit passed without the stop or the target.",
+    "expiry_near": "Closed within two days of expiry to stay clear of assignment and pin risk.",
+    "expired_unmarked": "The contract expired with no usable quote, so it was closed at its intrinsic value.",
+}
+
+
+# ------------------------------------------------------------ small pure helpers
+def intrinsic(right: str, strike: float, spot: Optional[float]) -> float:
+    if spot is None:
+        return 0.0
+    return max(0.0, spot - strike) if right == "C" else max(0.0, strike - spot)
+
+
+def pick_contract(snap: MarketSnapshot, right: Right, now: datetime, p: Params) -> Optional[ChainRow]:
+    """The row nearest the aimed strike inside the expiry window that passes the lane's quote limits, or None."""
+    spot = snap.underlying
+    target = spot * (1 + p.otm_pct / 100) if right is Right.CALL else spot * (1 - p.otm_pct / 100)
+    mid_dte = (p.dte_min + p.dte_max) / 2
+    best: Optional[tuple[tuple[float, float], ChainRow]] = None
+    for r in snap.rows:
+        c = r.contract
+        if c.right is not right:
+            continue
+        dte = (c.expiry - now.date()).days
+        if not p.dte_min <= dte <= p.dte_max:
+            continue
+        if not (r.bid > 0 and r.ask >= r.bid and r.ask >= p.min_ask):  # a zero bid has no exit
+            continue
+        if (r.ask - r.bid) / r.ask * 100 > p.max_spread_pct or (r.open_interest or 0) < p.min_oi or (r.volume or 0) < p.min_volume:
+            continue
+        miss = abs(c.strike - target) / spot * 100
+        if miss > MAX_STRIKE_MISS_PCT:
+            continue
+        key = (round(miss, 3), abs(dte - mid_dte))
+        if best is None or key < best[0]:
+            best = (key, r)
+    return best[1] if best else None
+
+
+def short_signal(r: dict[str, Any], p: Params) -> Optional[str]:
+    if st_mod.entry_signal(r):
+        return "C"
+    if p.both_ways and r["prev_ema"] >= r["prev_vwap"] and r["ema"] < r["vwap"] and r["close"] < r["vwap"]:
+        return "P"
+    return None
+
+
+def swing_signal(r: dict[str, Any], p: Params) -> Optional[str]:
+    if not p.experimental:
+        return "C" if sw_mod.entry_signal(r) else None
+    if abs(r["day_move_pct"]) > 8.0:
+        return None
+    if r["close"] > r["sma_slow"] and r["rsi_dip"] <= 50 and r["rsi"] > r["rsi_prev"] and r["close"] > r["prev_close"]:
+        return "C"
+    if p.both_ways and r["close"] < r["sma_slow"] and r["rsi_peak"] >= 55 and r["rsi"] < r["rsi_prev"] and r["close"] < r["prev_close"]:
+        return "P"
+    return None
+
+
+def rules_text(p: Params) -> list[str]:
+    ways = "calls and puts" if p.both_ways else "calls only"
+    rows = [p.why,
+            f"Buys {ways}, one contract per name, {p.dte_min} to {p.dte_max} days to expiry, aimed {p.otm_pct:g}% out of the money, spread at most {p.max_spread_pct:g}%, "
+            f"open interest at least {p.min_oi}, at most ${p.budget_usd:,.0f} of premium risked per trade.",
+            f"Filled at the ask, closed at the bid, ${FEE_PER_CONTRACT} per contract each way. Stop at {p.stop_pct:g}% of the premium, target at {p.target_pct:g}%."]
+    if p.kind == "short":
+        rows.append(f"Entries {st_mod.ENTRY_FROM:%H:%M} to {st_mod.ENTRY_UNTIL:%H:%M} New York time, flat by {st_mod.FLAT_BY:%H:%M}, also closed when the underlying closes back through VWAP.")
+    else:
+        rows.append(f"Held at most {p.max_hold_bars} trading days; closed within 2 days of expiry; at most {p.max_open} open and {p.max_per_sector} per sector.")
+    return rows
+
+
+LIMITATIONS = (
+    "Free option quotes are delayed and unofficial. Fills at the ask and bid are an assumption: a real order could fill worse, or not at all in a thin contract.",
+    "A premium stop or target is checked each time the lane runs, not continuously, so a real stop could have triggered sooner or later.",
+    "These are simulated trades in a separate ledger. No order is sent anywhere and the risk policy is untouched.",
+    "The aggressive variants are loose on purpose. Their losses are the point; their wins prove nothing.",
+    "Buy or sell, and opened or closed, for the flow lane are inferred from one last price and a next-day open interest change.",
+)
+
+
+# ------------------------------------------------------------ a short-lived cache so lanes share requests
+class Feed:
+    """Several lanes reading the same name in the same minute make one request."""
+
+    def __init__(self, provider: MarketDataProvider, clock: Callable[[], datetime], ttl_s: float = 60.0, daily_ttl_s: float = 900.0) -> None:
+        self.provider, self.clock, self.ttl_s, self.daily_ttl_s = provider, clock, ttl_s, daily_ttl_s
+        self._cache: dict[Any, tuple[datetime, Any]] = {}
+        self._lock = threading.Lock()
+
+    def _cached(self, key: Any, ttl: float, load: Callable[[], Any]) -> Any:
+        now = self.clock()
+        with self._lock:
+            hit = self._cache.get(key)
+        if hit and 0 <= (now - hit[0]).total_seconds() < ttl:
+            return hit[1]
+        value = load()
+        with self._lock:
+            self._cache[key] = (now, value)
+        return value
+
+    def intraday(self, sym: str):
+        return self._cached(("i", sym), self.ttl_s, lambda: self.provider.intraday_bars(sym))
+
+    def window(self, sym: str, lo: int, hi: int, n: int) -> MarketSnapshot:
+        return self._cached(("w", sym, lo, hi, n), self.ttl_s, lambda: self.provider.snapshot_window(sym, lo, hi, n))
+
+    def daily(self, symbols: Sequence[str], months: int):
+        return self._cached(("d", tuple(symbols), months), self.daily_ttl_s, lambda: self.provider.daily_bars(symbols, months=months))  # type: ignore[call-arg]
+
+
+# ------------------------------------------------------------ the lane
+class OptionLane:
+    def __init__(self, provider: MarketDataProvider, store: Store, params: Params, feed: Feed, *, clock: Callable[[], datetime] = utcnow,
+                 calendar: Optional[EventCalendar] = None) -> None:
+        self.provider, self.store, self.p, self.feed, self.clock, self.calendar = provider, store, params, feed, clock, calendar
+        self._lock = threading.Lock()
+
+    # -- bookkeeping
+    def _held(self) -> dict[str, dict[str, Any]]:
+        return {t["symbol"]: t for t in self.store.lane_trades(self.p.lane, self.provider.fictional, 2000) if t["closed_at"] is None}
+
+    def _new_out(self, now: datetime) -> dict[str, Any]:
+        return {"lane": self.p.lane, "at": now.isoformat(), "opened": [], "closed": [], "errors": [], "skips": [], "skipped": 0}
+
+    def _throttled(self, now: datetime, force: bool, out: dict[str, Any]) -> bool:
+        key = f"optlane_last_run:{self.p.lane}"
+        last = self.store.get_state(key, "")
+        if not force and last and now - datetime.fromisoformat(last) < RUN_EVERY[self.p.kind]:
+            out["note"] = "throttled"
+            return True
+        self.store.set_state(key, now.isoformat())
+        return False
+
+    def _sector_full(self, sym: str, held: dict[str, dict[str, Any]]) -> bool:
+        sec = SECTOR_OF.get(sym, sym)
+        return sum(1 for s in held if SECTOR_OF.get(s, s) == sec) >= self.p.max_per_sector
+
+    def _earnings_state(self, sym: str, today: date) -> str:
+        if sym.upper() in ETFS:
+            return "FUND"
+        if self.calendar is None:
+            return "UNKNOWN"
+        ev = self.calendar.earnings(sym, today, today + timedelta(days=int(self.p.max_hold_bars * 1.5) + sw_mod.EARNINGS_BUFFER_DAYS))
+        return "UNKNOWN" if ev is None else ("SOON" if ev else "CLEAR")
+
+    # -- marking
+    def _marks(self, held: dict[str, dict[str, Any]], now: datetime, out: dict[str, Any]) -> dict[str, tuple[float, float]]:
+        if not held:
+            return {}
+        contracts = []
+        for t in held.values():
+            o = t["open_payload"]
+            contracts.append(OptionContract(t["symbol"], date.fromisoformat(o["expiry"]), Right(o["right"]), o["strike"]))
+        try:
+            quotes = self.provider.quotes_for(contracts)
+        except Exception as exc:  # noqa: BLE001 - no marks means no premium exits this pass, and it is shown
+            out["errors"].append(f"quotes unavailable: {type(exc).__name__}: {str(exc)[:80]}")
+            return {}
+        marks = {q.contract.occ_symbol.strip(): (q.bid, q.ask) for q in quotes if q.is_valid()}
+        for t in held.values():
+            m = marks.get(t["open_payload"]["contract"])
+            if m:
+                self.store.set_state(f"lane_mark:{t['id']}", json.dumps({"bid": m[0], "ask": m[1], "at": now.isoformat()}))
+        return marks
+
+    # -- closing and opening
+    def _close(self, t: dict[str, Any], bid: float, reason: str, now: datetime, out: dict[str, Any], info: dict[str, Any]) -> bool:
+        fees = round(t["quantity"] * FEE_PER_CONTRACT, 2)
+        info = {**info, "fees_close": fees}
+        info["postmortem"] = post_mortem(t, bid, reason, now, info)
+        if self.store.lane_close(t["id"], now, bid, reason, info):
+            out["closed"].append({"symbol": t["symbol"], "reason": reason})
+            return True
+        return False
+
+    def _enter(self, sym: str, right: str, now: datetime, out: dict[str, Any], signal: dict[str, Any], extra: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
+        p = self.p
+        try:
+            chk = check_snapshot(self.feed.window(sym, p.dte_min, p.dte_max, 3), now)
+        except Exception as exc:  # noqa: BLE001
+            out["errors"].append(f"{sym}: chain unavailable ({type(exc).__name__})")
+            return None
+        if chk.snapshot is None:
+            out["errors"].append(f"{sym}: chain rejected by the data-quality gate ({chk.issues[-1].kind if chk.issues else 'unknown'})")
+            return None
+        row = pick_contract(chk.snapshot, Right(right), now, p)
+        if row is None:
+            out["skips"].append(f"{sym}: no {'call' if right == 'C' else 'put'} met the expiry, spread and open interest limits")
+            return None
+        qty = int(p.budget_usd // (row.ask * MULTIPLIER))
+        if qty < 1:
+            out["skips"].append(f"{sym}: one contract costs more than the ${p.budget_usd:,.0f} budget")
+            return None
+        c = row.contract
+        payload = {"kind": p.kind, "variant": p.label, "contract": c.occ_symbol.strip(), "right": right, "strike": c.strike,
+                   "expiry": c.expiry.isoformat(), "dte": (c.expiry - now.date()).days, "bid": row.bid, "ask": row.ask,
+                   "spread_pct": round((row.ask - row.bid) / row.ask * 100, 2), "iv": row.iv, "open_interest": row.open_interest,
+                   "volume": row.volume, "underlying_price": signal.get("close") or chk.snapshot.underlying, "chain_underlying": chk.snapshot.underlying,
+                   "multiplier": MULTIPLIER,
+                   "fee_per_contract": FEE_PER_CONTRACT, "fees_open": round(qty * FEE_PER_CONTRACT, 2), "stop_pct": p.stop_pct,
+                   "target_pct": p.target_pct, "max_hold_bars": p.max_hold_bars, "sector": SECTOR_OF.get(sym), "signal": signal,
+                   "earnings_state": "n/a", **(extra or {})}
+        tid = self.store.lane_open(p.lane, sym, now, row.ask, qty, self.provider.fictional, payload)
+        out["opened"].append({"symbol": sym, "contract": payload["contract"], "right": right})
+        return {"id": tid, "symbol": sym, "open_payload": payload, "entry_price": row.ask, "quantity": qty, "opened_at": now.isoformat()}
+
+    # -- the premium rules every lane shares
+    def _premium_exit(self, t: dict[str, Any], mark: Optional[tuple[float, float]]) -> Optional[str]:
+        if mark is None:
+            return None
+        bid, entry = mark[0], t["entry_price"]
+        if bid <= entry * (1 - t["open_payload"]["stop_pct"] / 100):
+            return "stop"
+        if bid >= entry * (1 + t["open_payload"]["target_pct"] / 100):
+            return "target"
+        return None
+
+    # -- one pass
+    def step(self, force: bool = False) -> dict[str, Any]:
+        with self._lock:
+            now = self.clock()
+            out = self._new_out(now)
+            if self._throttled(now, force, out):
+                return out
+            try:
+                {"short": self._step_short, "swing": self._step_swing, "flow": self._step_flow}[self.p.kind](now, out)
+            except Exception as exc:  # noqa: BLE001 - a research lane must never raise into the engine
+                out["errors"].append(f"{type(exc).__name__}: {str(exc)[:100]}")
+            return out
+
+    def _step_short(self, now: datetime, out: dict[str, Any]) -> None:
+        p = self.p
+        held = self._held()
+        marks = self._marks(held, now, out)
+        in_window = st_mod.in_entry_window(now)
+        for sym in p.symbols:
+            if sym not in held and not in_window:
+                continue
+            try:
+                r = st_mod.read(self.feed.intraday(sym), now)
+            except Exception as exc:  # noqa: BLE001
+                out["errors"].append(f"{sym}: {type(exc).__name__}: {str(exc)[:80]}")
+                r = None
+            fresh = r is not None and (now - r["bar_end"]).total_seconds() <= st_mod.MAX_BAR_AGE_S
+            t = held.get(sym)
+            if t is not None:
+                self._short_exit(t, marks.get(t["open_payload"]["contract"]), r if fresh else None, now, out, held, sym)
+                continue
+            if not fresh or r is None:
+                continue
+            key = f"optlane_bar:{p.lane}:{sym}"
+            if self.store.get_state(key, "") == r["bar_ts"].isoformat():
+                continue
+            self.store.set_state(key, r["bar_ts"].isoformat())
+            right = short_signal(r, p)
+            if right is None:
+                continue
+            if len(held) >= p.max_open or self._sector_full(sym, held):
+                out["skipped"] += 1
+                continue
+            made = self._enter(sym, right, now, out, {"bar": r["bar_ts"].isoformat(), "close": round(r["close"], 4), "ema": round(r["ema"], 4),
+                                                       "vwap": round(r["vwap"], 4), "direction": "up" if right == "C" else "down"})
+            if made:
+                held[sym] = made
+
+    def _short_exit(self, t: dict[str, Any], mark: Optional[tuple[float, float]], r: Optional[dict[str, Any]], now: datetime,
+                    out: dict[str, Any], held: dict[str, dict[str, Any]], sym: str) -> None:
+        o = t["open_payload"]
+        reason: Optional[str] = None
+        if datetime.fromisoformat(t["opened_at"]).astimezone(NY).date() != now.astimezone(NY).date():
+            reason = "carried_over"
+        elif now.astimezone(NY).time() >= st_mod.FLAT_BY:
+            reason = "flat_by_close"
+        else:
+            reason = self._premium_exit(t, mark)
+            if reason is None and r is not None:
+                if (o["right"] == "C" and r["close"] < r["vwap"]) or (o["right"] == "P" and r["close"] > r["vwap"]):
+                    reason = "vwap_lost"
+        if reason is None:
+            return
+        if mark is None:
+            out["errors"].append(f"{sym}: wanted to close on {reason} but there is no usable quote; it stays open")
+            return
+        info = {"underlying": None if r is None else round(r["close"], 4), "bid": mark[0], "ask": mark[1],
+                "spread_pct": round((mark[1] - mark[0]) / mark[1] * 100, 2) if mark[1] > 0 else None}
+        if self._close(t, mark[0], reason, now, out, info):
+            held.pop(sym, None)
+
+    def _step_swing(self, now: datetime, out: dict[str, Any]) -> None:
+        p = self.p
+        held = self._held()
+        marks = self._marks(held, now, out)
+        try:
+            raw = self.feed.daily(p.symbols, sw_mod.BARS_MONTHS)
+        except Exception as exc:  # noqa: BLE001
+            out["errors"].append(f"daily bars unavailable: {type(exc).__name__}: {str(exc)[:100]}")
+            raw = {}
+        reads = {sym: sw_mod.read(raw.get(sym, []), now) for sym in p.symbols}
+        for sym, t in list(held.items()):
+            self._swing_exit(t, marks.get(t["open_payload"]["contract"]), reads.get(sym), now, out, held, sym)
+        signals = []
+        for sym in p.symbols:
+            r = reads.get(sym)
+            if r is None or sym in held:
+                continue
+            key = f"optlane_bar:{p.lane}:{sym}"
+            if self.store.get_state(key, "") == r["day"].isoformat():
+                continue
+            self.store.set_state(key, r["day"].isoformat())
+            right = swing_signal(r, p)
+            if right:
+                signals.append((r["rsi_dip"] if right == "C" else -r["rsi_peak"], sym, right, r))
+        signals.sort(key=lambda x: (x[0], x[1]))   # the deepest dip, or the highest bounce, first
+        entries = reads_done = 0
+        for _, sym, right, r in signals:
+            if entries >= MAX_ENTRIES_PER_STEP or reads_done >= MAX_CHAIN_READS_PER_STEP:
+                out["skipped"] += 1
+                continue
+            if len(held) >= p.max_open or self._sector_full(sym, held):
+                out["skipped"] += 1
+                continue
+            state = self._earnings_state(sym, now.date())
+            if p.earnings_gate and state not in ("FUND", "CLEAR"):
+                out["skipped"] += 1
+                continue
+            reads_done += 1
+            made = self._enter(sym, right, now, out, {"bar_day": r["day"].isoformat(), "close": round(r["close"], 4), "rsi": r["rsi"],
+                                                       "sma_slow": round(r["sma_slow"], 4), "direction": "up" if right == "C" else "down"},
+                               {"bar_day": r["day"].isoformat(), "earnings_state": state})
+            if made:
+                held[sym] = made
+                entries += 1
+
+    def _long_exit(self, t: dict[str, Any], mark: Optional[tuple[float, float]], r: Optional[dict[str, Any]], now: datetime, out: dict[str, Any],
+                   held: dict[str, dict[str, Any]], sym: str, trend_rule: bool) -> None:
+        o = t["open_payload"]
+        reason = self._premium_exit(t, mark)
+        if reason is None and (date.fromisoformat(o["expiry"]) - now.date()).days <= 2:
+            reason = "expiry_near"
+        if reason is None and trend_rule and r is not None and ((o["right"] == "C" and r["close"] < r["sma_slow"]) or (o["right"] == "P" and r["close"] > r["sma_slow"])):
+            reason = "trend_break"
+        if reason is None:
+            opened_day = o.get("bar_day") or datetime.fromisoformat(t["opened_at"]).date().isoformat()
+            held_bars = sum(1 for d in r["days"] if d.isoformat() > opened_day) if r is not None else \
+                int((now.date() - date.fromisoformat(opened_day)).days / 1.5)
+            if held_bars >= o.get("max_hold_bars", self.p.max_hold_bars):
+                reason = "time"
+        if reason is None:
+            return
+        spot = None if r is None else round(r["close"], 4)
+        if mark is None:
+            if (date.fromisoformat(o["expiry"]) - now.date()).days < 0:
+                info = {"underlying": spot, "bid": None, "spread_pct": None}
+                if self._close(t, round(intrinsic(o["right"], o["strike"], spot), 4), "expired_unmarked", now, out, info):
+                    held.pop(sym, None)
+            else:
+                out["errors"].append(f"{sym}: wanted to close on {reason} but there is no usable quote; it stays open")
+            return
+        info = {"underlying": spot, "bid": mark[0], "ask": mark[1], "spread_pct": round((mark[1] - mark[0]) / mark[1] * 100, 2) if mark[1] > 0 else None}
+        if self._close(t, mark[0], reason, now, out, info):
+            held.pop(sym, None)
+
+    def _swing_exit(self, t, mark, r, now, out, held, sym) -> None:
+        self._long_exit(t, mark, r, now, out, held, sym, trend_rule=True)
+
+    def _step_flow(self, now: datetime, out: dict[str, Any]) -> None:
+        p = self.p
+        held = self._held()
+        marks = self._marks(held, now, out)
+        reads: dict[str, Any] = {}
+        if held:
+            try:
+                raw = self.feed.daily(sorted(held), sw_mod.BARS_MONTHS)
+                reads = {s: sw_mod.read(raw.get(s, []), now) for s in held}
+            except Exception as exc:  # noqa: BLE001
+                out["errors"].append(f"daily bars unavailable: {type(exc).__name__}: {str(exc)[:100]}")
+        for sym, t in list(held.items()):
+            self._long_exit(t, marks.get(t["open_payload"]["contract"]), reads.get(sym), now, out, held, sym, trend_rule=False)
+        scan = self.store.latest_scan(self.provider.fictional)
+        if not scan:
+            out["note"] = "no scan yet"
+            return
+        if scan.get("session_day") != session_day(now).isoformat() or now - datetime.fromisoformat(scan["as_of"]) > SCAN_MAX_AGE:
+            out["note"] = "the latest scan is not from this session"
+            return
+        entries = 0
+        for f in scan.get("follow_ups", []):
+            sym = f["symbol"]
+            seen = f"optlane_seen:{f['contract']}:{f['prior_day']}"
+            extreme = f.get("prior_low_oi") or (f.get("prior_ratio") or 99) >= 5
+            if f["oi_verdict"] != "OI_ROSE" or f["lean"] not in ("BULLISH", "BEARISH") or not extreme or self.store.get_state(seen, ""):
+                continue
+            self.store.set_state(seen, now.isoformat())
+            if sym in held or entries >= MAX_ENTRIES_PER_STEP or len(held) >= p.max_open or self._sector_full(sym, held):
+                out["skipped"] += 1
+                continue
+            made = self._enter(sym, "C" if f["lean"] == "BULLISH" else "P", now, out,
+                               {"from_contract": f["contract"], "prior_day": f["prior_day"], "prior_volume": f["prior_volume"], "prior_oi": f["prior_oi"],
+                                "oi_change": f["oi_change"], "position_read": f["position_read"], "prior_ratio": f.get("prior_ratio"),
+                                "direction": "up" if f["lean"] == "BULLISH" else "down"},
+                               {"earnings_state": self._earnings_state(sym, now.date())})
+            if made:
+                held[sym] = made
+                entries += 1
+
+
+# ------------------------------------------------------------ all five together
+class OptionLanes:
+    def __init__(self, provider: MarketDataProvider, store: Store, *, clock: Callable[[], datetime] = utcnow,
+                 calendar: Optional[EventCalendar] = None) -> None:
+        self.provider, self.store, self.clock = provider, store, clock
+        self.feed = Feed(provider, clock)
+        self.lanes = [OptionLane(provider, store, p, self.feed, clock=clock, calendar=calendar) for p in ALL_PARAMS]
+
+    def step(self, force: bool = False) -> list[dict[str, Any]]:
+        return [lane.step(force) for lane in self.lanes]
+
+    def reports(self, now: datetime) -> dict[str, Any]:
+        fict = self.provider.fictional
+        lanes, closed_all = [], []
+        for p in ALL_PARAMS:
+            rep = lane_report(self.store, p.lane, fict, now, rules=rules_text(p), limitations=LIMITATIONS, symbols=p.symbols or UNIVERSE, exit_text=EXIT_TEXT)
+            lanes.append({**rep, "label": p.label, "kind": p.kind, "why": p.why, "experimental": p.experimental,
+                          "params": {"budget_usd": p.budget_usd, "max_open": p.max_open, "dte": [p.dte_min, p.dte_max], "otm_pct": p.otm_pct,
+                                     "stop_pct": p.stop_pct, "target_pct": p.target_pct, "both_ways": p.both_ways}})
+            closed_all += self.store.lane_trades(p.lane, fict, 500)
+        closed = [t for t in closed_all if t["closed_at"] is not None]
+        return {"fictional": fict, "as_of": now.isoformat(), "lanes": lanes, "digest": digest(closed)}

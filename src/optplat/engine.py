@@ -31,6 +31,7 @@ from .risk import RiskPolicy
 from .scanner import Scanner
 from .shortterm import ShortTermLane
 from .swing import SwingLane
+from .optionlanes import OptionLanes
 from .strategy import Strategy
 
 SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
@@ -56,6 +57,7 @@ class EngineConfig:
     committee_mode: str = "shadow"  # off | shadow (records its votes only) | active (its vote and size apply)
     shortterm_enabled: bool = False  # research lane: simulated intraday share trades on the underlying, no orders
     swing_enabled: bool = False  # research lane: simulated multi-day share trades on daily bars, no orders
+    option_lanes_enabled: bool = False  # research lanes: simulated long calls and puts from real chain quotes, no orders
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -87,7 +89,7 @@ class EngineConfig:
         for name, value in asdict(self).items():
             if name == "watchlist":
                 continue
-            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots", "shortterm_enabled", "swing_enabled")):
+            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots", "shortterm_enabled", "swing_enabled", "option_lanes_enabled")):
                 raise ValueError(f"{name} has the wrong type")
         checks = [
             (0 <= self.max_new_per_cycle <= 5, "max_new_per_cycle must be 0-5"),
@@ -144,6 +146,7 @@ class TradingEngine:
         self.scanner = Scanner(provider, self.store, clock=clock)
         self.shortterm = ShortTermLane(provider, self.store, clock=clock)
         self.swing = SwingLane(provider, self.store, clock=clock, calendar=self.calendar)
+        self.option_lanes = OptionLanes(provider, self.store, clock=clock, calendar=self.calendar)
 
     # ---- config -------------------------------------------------------
     def config(self) -> EngineConfig:
@@ -410,6 +413,20 @@ class TradingEngine:
             if not self.config().swing_enabled:
                 return None
             return self.swing.step(force=force)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def maybe_option_lanes(self, force: bool = False) -> Optional[list[dict[str, Any]]]:
+        """One pass of the five options research lanes when they are switched on and quotes exist (the market is open,
+        or the data is fictional with hours not enforced). Each lane throttles itself. Nothing here places an order, and
+        nothing raises into the trading loop."""
+        try:
+            cfg = self.config()
+            if not cfg.option_lanes_enabled:
+                return None
+            if not session_status(self.clock())[0] and self._hours_enforced(cfg):
+                return None
+            return self.option_lanes.step(force=force)
         except Exception:  # noqa: BLE001
             return None
 
@@ -752,6 +769,7 @@ class Runner:
                 self.engine.maybe_scan()
                 self.engine.maybe_shortterm()
                 self.engine.maybe_swing()
+                self.engine.maybe_option_lanes()
             except Exception as exc:  # noqa: BLE001 - keep the loop alive; the error is surfaced in status
                 self.last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
             self._stop.wait(self.engine.config().interval_s)

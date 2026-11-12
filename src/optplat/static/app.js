@@ -2,7 +2,7 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
   const phone = window.matchMedia("(max-width:860px)");
-  const PAGES = ["desk", "trades", "swing", "shortterm", "market", "agents", "research", "system"];
+  const PAGES = ["desk", "trades", "options", "swing", "shortterm", "market", "agents", "research", "system"];
   let token = "";
   try { token = sessionStorage.getItem("optplat_token") || ""; } catch (e) { /* storage unavailable */ }
   // The launcher opens /#token=... . A URL fragment is never sent to the server. Read it once, keep it for this
@@ -16,7 +16,7 @@
   const S = {
     killState: false, lastPoints: [], core: null, connected: false,
     trades: null, filter: "all", query: "", sort: { key: "entry_time", dir: -1 }, openTrade: null, opener: null,
-    scan: null, marketTab: "active", unusualFilter: "reviewable",
+    scan: null, marketTab: "heat", unusualFilter: "all", opt: null, optLane: "shortterm-options-base",
   };
 
   // ---------------------------------------------------------------- DOM helpers (textContent only)
@@ -104,7 +104,7 @@
     document.querySelectorAll("a.nav").forEach((a) => {
       if (a.getAttribute("data-page") === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
-    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", swing: "Swing", shortterm: "Short-term", market: "Market", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
+    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
   }
 
   // ---------------------------------------------------------------- equity chart (unchanged behaviour)
@@ -337,6 +337,7 @@
     $("cfg-exits").checked = status.config.auto_exits;
     $("cfg-shortterm").checked = !!cfg.shortterm_enabled;
     $("cfg-swing").checked = !!cfg.swing_enabled;
+    $("cfg-optlanes").checked = !!cfg.option_lanes_enabled;
     $("cfg-hours").checked = status.market.hours_enforced;
     $("cfg-hours").disabled = status.market.hours_enforced && !status.data_source.fictional; // real data: always on
     if (document.activeElement !== $("cfg-watch")) $("cfg-watch").value = status.config.watchlist.join(", ");
@@ -599,13 +600,13 @@
   const LANES = {
     st: {
       path: "/api/shortterm", exits: ST_EXIT, cadence: "Runs with the loop, on completed 5-minute bars",
-      intro: "This is the day-trading experiment, kept apart from the long-term options book. It simulates buying shares of six liquid names when a fast trend line crosses above the day's average price, and selling when that fails. It places no orders. ",
+      intro: "This is the share version of the day-trading experiment, kept as the benchmark for the short-term options lanes. It simulates buying shares of six liquid names when a fast trend line crosses above the day's average price, and selling when that fails. It places no orders. ",
       hint: "A trade needs a fresh crossing between 10:00 and 15:00 New York time on a name in the list.",
       why: (w) => "EMA " + w.ema + " crossed above VWAP " + w.vwap + " (was " + w.prev_ema + " under " + w.prev_vwap + ")",
     },
     sw: {
       path: "/api/swing", exits: SW_EXIT, cadence: "Checks about once an hour, on completed daily bars",
-      intro: "This is the swing experiment, kept apart from the long-term options book. It simulates buying shares of liquid names after a pullback inside an uptrend, holds them for up to ten trading days, and sells at a stop, a target, a broken trend or the time limit. It places no orders. ",
+      intro: "This is the share version of the swing experiment, kept as the benchmark for the swing options lanes. It simulates buying shares of liquid names after a pullback inside an uptrend, holds them for up to ten trading days, and sells at a stop, a target, a broken trend or the time limit. It places no orders. ",
       hint: "A trade needs an uptrend, a recent dip in momentum that is turning up, and no earnings in the way.",
       why: (w) => "Dip to RSI " + w.rsi_dip + ", now " + w.rsi + ". Stop " + w.stop + ", target " + w.target,
     },
@@ -653,54 +654,221 @@
   async function loadSwing() { renderLane("sw", await api("/api/swing")); }
 
   // ---------------------------------------------------------------- Market scan
-  const TABS = [{ id: "active", label: "Most active names" }, { id: "unusual", label: "Unusual options activity" }, { id: "options", label: "Option volume by name" }];
+  const TABS = [{ id: "heat", label: "Heat map" }, { id: "unusual", label: "Unusual options" }, { id: "follow", label: "Did it stick?" },
+    { id: "active", label: "Most active names" }, { id: "options", label: "Option volume by name" }];
+  const TONE = { BROAD_STRENGTH: "▲ Broad strength", BROAD_WEAKNESS: "▼ Broad weakness", MIXED: "◆ Mixed", UNKNOWN: "? Unknown" };
+  const FLOW = { BULLISH_LEAN: "▲ Bullish lean", BEARISH_LEAN: "▼ Bearish lean", BALANCED: "◆ Balanced", UNCLEAR: "? Unclear" };
+  const POSITION = { BUY_TO_OPEN: "likely bought to open", SELL_TO_OPEN: "likely sold to open", BUY_TO_CLOSE: "likely bought to close", SELL_TO_CLOSE: "likely sold to close", UNCLEAR: "open or close unclear" };
+  const LEAN = { BULLISH: "▲ Bullish read", BEARISH: "▼ Bearish read", UNCLEAR: "" };
+  const arrow = (v) => (v > 0 ? "▲ " : v < 0 ? "▼ " : "◆ ");
+  const signed = (v) => arrow(v) + (v > 0 ? "+" : "") + Number(v).toFixed(2) + "%";
+  const PRINT = { AT_ASK: "At the ask: buy leaning", ABOVE_ASK: "Above the ask: buy leaning", AT_BID: "At the bid: sell leaning", BELOW_BID: "Below the bid: sell leaning", MID: "Mid price: unclear", UNKNOWN: "No usable last price" };
+  const shortDay = (iso) => { const d = new Date(iso + "T12:00:00"); return isNaN(d) ? String(iso) : d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); };
+  function histText(h) {
+    if (!h) return "First time seen";
+    const bits = [];
+    if (h.oi_change !== null && h.oi_change !== undefined) bits.push("open interest " + (h.oi_change >= 0 ? "+" : "") + num(h.oi_change) + " since " + shortDay(h.prior_day));
+    else bits.push(h.oi_verdict === "TOO_FAR_APART" ? "seen " + shortDay(h.prior_day) + ", too long ago to compare" : "seen " + shortDay(h.prior_day));
+    if (h.position_read && h.position_read !== "UNCLEAR") bits.push(POSITION[h.position_read]);
+    if (h.lean && LEAN[h.lean]) bits.push(LEAN[h.lean]);
+    return bits.join(", ");
+  }
+  function renderHeat(res) {
+    const host = $("scan-heat"), hm = res.heat_map;
+    if (!hm || !hm.sectors.length) { empty(host, "No heat map", "The scan returned no ranked names."); return; }
+    host.replaceChildren();
+    hm.sectors.forEach((sec) => {
+      const wrap = el("div", null, "sector"), head = el("header");
+      kids(head, [el("b", sec.sector), span(signed(sec.avg_change_pct) + " on average", "num " + tone(sec.avg_change_pct)),
+        span(sec.advancers + " up, " + sec.decliners + " down" + (sec.surging ? ", " + sec.surging + " on heavy volume" : ""), "muted")]);
+      const tiles = el("div", null, "tiles");
+      hm.names.filter((n) => n.sector === sec.sector).sort((x, y) => y.change_pct - x.change_pct).forEach((n) => {
+        const t = el("div", null, "tile " + (n.change_pct > 0 ? "up" : n.change_pct < 0 ? "down" : ""));
+        t.style.setProperty("--k", Math.min(60, Math.abs(n.change_pct) * 12 + 6) + "%");
+        t.title = n.symbol + (n.relative_volume === null ? "" : ", volume " + n.relative_volume.toFixed(1) + "x its usual");
+        kids(t, [el("b", n.symbol), el("small", signed(n.change_pct) + (n.relative_volume !== null && n.relative_volume >= 2 ? " · " + n.relative_volume.toFixed(1) + "x vol" : ""))]);
+        tiles.appendChild(t);
+      });
+      kids(wrap, [head, tiles]);
+      host.appendChild(wrap);
+    });
+  }
+  function renderSentiment(res) {
+    const host = $("scan-sentiment");
+    host.replaceChildren();
+    const s = res && res.sentiment;
+    if (!s) return;
+    kids(host, [
+      fig(TONE[s.tone] || s.tone, "Stock tape", s.breadth_pct === null ? "" : s.advancers + " of " + s.names + " names up (" + s.breadth_pct + "%)"),
+      fig(s.spy_change_pct === null ? "n/a" : signed(s.spy_change_pct), "SPY, last full day", "", tone(s.spy_change_pct)),
+      fig(s.call_put_ratio === null ? "n/a" : String(s.call_put_ratio), "Calls per put", num(s.call_volume) + " calls, " + num(s.put_volume) + " puts in the chains read"),
+      fig(FLOW[s.flow_lean] || s.flow_lean, "Unusual option flow", "bought $" + num(s.bullish_flow_usd) + " bullish, $" + num(s.bearish_flow_usd) + " bearish, $" + num(s.unclear_flow_usd) + " unclear"),
+    ]);
+  }
   function renderMarket() {
     const d = S.scan, res = d && d.result;
     const st = d && d.status;
-    $("scan-lede").textContent = "A fixed list of about 75 liquid names ranked by dollar volume, and the option contracts trading far above their open interest. This is a screen for where to look, not a signal to trade.";
+    $("scan-lede").textContent = "About " + ((res && res.coverage && res.coverage.universe) || 200) + " liquid names from mega-caps down to mid-caps, ranked by dollar volume, with the option contracts trading far above their open interest, and what the sectors and the flow are doing. A screen for where to look, not a signal to trade.";
     $("scan-status").textContent = !st ? "" : st.running ? "Scanning now" : st.last_scan_at ? "Last scan " + fmtTime(st.last_scan_at) + (d.interval_s ? ", repeats every " + Math.round(d.interval_s / 60) + " minutes" : ", automatic scanning is off") : "No scan has run yet";
     $("btn-scan").disabled = !!(st && st.running);
     chips($("market-tabs"), TABS, S.marketTab, (id) => { S.marketTab = id; renderMarket(); }, "tab");
-    $("scan-active-panel").hidden = S.marketTab !== "active";
-    $("scan-unusual-panel").hidden = S.marketTab !== "unusual";
-    $("scan-options-panel").hidden = S.marketTab !== "options";
+    ["heat", "unusual", "follow", "active", "options"].forEach((id) => { $("scan-" + id + "-panel").hidden = S.marketTab !== id; });
+    renderSentiment(res);
     const notes = $("scan-notes");
     notes.replaceChildren();
     ((res && res.limitations) || []).forEach((x) => notes.appendChild(el("li", x)));
+    if (res && res.sentiment) notes.appendChild(el("li", res.sentiment.basis));
     if (res && res.fictional) notes.appendChild(el("li", "This scan ran on fictional demo data. The names and volumes are invented.", "warn"));
     if (res && res.errors && res.errors.length) notes.appendChild(el("li", "Problems during the scan: " + res.errors.slice(0, 6).join("; ")));
     if (!res) {
-      ["scan-active", "scan-unusual", "scan-options"].forEach((id) => empty($(id), "No scan yet", "Choose Scan now, or set a scan interval in Controls."));
+      ["scan-heat", "scan-active", "scan-unusual", "scan-follow", "scan-options"].forEach((id) => empty($(id), "No scan yet", "Choose Scan now, or set a scan interval in Controls."));
       return;
     }
+    renderHeat(res);
     table($("scan-active"), [
       { label: "Rank", right: true, get: (r) => r.rank }, { label: "Name", get: (r) => el("b", r.symbol) },
       { label: "Close", right: true, get: (r) => money(r.close) },
-      { label: "Day change", right: true, get: (r) => span(pct(r.change_pct), tone(r.change_pct)) },
+      { label: "Day change", right: true, get: (r) => span(signed(r.change_pct), tone(r.change_pct)) },
       { label: "Dollar volume", right: true, get: (r) => "$" + (r.dollar_volume / 1e9 >= 1 ? (r.dollar_volume / 1e9).toFixed(1) + "B" : (r.dollar_volume / 1e6).toFixed(0) + "M") },
       { label: "Volume vs usual", right: true, get: (r) => r.relative_volume === null ? "n/a" : span(r.relative_volume.toFixed(1) + "x", r.surge ? "tag warn" : "") },
     ], res.active_names, "No ranked names", (res.errors || [])[0] || "The scan returned no daily bars.");
 
-    chips($("scan-filters"), [{ id: "reviewable", label: "Tradable by the rules" }, { id: "all", label: "Everything unusual" }], S.unusualFilter, (id) => { S.unusualFilter = id; renderMarket(); });
-    const un = res.unusual.filter((r) => S.unusualFilter === "all" || r.decision === "REVIEWABLE");
+    chips($("scan-filters"), [{ id: "all", label: "Everything unusual" }, { id: "low", label: "Very low open interest" }, { id: "reviewable", label: "Tradable by the rules" }], S.unusualFilter, (id) => { S.unusualFilter = id; renderMarket(); });
+    const un = res.unusual.filter((r) => S.unusualFilter === "all" || (S.unusualFilter === "low" ? r.low_oi : r.decision === "REVIEWABLE"));
+    const th = res.thresholds;
     table($("scan-unusual"), [
       { label: "Name", get: (r) => el("b", r.symbol) },
       { label: "Contract", get: (r) => el("span", (r.right === "C" ? "Call " : "Put ") + r.strike + ", " + fmtDay(r.expiry) + " (" + r.dte + "d)", "") },
       { label: "Volume", right: true, get: (r) => num(r.volume) },
-      { label: "Open interest", right: true, get: (r) => r.open_interest === null ? "missing" : (r.oi_state === "REPORTED_ZERO" ? "zero" : num(r.open_interest)) },
+      { label: "Open interest", right: true, get: (r) => { const t = r.open_interest === null ? "missing" : (r.oi_state === "REPORTED_ZERO" ? "zero" : num(r.open_interest)); return r.low_oi ? kids(el("span"), [span(t + " "), span("Low", "tag warn")]) : t; } },
       { label: "Volume / OI", right: true, get: (r) => r.volume_oi_ratio === null ? "no ratio" : r.volume_oi_ratio + "x" },
+      { label: "Last trade", get: (r) => PRINT[r.print] || r.print },
+      { label: "Seen before?", get: (r) => (r.sightings > 1 ? "Day " + r.sightings + ": " : "") + histText(r.history) },
       { label: "Spread", right: true, get: (r) => r.spread_pct.toFixed(1) + "%" },
       { label: "Quoted turnover", right: true, get: (r) => "$" + num(r.quoted_turnover_usd) },
       { label: "Status", get: (r) => r.decision === "REVIEWABLE" ? el("span", "Reviewable", "tag info") : el("span", "Watch only: " + r.why_observe_only, "tag") },
-    ], un, "Nothing unusual by these thresholds", "Thresholds: at least " + res.thresholds.min_volume + " contracts and volume at " + res.thresholds.min_volume_oi_ratio + "x open interest or more.");
+    ], un, "Nothing unusual by these thresholds", "Thresholds: at least " + th.min_volume + " contracts at " + th.min_volume_oi_ratio + "x open interest or more" + (th.low_oi_below ? ", or at least " + th.min_volume_when_oi_low + " contracts when open interest is under " + th.low_oi_below : "") + ".");
+
+    table($("scan-follow"), [
+      { label: "Name", get: (f) => el("b", f.symbol) },
+      { label: "Contract", get: (f) => (f.right === "C" ? "Call " : "Put ") + f.strike + ", " + fmtDay(f.expiry) + " (" + f.dte + "d)" },
+      { label: "Unusual on", get: (f) => shortDay(f.prior_day) },
+      { label: "Volume then", right: true, get: (f) => num(f.prior_volume) },
+      { label: "Open interest", right: true, get: (f) => f.oi_change === null ? "n/a" : num(f.prior_oi) + " to " + num(f.oi_now) + " (" + (f.oi_change >= 0 ? "+" : "") + num(f.oi_change) + ")" },
+      { label: "Did it stick?", get: (f) => f.oi_verdict === "OI_ROSE" ? el("span", "Yes, positions opened", "tag gain") : f.oi_verdict === "OI_FELL" ? el("span", "No, positions closed", "tag loss") : el("span", words(f.oi_verdict), "tag") },
+      { label: "Read", get: (f) => [POSITION[f.position_read], LEAN[f.lean]].filter(Boolean).join(", ") || "Unclear" },
+      { label: "Volume today", right: true, get: (f) => num(f.volume_today) },
+    ], res.follow_ups || [], "No earlier unusual contracts to follow up", "The scanner remembers each day's unusual contracts and checks their open interest the next trading day, so this fills from the second day of scanning.");
+
     table($("scan-options"), [
-      { label: "Name", get: (r) => el("b", r.symbol) }, { label: "Call volume", right: true, get: (r) => num(r.call_volume) },
+      { label: "Name", get: (r) => el("b", r.symbol) }, { label: "Sector", get: (r) => r.sector || "" }, { label: "Call volume", right: true, get: (r) => num(r.call_volume) },
       { label: "Put volume", right: true, get: (r) => num(r.put_volume) },
       { label: "Calls per put", right: true, get: (r) => r.call_put_ratio === null ? "no puts" : r.call_put_ratio },
       { label: "Unusual contracts", right: true, get: (r) => r.unusual_count }, { label: "Contracts read", right: true, get: (r) => r.contracts },
     ], res.option_names, "No option chains were read", (res.errors || [])[0] || "");
   }
   async function loadMarket() { S.scan = await api("/api/scan"); renderMarket(); }
+
+  // ---------------------------------------------------------------- Options lanes
+  const OP_EXIT = { stop: "Stop", target: "Target", vwap_lost: "Lost VWAP", flat_by_close: "Closed for the day", carried_over: "Left over", trend_break: "Trend broke", time: "Time stop", expiry_near: "Near expiry", expired_unmarked: "Expired" };
+  const STATE = { FUND: "a fund, no earnings", CLEAR: "no earnings in the way", SOON: "earnings close by", UNKNOWN: "earnings date unknown", "n/a": "not checked" };
+  function describeSignal(o) {
+    const g = o.signal || {};
+    if (o.kind === "short") return "The 9-bar EMA " + g.ema + " crossed " + (g.direction === "up" ? "above" : "below") + " the session VWAP " + g.vwap + ".";
+    if (o.kind === "swing") return "Daily close " + g.close + " " + (g.direction === "up" ? "after a dip, RSI turning up (" + g.rsi + ")" : "after a bounce in a downtrend, RSI turning down (" + g.rsi + ")") + ".";
+    if (o.kind === "flow") return "On " + shortDay(g.prior_day) + " " + num(g.prior_volume) + " contracts of " + g.from_contract + " traded against " + num(g.prior_oi) + " open interest; open interest then rose by " + num(g.oi_change) + ", read as " + (POSITION[g.position_read] || "unclear") + ".";
+    return "";
+  }
+  function tradeItem(t, exits) {
+    const o = t.why_entered || {}, open = t.status === "OPEN";
+    const d = el("details", null, "pm");
+    const sum = el("summary");
+    const label = open ? "Open" : (exits[t.close_reason] || words(t.close_reason));
+    kids(sum, [span(o.right === "C" ? "Call" : "Put", "tag " + (o.right === "C" ? "gain" : "loss")), el("b", t.symbol),
+      span(o.strike + " expiring " + shortDay(o.expiry) + " (" + o.dte + "d at entry)", "muted"),
+      span(t.quantity + " at " + Number(t.entry_price).toFixed(2) + (t.exit_price === null ? "" : " to " + Number(t.exit_price).toFixed(2)), "num"),
+      span(label, "tag " + (open ? "info" : t.pnl > 0 ? "gain" : "loss"))]);
+    const money_ = open ? (t.unrealized_pnl === null ? "no mark yet" : arrow(t.unrealized_pnl) + sgn(t.unrealized_pnl)) : arrow(t.pnl) + sgn(t.pnl) + " (" + pct(t.pnl_pct) + ")";
+    sum.appendChild(span(money_, "pm-money " + tone(open ? t.unrealized_pnl : t.pnl)));
+    const body = el("div", null, "pm-body"), facts = el("dl", null, "facts");
+    const row = (k, v) => { facts.appendChild(el("dt", k)); facts.appendChild(el("dd", v)); };
+    row("Opened", fmtTime(t.opened_at));
+    row("Why it entered", describeSignal(o));
+    row("Paid", t.quantity + " contract" + (t.quantity > 1 ? "s" : "") + " at the ask of " + Number(t.entry_price).toFixed(2) + " ($" + num(Math.round(t.entry_price * t.quantity * 100)) + "), spread " + o.spread_pct + "%, open interest " + num(o.open_interest) + ", fees " + money(o.fees_open));
+    row("Stop and target", "Stop if the bid reaches " + (t.entry_price * (1 - o.stop_pct / 100)).toFixed(2) + ", target at " + (t.entry_price * (1 + o.target_pct / 100)).toFixed(2));
+    row("Earnings", STATE[o.earnings_state] || o.earnings_state);
+    if (open && t.mark_bid !== null) row("Last mark", "Bid " + Number(t.mark_bid).toFixed(2) + " at " + fmtTime(t.mark_at));
+    body.appendChild(facts);
+    const pm = t.postmortem;
+    if (!open && pm) {
+      const box = el("div");
+      box.appendChild(el("b", "Post-mortem"));
+      box.appendChild(el("p", pm.headline));
+      if (pm.lessons.length) { const u = el("ul", null, "plain"); pm.lessons.forEach((x) => u.appendChild(el("li", x))); box.appendChild(u); }
+      if (pm.try_next.length) { box.appendChild(el("b", "Test next")); const u = el("ul", null, "plain"); pm.try_next.forEach((x) => u.appendChild(el("li", x))); box.appendChild(u); }
+      if (t.close_text) box.appendChild(el("p", t.close_text, "muted"));
+      body.appendChild(box);
+    }
+    d.appendChild(sum); d.appendChild(body);
+    return d;
+  }
+  function renderOptions() {
+    const o = S.opt;
+    if (!o) return;
+    const d = o.ops, lanes = d.lanes;
+    const total = lanes.reduce((a, l) => a + l.summary.closed, 0);
+    $("op-lede").textContent = (d.enabled ? "" : "The lanes are switched off. Turn them on under Controls. ") +
+      "Five simulated experiments buy calls and puts using real chain quotes: filled at the ask, closed at the bid, with a fee each way. Risk on each is the premium paid. The aggressive versions are loose on purpose, so there are more and different losses to learn from. Nothing here places an order. " +
+      "With " + total + " closed trades in total, none of this shows an edge yet." + (d.fictional ? " These trades come from fictional demo data." : "");
+    $("op-status").textContent = d.enabled ? "Short-term lanes check every 2 minutes, swing every hour, flow every 30 minutes, while the market is open" : "Off";
+    $("btn-op-step").disabled = !d.enabled;
+    const bench = [
+      { name: "Swing, shares (benchmark)", what: "Shares", s: Object.assign({}, o.swing.summary, { unrealized_pnl: undefined }) },
+      { name: "Short-term, shares (benchmark)", what: "Shares", s: Object.assign({}, o.st.summary, { unrealized_pnl: undefined }) },
+    ];
+    const rows = lanes.map((l) => ({ name: l.label, what: l.params.both_ways ? "Calls and puts" : "Calls", s: l.summary, lane: l.lane })).concat(bench);
+    table($("op-compare"), [
+      { label: "Lane", get: (r) => r.lane ? el("b", r.name) : span(r.name, "muted") }, { label: "Instrument", get: (r) => r.what },
+      { label: "Trades", right: true, get: (r) => r.s.open + " open, " + r.s.closed + " closed" },
+      { label: "Winners", right: true, get: (r) => r.s.win_rate_pct === null ? "n/a" : r.s.win_rate_pct + "%" },
+      { label: "Average per trade", right: true, get: (r) => r.s.avg_return_pct === null ? "n/a" : span(arrow(r.s.avg_return_pct) + pct(r.s.avg_return_pct), tone(r.s.avg_return_pct)) },
+      { label: "Realized", right: true, get: (r) => span(arrow(r.s.realized_pnl) + sgn(r.s.realized_pnl), tone(r.s.realized_pnl)) },
+      { label: "Open now", right: true, get: (r) => r.s.unrealized_pnl === undefined ? "n/a" : span(arrow(r.s.unrealized_pnl) + sgn(r.s.unrealized_pnl), tone(r.s.unrealized_pnl)) },
+    ], rows, "No lanes");
+    chips($("op-tabs"), lanes.map((l) => ({ id: l.lane, label: l.label })), S.optLane, (id) => { S.optLane = id; renderOptions(); }, "tab");
+    const lane = lanes.find((l) => l.lane === S.optLane) || lanes[0], sm = lane.summary;
+    $("op-why").textContent = lane.why + " Up to $" + num(lane.params.budget_usd) + " of premium per trade, " + lane.params.dte[0] + " to " + lane.params.dte[1] + " days to expiry, at most " + lane.params.max_open + " open.";
+    const f = $("op-summary");
+    f.replaceChildren();
+    kids(f, [
+      fig(String(sm.total), "Simulated trades", sm.open + " open, " + sm.closed + " closed"),
+      fig(sm.win_rate_pct === null ? "n/a" : sm.win_rate_pct + "%", "Winners", sm.closed ? sm.wins + " of " + sm.closed + " closed" : "no closed trades"),
+      fig(sm.avg_return_pct === null ? "n/a" : arrow(sm.avg_return_pct) + pct(sm.avg_return_pct), "Average per trade", "of the premium paid, after fees", tone(sm.avg_return_pct)),
+      fig(arrow(sm.realized_pnl) + sgn(sm.realized_pnl), "Realized", "simulated", tone(sm.realized_pnl)),
+      fig(arrow(sm.unrealized_pnl) + sgn(sm.unrealized_pnl), "Open now", "at the last bid", tone(sm.unrealized_pnl)),
+    ]);
+    const host = $("op-trades");
+    if (!lane.trades.length) empty(host, "No simulated trades yet", d.enabled ? "A trade needs this lane's signal while the market is open." : "Switch the options lanes on under Controls.");
+    else { host.replaceChildren(); lane.trades.slice(0, 60).forEach((t) => host.appendChild(tradeItem(t, OP_EXIT))); }
+    const dg = d.digest;
+    table($("op-digest"), [
+      { label: "Cause", get: (r) => el("b", words(r.tag)) }, { label: "Trades", right: true, get: (r) => r.count },
+      { label: "Winners", right: true, get: (r) => r.win_rate_pct + "%" },
+      { label: "Average", right: true, get: (r) => { const x = span(arrow(r.avg_net_pct) + pct(r.avg_net_pct), tone(r.avg_net_pct)); x.style.whiteSpace = "nowrap"; return x; } },
+      { label: "Status", get: (r) => el("span", r.pattern ? "Pattern" : "Too few to say", "tag " + (r.pattern ? "warn" : "")) },
+      { label: "What it means", get: (r) => r.means }, { label: "Test next", get: (r) => r.try_next },
+    ], dg.tags, "No post-mortems yet", "Each closed trade is reviewed automatically when it closes.");
+    $("op-digest-note").textContent = dg.note + " " + dg.trades_reviewed + " closed trades reviewed.";
+    const r = $("op-rules"), l = $("op-limits");
+    r.replaceChildren(); l.replaceChildren();
+    lane.rules.forEach((x) => r.appendChild(el("li", x)));
+    lane.limitations.forEach((x) => l.appendChild(el("li", x)));
+  }
+  async function loadOptions() {
+    const [ops, swing, st] = await Promise.all([api("/api/optlanes"), api("/api/swing"), api("/api/shortterm")]);
+    S.opt = { ops, swing, st };
+    renderOptions();
+  }
 
   // ---------------------------------------------------------------- Agents
   const pctText = (v) => (v === null || v === undefined ? "n/a" : (v >= 0 ? "+" : "") + v + "%");
@@ -753,6 +921,7 @@
   async function loadPage() {
     const page = route();
     if (page === "trades") await loadTrades();
+    else if (page === "options") await loadOptions();
     else if (page === "swing") await loadSwing();
     else if (page === "shortterm") await loadShortterm();
     else if (page === "market") await loadMarket();
@@ -809,10 +978,11 @@
     body: JSON.stringify({
       auto_entries: $("cfg-entries").checked, auto_exits: $("cfg-exits").checked,
       enforce_market_hours: $("cfg-hours").checked, committee_mode: $("cfg-committee").value,
-      scan_interval_s: Number($("cfg-scan").value), shortterm_enabled: $("cfg-shortterm").checked, swing_enabled: $("cfg-swing").checked,
+      scan_interval_s: Number($("cfg-scan").value), shortterm_enabled: $("cfg-shortterm").checked, swing_enabled: $("cfg-swing").checked, option_lanes_enabled: $("cfg-optlanes").checked,
       watchlist: $("cfg-watch").value.split(/[,\s]+/).filter(Boolean),
     }),
   })));
+  $("btn-op-step").addEventListener("click", () => act(async () => { await api("/api/optlanes/step", { method: "POST" }); }));
   $("btn-sw-step").addEventListener("click", () => act(async () => { await api("/api/swing/step", { method: "POST" }); }));
   $("btn-st-step").addEventListener("click", () => act(async () => { await api("/api/shortterm/step", { method: "POST" }); }));
   $("btn-scan").addEventListener("click", () => act(async () => {
@@ -830,7 +1000,7 @@
   $("btn-drawer-close").addEventListener("click", closeTrade);
   $("scrim").addEventListener("click", closeTrade);
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeTrade(); trapFocus(ev); });
-  const onBreak = () => { if (S.trades && route() === "trades") renderTrades(); if (route() === "shortterm") loadShortterm().catch(() => {}); if (route() === "swing") loadSwing().catch(() => {}); };
+  const onBreak = () => { if (S.trades && route() === "trades") renderTrades(); if (route() === "shortterm") loadShortterm().catch(() => {}); if (route() === "swing") loadSwing().catch(() => {}); if (route() === "options" && S.opt) renderOptions(); };
   if (phone.addEventListener) phone.addEventListener("change", onBreak); else if (phone.addListener) phone.addListener(onBreak);
   window.addEventListener("hashchange", () => { showPage(); if (S.connected && route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); if (S.connected) loadPage().catch((e) => { $("updated").textContent = "Error: " + e.message; }); });
 

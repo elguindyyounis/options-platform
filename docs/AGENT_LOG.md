@@ -2,6 +2,21 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-12: options-first research lanes and scanner v2 (human-directed session)
+
+* Owner asked for options-heavy, more experimental, automated research. Added: `universe.py` (200 names, 19 sectors),
+  scanner v2 (open interest under 10 flagged at 100+ contracts, weeklies, `ChainRow.last`, `trade_side`, `unusual_history`
+  table, `compare_with_prior`, `follow_ups`, heat map, sentiment), `optionlanes.py` (five lanes), `postmortem.py`, a
+  per-sector cap on the share swing lane, `snapshot_window` on providers, `/api/optlanes`, an Options dashboard page and
+  Market tabs (heat map, did it stick).
+* Safety: the option lanes import nothing from orders, broker, risk or engine (a test checks it); `RiskPolicy`, its 7-day
+  minimum and every default are untouched; lanes default off. Aggressive variants only loosen the lanes' own rules.
+* Verified: 457 tests; headless Chromium on demo data at 1280 and 390 px, light and dark, no overflow or console errors.
+* Not verified: live Yahoo `lastPrice` semantics, `snapshot_window` and chain-read rate limits for ~60 chains per scan,
+  the 200-name daily download, whether open interest updates promptly, after-hours quotes (the quality gate drops zero-ask
+  rows, so scans and lanes only work while quotes exist). Buy/sell and open/close reads are inference only.
+* Owner decisions: raising real risk limits or caps, promoting anything, licensed data, a real broker.
+
 ## 2026-11-12: "it only did one trade" (owner's real run, read from their database copy with their permission)
 
 * The owner's real database showed the swing lane working on real Yahoo data: 72 of 74 names judged on the 2026-11-11

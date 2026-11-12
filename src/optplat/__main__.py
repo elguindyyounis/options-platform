@@ -100,6 +100,8 @@ def main() -> None:
         engine.set_config({"shortterm_enabled": True})  # research lane only: simulated share trades, no orders
     if os.environ.get("OPTPLAT_SWING", "") == "1":
         engine.set_config({"swing_enabled": True})  # research lane only: simulated share trades, no orders
+    if os.environ.get("OPTPLAT_OPTION_LANES", "") == "1":
+        engine.set_config({"option_lanes_enabled": True})  # research lanes only: simulated long calls and puts, no orders
     mode = os.environ.get("OPTPLAT_COMMITTEE", "")
     if mode:
         if mode not in ("off", "shadow", "active"):

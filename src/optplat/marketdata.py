@@ -24,6 +24,7 @@ class ChainRow:
     volume: Optional[int] = None
     open_interest: Optional[int] = None
     iv: Optional[float] = None
+    last: Optional[float] = None  # last traded price, when the feed has it
 
     def to_quote(self, as_of: datetime, source: str, verified: bool) -> Quote:
         return Quote(self.contract, self.bid, self.ask, as_of, source, timestamp_verified=verified)
@@ -59,6 +60,7 @@ def snapshot_to_dict(snap: MarketSnapshot) -> dict[str, Any]:
                 "volume": r.volume,
                 "open_interest": r.open_interest,
                 "iv": r.iv,
+                "last": r.last,
             }
             for r in snap.rows
         ],
@@ -78,6 +80,7 @@ def snapshot_from_dict(d: dict[str, Any]) -> MarketSnapshot:
                 r.get("volume"),
                 r.get("open_interest"),
                 r.get("iv"),
+                r.get("last"),
             )
             for r in d["rows"]
         ),
@@ -127,6 +130,12 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def quotes_for(self, contracts: Sequence[OptionContract]) -> list[Quote]:
         """Current quotes for specific contracts (used to keep held positions marked)."""
+
+    def snapshot_window(self, symbol: str, min_dte: int, max_dte: int, max_expiries: int = 4) -> MarketSnapshot:
+        """Like ``snapshot`` but for the nearest ``max_expiries`` expirations between ``min_dte`` and ``max_dte`` days out.
+        Used by the research lanes and the scanner, which need weekly expirations the trading snapshot skips.
+        A provider that cannot do this falls back to its normal snapshot."""
+        return self.snapshot(symbol)
 
     def daily_bars(self, symbols: Sequence[str], months: int = 2) -> dict[str, list[Bar]]:
         """Daily bars per symbol (about two months by default, more for swing research). Optional: raise if unsupported."""
@@ -263,18 +272,31 @@ class DemoDataProvider(MarketDataProvider):
         m = abs(strike / spot - 1)
         volume = int(1500 * math.exp(-((m / 0.04) ** 2))) + 5
         oi = int(4000 * math.exp(-((m / 0.06) ** 2))) + 120
-        return ChainRow(OptionContract(symbol, expiry, right, strike), bid, ask, volume, oi, self._vol)
+        h = sum(map(ord, f"{symbol}{expiry}{right.value}{strike}"))
+        if m > 0.08 and h % 9 == 0:  # fictional fresh wing positioning, so the unusual scanner has low-OI cases to show
+            volume, oi = 220 + (h * 7) % 400, h % 8
+        # a fictional last trade near the ask, near the bid, or mid, so the buy/sell inference has all three to show
+        last = (ask, bid, round((bid + ask) / 2, 2))[h % 3]
+        return ChainRow(OptionContract(symbol, expiry, right, strike), bid, ask, volume, oi, self._vol, last)
 
     def snapshot(self, symbol: str) -> MarketSnapshot:
+        return self._build(symbol, [e for e in self._expiries() if (e - self._clock().date()).days >= 7])
+
+    def snapshot_window(self, symbol: str, min_dte: int, max_dte: int, max_expiries: int = 4) -> MarketSnapshot:
+        """Fictional weekly (Friday) expirations inside the window, plus today when the window starts at zero."""
+        today = self._clock().date()
+        days = [today + timedelta(days=n) for n in range(max(0, min_dte), max_dte + 1)]
+        picks = [d for d in days if d.weekday() == 4 or (d == today and min_dte <= 0)]
+        return self._build(symbol, picks[:max_expiries])
+
+    def _build(self, symbol: str, expiries: Sequence[date]) -> MarketSnapshot:
         closes = self._closes(symbol)
         spot = closes[-1]
         now = self._clock()
         step = 5.0 if spot > 100 else 1.0
         base = round(spot / step) * step
         rows: list[ChainRow] = []
-        for expiry in self._expiries():
-            if (expiry - now.date()).days < 7:
-                continue
+        for expiry in expiries:
             for k in range(-6, 7):
                 for right in (Right.CALL, Right.PUT):
                     row = self._row(symbol, spot, expiry, right, base + k * step)
@@ -338,6 +360,7 @@ def rows_from_records(records: Iterable[dict[str, Any]], symbol: str, expiry: da
         if strike is None or strike <= 0 or bid is None or ask is None or ask <= 0 or bid < 0 or bid > ask:
             continue
         volume, oi, iv = _num(r.get("volume")), _num(r.get("openInterest")), _num(r.get("impliedVolatility"))
+        last = _num(r.get("lastPrice"))
         if iv is not None and not 0 < iv < 10:
             iv = None
         rows.append(
@@ -348,6 +371,7 @@ def rows_from_records(records: Iterable[dict[str, Any]], symbol: str, expiry: da
                 int(volume) if volume is not None else None,
                 int(oi) if oi is not None else None,
                 iv,
+                last if last is not None and last > 0 else None,
             )
         )
     return rows
@@ -369,6 +393,12 @@ class YahooDataProvider(MarketDataProvider):
         )
 
     def snapshot(self, symbol: str) -> MarketSnapshot:
+        return self._read(symbol, 14, 180, self._max)
+
+    def snapshot_window(self, symbol: str, min_dte: int, max_dte: int, max_expiries: int = 4) -> MarketSnapshot:
+        return self._read(symbol, min_dte, max_dte, max_expiries)
+
+    def _read(self, symbol: str, min_dte: int, max_dte: int, max_expiries: int) -> MarketSnapshot:
         import yfinance as yf  # optional dependency: pip install -e ".[yahoo]"
 
         ticker = yf.Ticker(symbol)
@@ -380,10 +410,10 @@ class YahooDataProvider(MarketDataProvider):
         expiries = []
         for e in ticker.options or []:
             d = date.fromisoformat(e)
-            if 14 <= (d - today).days <= 180:
+            if min_dte <= (d - today).days <= max_dte:
                 expiries.append(d)
         rows: list[ChainRow] = []
-        for d in expiries[: self._max]:
+        for d in expiries[:max_expiries]:
             rows.extend(self._chain_rows(ticker, symbol, d))
         return MarketSnapshot(symbol, closes[-1], tuple(closes[-120:]), tuple(rows), self._clock(), self.name, False)
 

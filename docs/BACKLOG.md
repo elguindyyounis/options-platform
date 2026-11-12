@@ -75,6 +75,11 @@ Existing items, in order:
 
 ## Done
 
+* Options-first research (owner request 2026-11-12): scanner v2 (200-name sector-mapped universe, very-low-open-interest rule,
+  weekly expirations, last-trade buy/sell inference, next-day open-interest confirmation with a day-by-day memory), sector
+  heat map and sentiment, five simulated option lanes (short-term base and aggressive, swing base and aggressive, unusual
+  flow that stuck) beside the share lanes as benchmarks, automatic post-mortems with a digest, per-sector caps. Options
+  page on the dashboard. Research only: no orders, `RiskPolicy` untouched.
 * Swing research lane: pullback-in-uptrend on daily bars, simulated share trades, own stops, earnings-aware, off by default.
 * Short-term research lane: EMA9/VWAP on 5-minute bars, simulated share trades in a separate ledger, off by default.
 * Dashboard v2: six pages, trade blotter with per-trade files (reasoning, agent votes, exit, audit trail), market scan

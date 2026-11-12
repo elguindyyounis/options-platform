@@ -19,7 +19,7 @@ from .agents import rsi, sma
 from .events import ETFS, EventCalendar
 from .marketdata import Bar, MarketDataProvider
 from .models import utcnow
-from .scanner import UNIVERSE, completed_bars
+from .scanner import SECTOR_OF, UNIVERSE, completed_bars
 from .shortterm import lane_report
 from .store import Store
 
@@ -40,6 +40,7 @@ TARGET_R = 1.5                # target distance = this multiple of the stop dist
 MAX_HOLD_BARS = 10            # trading days
 NOTIONAL_USD = 2000.0         # simulated size per trade
 MAX_OPEN = 5
+MAX_PER_SECTOR = 2            # no one sector (biotech, say) may fill the book
 SLIPPAGE_PCT = 0.05           # each way, against the trade
 EARNINGS_BUFFER_DAYS = 14     # no entry if earnings fall inside the hold window plus this much
 RUN_EVERY = timedelta(minutes=60)
@@ -53,7 +54,7 @@ RULES = (
     f"Stop at {STOP_VOL_MULT:g} daily standard deviations below entry (between {STOP_MIN_PCT:g}% and {STOP_MAX_PCT:g}%), "
     f"target {TARGET_R:g} times that distance above. Also exit on a close below the {SMA_SLOW}-day average or after {MAX_HOLD_BARS} trading days.",
     f"Single stocks only when no earnings fall inside the hold plus {EARNINGS_BUFFER_DAYS} days, and the date is known. Funds are exempt.",
-    f"Simulated size ${NOTIONAL_USD:,.0f} per trade, at most {MAX_OPEN} open, {SLIPPAGE_PCT}% slippage each way.",
+    f"Simulated size ${NOTIONAL_USD:,.0f} per trade, at most {MAX_OPEN} open and {MAX_PER_SECTOR} per sector, {SLIPPAGE_PCT}% slippage each way.",
 )
 LIMITATIONS = (
     "Free daily data is unofficial and delayed. Entries are simulated at the latest completed close, not the next open, so real fills would differ and gaps are not modelled.",
@@ -87,7 +88,7 @@ def read(bars: Sequence[Bar], now: datetime) -> Optional[dict[str, Any]]:
     sigma = math.sqrt(sum((x - mean) ** 2 for x in rets) / (len(rets) - 1))
     return {"day": done[-1].day, "close": closes[-1], "prev_close": closes[-2], "sma_fast": sma(closes, SMA_FAST),
             "sma_slow": sma(closes, SMA_SLOW), "rsi": rsis[0], "rsi_prev": rsis[1],
-            "rsi_dip": min(rsis[1:]), "sigma": sigma, "day_move_pct": (closes[-1] / closes[-2] - 1) * 100, "bars": len(done),
+            "rsi_dip": min(rsis[1:]), "rsi_peak": max(rsis[1:]), "sigma": sigma, "day_move_pct": (closes[-1] / closes[-2] - 1) * 100, "bars": len(done),
             "days": [b.day for b in done]}
 
 
@@ -158,7 +159,9 @@ class SwingLane:
             self.store.set_state(key, r["day"].isoformat())
             if not entry_signal(r):
                 continue
-            if len(open_by) >= MAX_OPEN or not self._earnings_ok(sym, now.date()):
+            sector = SECTOR_OF.get(sym, sym)
+            if len(open_by) >= MAX_OPEN or sum(1 for s2 in open_by if SECTOR_OF.get(s2, s2) == sector) >= MAX_PER_SECTOR \
+                    or not self._earnings_ok(sym, now.date()):
                 out["skipped"] += 1
                 continue
             px = round(r["close"] * (1 + SLIPPAGE_PCT / 100), 4)

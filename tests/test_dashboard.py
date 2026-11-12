@@ -114,7 +114,7 @@ def test_equity_points_come_back_in_time_order_even_if_inserted_out_of_order():
 def test_every_nav_link_has_a_page_with_a_question(client):
     html = client[0].get("/").text
     pages = re.findall(r'<a class="nav" href="#/([a-z]+)" data-page="([a-z]+)"', html)
-    assert [p for p, _ in pages] == ["desk", "trades", "swing", "shortterm", "market", "agents", "research", "system"]
+    assert [p for p, _ in pages] == ["desk", "trades", "options", "swing", "shortterm", "market", "agents", "research", "system"]
     for route, page in pages:
         assert route == page
         tag = re.search(rf'<section[^>]*data-page="{page}"[^>]*>', html)
@@ -162,3 +162,15 @@ def test_research_lane_pages_have_every_element_the_shared_renderer_writes(clien
     assert 'id="cfg-swing"' in html and 'id="cfg-shortterm"' in html
     js = client[0].get("/static/app.js").text
     assert "/api/swing" in js and "/api/shortterm" in js and "swing_enabled" in js
+
+
+def test_options_page_and_market_additions_have_every_element_the_script_writes(client):
+    html = client[0].get("/").text
+    js = client[0].get("/static/app.js").text
+    for ident in ("op-lede", "op-status", "op-compare", "op-tabs", "op-why", "op-summary", "op-trades", "op-digest", "op-digest-note", "op-rules",
+                  "op-limits", "btn-op-step", "scan-sentiment", "scan-heat", "scan-heat-panel", "scan-follow", "scan-follow-panel", "cfg-optlanes"):
+        assert f'id="{ident}"' in html, ident
+    assert "/api/optlanes" in js and "option_lanes_enabled" in js and "postmortem" in js
+    # direction is never carried by colour alone: the heat map and the figures use arrows and signs
+    assert "\u25b2" in js and "\u25bc" in js
+    assert "innerHTML" not in js
