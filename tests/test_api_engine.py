@@ -124,3 +124,10 @@ def test_health_shows_runner_flags_but_never_error_text_and_status_shows_the_det
 def test_dashboard_warns_when_the_loop_is_stalled(client):
     src = client.get("/static/app.js").text
     assert "LOOP STALLED" in src and "rn.stalled" in src
+
+
+def test_provenance_endpoint_requires_the_token_and_lists_unvalidated_signals(client):
+    assert client.get("/api/research/provenance").status_code in (401, 403)
+    body = client.get("/api/research/provenance", headers=H).json()
+    assert body["unvalidated"] == len(body["signals"]) > 5
+    assert all(s["validation"] == "UNVALIDATED" for s in body["signals"])

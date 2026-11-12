@@ -70,6 +70,8 @@ Existing items, in order:
 
 ## Ideas (unscheduled)
 
+* Show the provenance table in the dashboard next to the lane scoreboard.
+
 * Recorder storage: snapshots are about 20 KB of JSON each. At the default 5-minute interval and two
   symbols that is roughly 3 MB a day (about 90 MB for the 30-day default). Compress, or store only
   rows near the money, before running a short interval or a long watchlist.
@@ -79,6 +81,8 @@ Existing items, in order:
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Signal provenance registry and `GET /api/research/provenance` (challenge 5). Every listed signal is UNVALIDATED; a test keeps it in step with `signals.VALIDATED_SIGNALS`.
 
 * Honest lane scoreboard (2026-11-12, branch `agent/2026-11-12-daily-challenge`): `scoreboard.py`, `scoreboard` key on
   `GET /api/optionlanes` reports and a dashboard panel. Display-only.

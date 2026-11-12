@@ -307,6 +307,12 @@ def create_app(
                 })
             return out
 
+        @app.get("/api/research/provenance", dependencies=[Depends(auth)])
+        def research_provenance() -> dict[str, Any]:
+            from .provenance import provenance
+
+            return provenance()
+
         @app.get("/api/signals/{symbol}", dependencies=[Depends(auth)])
         def signals(symbol: str) -> dict[str, Any]:
             from datetime import datetime as _dt

@@ -76,3 +76,12 @@ These are challenges raised by reading the alerter. None is proven.
 * **Honest labels.** The alerter's score is described as a ranking heuristic, never a probability. Same stance as here.
 * **Black-Scholes greeks with stated assumptions** (4% rate, no dividends). Not needed by the platform yet.
 * **Not read:** `storage.py`, `server.py`, `data_sources.py`, the other six skill files, tests (none run).
+
+## Addendum 2026-11-12 (second run): `storage.py`
+
+Read the alerter's `storage.py` (commit `9210fd8`, unchanged). Observations, not verdicts: it merges per-ticker research
+state inside one `BEGIN IMMEDIATE` transaction so concurrent workers cannot overwrite each other; it keeps a `trade_journal`
+that stores the council's review text at entry next to the exit result; and a partial unique index allows only one open
+position per candidate. The platform's SQLite store already uses transactions per operation; the entry-time review snapshot is
+roughly what `lane_trades` payloads and post-mortems hold. Still not read: `agents.py`, `core.py`, `server.py`, `data_sources.py`.
+Ported today: the provenance idea (`research_foundations.py`) as `provenance.py`.
