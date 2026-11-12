@@ -868,6 +868,16 @@
       { label: "Status", get: (r) => el("span", r.pattern ? "Pattern" : "Too few to say", "tag " + (r.pattern ? "warn" : "")) },
       { label: "What it means", get: (r) => r.means }, { label: "Test next", get: (r) => r.try_next },
     ], dg.tags, "No post-mortems yet", "Each closed trade is reviewed automatically when it closes.");
+    const sb = d.scoreboard || { lanes: {}, note: "" };
+    table($("op-scoreboard"), [
+      { label: "Lane", get: (r) => el("b", r.name) }, { label: "Closed", right: true, get: (r) => r.trades },
+      { label: "Average at the bid", right: true, get: (r) => r.avg_net_pct === null ? "n/a" : pct(r.avg_net_pct) },
+      { label: "Average, harder exit", right: true, get: (r) => r.avg_stressed_pct === null ? "n/a" : pct(r.avg_stressed_pct) },
+      { label: "Likely range", right: true, get: (r) => r.interval_pct ? pct(r.interval_pct[0]) + " to " + pct(r.interval_pct[1]) : "n/a" },
+      { label: "Best trade's share of gains", right: true, get: (r) => r.best_trade_share_pct === null ? "n/a" : r.best_trade_share_pct + "%" },
+      { label: "Reading", get: (r) => el("span", words(r.verdict), "tag " + (r.verdict === "TOO_FEW" || r.verdict === "NO_TRADES" ? "" : "warn")) },
+    ], Object.entries(sb.lanes).map(([name, v]) => ({ name, ...v })), "No closed trades yet", "The scoreboard fills in as trades close.");
+    $("op-scoreboard-note").textContent = sb.note || "";
     $("op-digest-note").textContent = dg.note + " " + dg.trades_reviewed + " closed trades reviewed.";
     const lc = $("op-last"), ck = lane.last_check;
     lc.replaceChildren();

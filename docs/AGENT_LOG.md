@@ -2,6 +2,18 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-12: daily challenger, honest lane scoreboard
+
+* Alerter unchanged since `9210fd8`. Read `agents.py`, `core.py` and the skeptic skill; notes added to `docs/COMPARISON_ALERTER.md`.
+  The alerter can only be made stricter by its model and trips a skeptic hold on a cohort losing badly; the platform has no such tripwire.
+* Challenged: five lanes judged on small samples and the bid exit make it likely that one lane looks good by luck. Added
+  `src/optplat/scoreboard.py` (display-only): per lane, the average at the bid and at the harder exit, a normal-approximation
+  interval widened for the number of lanes (Bonferroni), the best trade's share of gains, and a verdict that is TOO_FEW below 30
+  closed trades. Exposed as `scoreboard` in the option-lanes report and as a dashboard panel (textContent only).
+* Nothing a lane trades, no limit, size, default or auth was changed. 505 tests pass (8 new; one existing assertion made stricter).
+* Not verified: the panel in a browser, any live Yahoo data or the owner's database, the alerter's own tests. The interval ignores
+  overlap between trades and fat tails, so it is still optimistic.
+
 
 
 

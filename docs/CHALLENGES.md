@@ -6,7 +6,7 @@ never touches `main`, and never changes risk limits, lane budgets, defaults or a
 
 The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 
-**Last alerter commit reviewed:** `9210fd8`  (update this line each run)
+**Last alerter commit reviewed:** `9210fd8`  (update this line each run; unchanged on 2026-11-12 second run)
 
 ## Open challenges (oldest first; the agent picks one per run)
 
@@ -19,12 +19,15 @@ The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 | 1 | Add a counterfactual journal: for each scan, record unselected and rejected contracts and mark them at 1, 7 and 30 days (ask in, bid out) | The platform has no way to tell whether its unusual-activity labels predict anything | Open |
 | 2 | Display-only modeled net GEX per scanned name, with the assumption stated | Alerter has it; platform lacks any positioning context | Open |
 | 3 | Add a frozen-baseline lane that never changes, to compare the others against | Lanes are only compared with each other | Open |
-| 4 | Make lane P&L itself use the stressed exit alongside the bid exit (show both) | Headline results are optimistic for large sizes | Open |
+| 4 | Make lane P&L itself use the stressed exit alongside the bid exit (show both) | Headline results are optimistic for large sizes | Partly done 2026-11-12: per-lane scoreboard shows average at the bid and at the harder exit side by side. Dollar P&L cards still use the bid |
 | 5 | Add a signal provenance doc listing each signal, where it came from and its validation status | Alerter's `research_foundations.py` does this; platform does not | Open |
+| 7 | **Loss tripwire (from the alerter).** The alerter downgrades a cohort with at least 8 trades, mean at or below -30% and win rate at or below 25%. Consider a lane-level equivalent that pauses new entries. | A lane that keeps losing keeps trading | Needs the owner: changes what lanes trade |
+| 8 | **Judge lanes by the scoreboard, not by averages.** Read the new scoreboard once lanes have 30 closed trades; check whether any lane reads ABOVE_ZERO after widening for the number of lanes. | Many lanes on few trades will always produce a lucky one | Waiting for trades |
 | 6 | Check whether stacking helps: compare stacked and first entries from the digest once there are enough trades | Owner asked for stacking as an experiment; nothing yet says whether it pays | Waiting for trades |
 
 ## Run log (newest first)
 
 | Date | Alerter commit | What was compared | What changed | What was not verified |
 | --- | --- | --- | --- | --- |
+| 2026-11-12 (second run) | `9210fd8` (no new commits) | Read `agents.py`, `core.py`, skeptic skill | Added the honest lane scoreboard (`scoreboard.py`): stressed average, widened interval, best-trade share, a verdict that needs 30 trades | Alerter tests not run; scoreboard on live data (none seen); its interval ignores overlap between trades |
 | 2026-11-12 | `9210fd8` | First full comparison | Ported liquidity tiers and exit stress into post-mortems | Alerter tests not run; several alerter modules not read; live Yahoo data |

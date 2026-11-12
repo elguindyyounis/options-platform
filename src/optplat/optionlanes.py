@@ -31,6 +31,7 @@ from .marketdata import ChainRow, MarketDataProvider, MarketSnapshot
 from .models import OptionContract, Right, utcnow
 from .postmortem import digest, post_mortem
 from .scanner import SECTOR_OF, UNIVERSE, session_day
+from .scoreboard import scoreboard
 from .shortterm import lane_report
 from .store import Store
 
@@ -579,13 +580,15 @@ class OptionLanes:
 
     def reports(self, now: datetime) -> dict[str, Any]:
         fict = self.provider.fictional
-        lanes, closed_all = [], []
+        lanes, closed_all, by_lane = [], [], {}
         for p in ALL_PARAMS:
             rep = lane_report(self.store, p.lane, fict, now, rules=rules_text(p), limitations=LIMITATIONS, symbols=p.symbols or UNIVERSE, exit_text=EXIT_TEXT)
             raw = self.store.get_state(f"optlane_last_result:{p.lane}", "")
             lanes.append({**rep, "last_check": json.loads(raw) if raw else None, "label": p.label, "kind": p.kind, "why": p.why, "experimental": p.experimental,
                           "params": {"budget_usd": p.budget_usd, "max_open": p.max_open, "dte": [p.dte_min, p.dte_max], "otm_pct": p.otm_pct,
                                      "stop_pct": p.stop_pct, "target_pct": p.target_pct, "both_ways": p.both_ways}})
-            closed_all += self.store.lane_trades(p.lane, fict, 500)
+            rows = self.store.lane_trades(p.lane, fict, 500)
+            by_lane[p.lane] = [t for t in rows if t["closed_at"] is not None]
+            closed_all += rows
         closed = [t for t in closed_all if t["closed_at"] is not None]
-        return {"fictional": fict, "as_of": now.isoformat(), "lanes": lanes, "digest": digest(closed)}
+        return {"fictional": fict, "as_of": now.isoformat(), "lanes": lanes, "digest": digest(closed), "scoreboard": scoreboard(by_lane)}

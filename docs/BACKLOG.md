@@ -42,6 +42,8 @@ and tests better approaches, with entries and exits automated in paper mode only
    earnings and FOMC only; CPI, jobs data, dividends and index events need a source. Earnings dates come
    from Yahoo's unofficial calendar and are unverified, so a paid or official earnings feed would be better.
 
+0b. **Owner decision: loss tripwire for lanes** (see `docs/CHALLENGES.md` #7). Not for an agent to decide.
+
 Existing items, in order:
 
 6. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
@@ -77,6 +79,9 @@ Existing items, in order:
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Honest lane scoreboard (2026-11-12, branch `agent/2026-11-12-daily-challenge`): `scoreboard.py`, `scoreboard` key on
+  `GET /api/optionlanes` reports and a dashboard panel. Display-only.
 
 * 10x challenge account (owner request 2026-11-13): `challenge.py`, restartable, critic on every trade, attempt history, dashboard panel.
 * Alerter comparison (owner request 2026-11-12): `docs/COMPARISON_ALERTER.md`, liquidity tiers and exit stress in post-mortems

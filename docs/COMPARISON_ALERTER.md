@@ -10,6 +10,8 @@ of a trading edge, and nothing here should be read as saying one earns more than
 `daily_review.py`, two agent skill files and the CI workflow. **Not read:** `agents.py`, `core.py`, `storage.py`,
 `server.py`, `data_sources.py`, the other skill files, and its tests (none were run). Claims about those are not made.
 
+**Read on 2026-11-12 (daily challenger run):** `agents.py` and `core.py`, plus the skeptic skill file. See "Second reading" at the end.
+
 ## Side by side
 
 | Area | options-alerter | options-platform | Who looks stronger, and why |
@@ -58,3 +60,19 @@ These are challenges raised by reading the alerter. None is proven.
 * **Strict entry gates.** Applying them would shrink the experiments the owner asked for. The post-mortem tags show what
   they would have caught.
 * **Anything about the alerter's council, sizing or goal tracker.** Not read closely enough to judge.
+
+## Second reading: `agents.py`, `core.py`, skeptic skill (2026-11-12, alerter `9210fd8`, unchanged since the first comparison)
+
+* **Models can only make it stricter.** `agents.py` lets an optional local Ollama model add risks or raise a VETO, but never
+  upgrade a rejection; the CIO is downgraded to REJECT if the model vetoes. Endpoints other than localhost are ignored so
+  trading data is never sent out. The platform's research lanes have no model in the loop, so there is nothing to port, but
+  the "can only tighten" rule is the right one if a model reviewer is ever added.
+* **A loss tripwire on peer groups.** In `core.research_case`, if a cohort has at least 8 closed trades with mean return at or
+  below -30% and a win rate at or below 25%, the skeptic moves from PASS to REVISE and the CIO to WATCH. Past gains never relax
+  a veto. The platform has no equivalent: a lane that keeps losing keeps trading. Candidate for a later, owner-approved change
+  (it alters what lanes trade, so it is not done here).
+* **Scores are capped when the data is thin.** `candidate_score` caps the score at 52 to 56 for volume under 5, open interest
+  under 20 or spread over 20%, so a tiny denominator cannot top a ranked list. The platform tags thin trades afterwards.
+* **Honest labels.** The alerter's score is described as a ranking heuristic, never a probability. Same stance as here.
+* **Black-Scholes greeks with stated assumptions** (4% rate, no dividends). Not needed by the platform yet.
+* **Not read:** `storage.py`, `server.py`, `data_sources.py`, the other six skill files, tests (none run).

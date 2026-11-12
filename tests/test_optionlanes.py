@@ -435,7 +435,7 @@ def test_the_option_lanes_are_off_by_default_and_the_endpoints_say_so(client):
     assert EngineConfig().option_lanes_enabled is False and engine.maybe_option_lanes() is None
     assert c.get("/api/optlanes").status_code == 401
     body = c.get("/api/optlanes", headers=H).json()
-    assert body["enabled"] is False and body["fictional"] is True and len(body["lanes"]) == 5 and "digest" in body
+    assert body["enabled"] is False and body["fictional"] is True and len(body["lanes"]) == 5 and "digest" in body and "scoreboard" in body
     assert {l["lane"] for l in body["lanes"]} == {p.lane for p in ol.ALL_PARAMS}
     assert c.post("/api/optlanes/step", headers=H).status_code == 409
 
