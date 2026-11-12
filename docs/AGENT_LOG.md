@@ -4,6 +4,22 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+
+## 2026-11-13: the 10x challenge account
+
+* Owner asked for an aggressive paper account (10x in a month, restartable, critical of every trade). Built it as a separate
+  research account (`challenge.py`, lane `challenge-10x`) so the real account's `RiskPolicy` is untouched: $10,000 start, 25% of
+  equity per trade, EMA9/VWAP calls and puts up to a week out, ends on 10x, down 90%, 30 days or a manual restart, then starts a
+  new attempt. Every attempt is kept in `challenge:history`; the report states the success rate across ALL attempts, because
+  restarting until one works is selection, not evidence.
+* The critic (`_review`) can refuse a trade (thin contract, exit that would cost over 12% extra under stress, over 60% of equity at
+  risk, a third trade right after three losses, chasing a name stopped out today), cuts size to 10% of volume and 15% of open
+  interest, and stores objections, thesis and what would prove it wrong with every trade. Base lanes got a no-op `_review` hook.
+* Dashboard: a 10x challenge panel at the top of the Options page; `GET /api/challenge`, `POST /api/challenge/restart`.
+* 497 tests pass; panel checked in headless Chromium on fictional demo data only (dark and phone widths, no script errors).
+* Not verified: behaviour on live Yahoo data; whether the critic's thresholds are sensible (they are guesses to be challenged);
+  expiry handling for positions held across a challenge end. A 10x target pushes towards long shots, so expect many ruins.
+
 ## 2026-11-13: restart recovery, error text, clock warning, side-by-side ports
 
 * Read-only look at the owner's database found: the simulated broker forgot a filled SPY put on restart (equity reset to

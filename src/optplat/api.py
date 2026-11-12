@@ -254,6 +254,14 @@ def create_app(
         def optlanes_report() -> dict[str, Any]:
             return {**engine.option_lanes.reports(engine.clock()), "enabled": engine.config().option_lanes_enabled}
 
+        @app.get("/api/challenge", dependencies=[Depends(auth)])
+        def challenge_report() -> dict[str, Any]:
+            return {**engine.option_lanes.challenge.report(engine.clock()), "enabled": engine.config().option_lanes_enabled}
+
+        @app.post("/api/challenge/restart", dependencies=[Depends(auth)])
+        def challenge_restart() -> dict[str, Any]:
+            return engine.option_lanes.challenge.restart(engine.clock())
+
         @app.post("/api/optlanes/step", dependencies=[Depends(auth)])
         def optlanes_step() -> dict[str, Any]:
             if not engine.config().option_lanes_enabled:

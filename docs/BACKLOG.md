@@ -78,6 +78,7 @@ Existing items, in order:
 
 ## Done
 
+* 10x challenge account (owner request 2026-11-13): `challenge.py`, restartable, critic on every trade, attempt history, dashboard panel.
 * Alerter comparison (owner request 2026-11-12): `docs/COMPARISON_ALERTER.md`, liquidity tiers and exit stress in post-mortems
   (`liquidity.py`), and `docs/CHALLENGES.md` as the log for the daily challenger agent. Open challenges are listed there.
 * Options-first research (owner request 2026-11-12): scanner v2 (200-name sector-mapped universe, very-low-open-interest rule,

@@ -772,7 +772,7 @@
   async function loadMarket() { S.scan = await api("/api/scan"); renderMarket(); }
 
   // ---------------------------------------------------------------- Options lanes
-  const OP_EXIT = { stop: "Stop", target: "Target", vwap_lost: "Lost VWAP", flat_by_close: "Closed for the day", carried_over: "Left over", trend_break: "Trend broke", time: "Time stop", expiry_near: "Near expiry", expired_unmarked: "Expired" };
+  const OP_EXIT = { stop: "Stop", target: "Target", vwap_lost: "Lost VWAP", flat_by_close: "Closed for the day", carried_over: "Left over", trend_break: "Trend broke", time: "Time stop", expiry_near: "Near expiry", expired_unmarked: "Expired", challenge_end: "Attempt ended" };
   const STATE = { FUND: "a fund, no earnings", CLEAR: "no earnings in the way", SOON: "earnings close by", UNKNOWN: "earnings date unknown", "n/a": "not checked" };
   function describeSignal(o) {
     const g = o.signal || {};
@@ -799,6 +799,11 @@
     row("Paid", t.quantity + " contract" + (t.quantity > 1 ? "s" : "") + " at the ask of " + Number(t.entry_price).toFixed(2) + " ($" + num(Math.round(t.entry_price * t.quantity * 100)) + "), spread " + o.spread_pct + "%, open interest " + num(o.open_interest) + ", fees " + money(o.fees_open));
     row("Stop and target", "Stop if the bid reaches " + (t.entry_price * (1 - o.stop_pct / 100)).toFixed(2) + ", target at " + (t.entry_price * (1 + o.target_pct / 100)).toFixed(2));
     row("Earnings", STATE[o.earnings_state] || o.earnings_state);
+    if (o.critic) {
+      row("Critic", o.critic.verdict === "ACCEPTED" ? "No objections." : "Accepted despite: " + o.critic.objections.join("; ") + ".");
+      row("Thesis", o.critic.thesis + " Wrong if " + o.critic.wrong_if + ".");
+      if (o.critic.needs_pct_per_day_for_goal !== null && o.critic.needs_pct_per_day_for_goal !== undefined) row("Pace", "At this point the account needs about " + o.critic.needs_pct_per_day_for_goal + "% a day, every day, to reach the goal.");
+    }
     if (o.stack_index > 0) row("Stacked", "Position " + (o.stack_index + 1) + " in this name, added on top of " + o.stacked_on.length + " earlier trade" + (o.stacked_on.length > 1 ? "s" : "") + ".");
     if (o.size_vs_volume_pct !== null && o.size_vs_volume_pct !== undefined) row("Size against the market", o.size_vs_volume_pct + "% of the contract's volume" + (o.size_vs_oi_pct === null || o.size_vs_oi_pct === undefined ? "" : ", " + o.size_vs_oi_pct + "% of its open interest") + ". A real order this size could move the price.");
     if (open && t.mark_bid !== null) row("Last mark", "Bid " + Number(t.mark_bid).toFixed(2) + " at " + fmtTime(t.mark_at));
@@ -819,6 +824,7 @@
   function renderOptions() {
     const o = S.opt;
     if (!o) return;
+    renderChallenge(o.ch);
     const d = o.ops, lanes = d.lanes;
     const total = lanes.reduce((a, l) => a + l.summary.closed, 0);
     $("op-lede").textContent = (d.enabled ? "" : "The lanes are switched off. Turn them on under Controls. ") +
@@ -879,9 +885,38 @@
     lane.rules.forEach((x) => r.appendChild(el("li", x)));
     lane.limitations.forEach((x) => l.appendChild(el("li", x)));
   }
+  function renderChallenge(ch) {
+    if (!ch) return;
+    const a = ch.account;
+    $("ch-lede").textContent = "A separate simulated account of " + money(a.start_equity) + " that aims for 10x in " + a.days + " days. That is deliberately unreasonable: it needs roughly 11% a day, every day. When an attempt ends, the result is kept and a new one starts, so losing it all is cheap and teaches something. A critic reviews every trade first." + (ch.fictional ? " These trades come from fictional demo data." : "");
+    const f = $("ch-figures");
+    f.replaceChildren();
+    f.appendChild(fig(money(a.equity), "Equity, attempt " + a.attempt, arrow(a.multiple - 1) + a.multiple + "x of the start", a.on_pace ? "gain" : "loss"));
+    f.appendChild(fig("Day " + Math.floor(a.day) + " of " + a.days, "Time used", "Goal " + money(a.goal_equity) + ", ruin at " + money(a.ruin_equity)));
+    f.appendChild(fig(money(a.cash), "Cash", money(a.open_premium) + " in open trades"));
+    f.appendChild(fig(money(a.realized_pnl), "Realized this attempt", a.unmarked_open ? a.unmarked_open + " open trade(s) have no quote yet" : "", tone(a.realized_pnl)));
+    $("ch-pace").textContent = (a.needed_pct_per_day === null ? "No time left to reach the goal. " : "To reach " + money(a.goal_equity) + " from here it needs about " + a.needed_pct_per_day + "% a day, every day. ") +
+      "A straight-line pace would be " + money(a.straight_line_equity) + " by now, so this attempt is " + (a.on_pace ? "ahead of" : "behind") + " it.";
+    $("ch-honesty").textContent = ch.honesty;
+    table($("ch-history"), [
+      { label: "Attempt", right: true, get: (r) => r.attempt }, { label: "How it ended", get: (r) => words(r.outcome) },
+      { label: "Ended with", right: true, get: (r) => money(r.end_equity) + " (" + r.multiple + "x)" },
+      { label: "Trades", right: true, get: (r) => r.wins + " won of " + r.trades },
+      { label: "Best and worst", right: true, get: (r) => r.best_trade_usd === null ? "n/a" : money(r.best_trade_usd) + " / " + money(r.worst_trade_usd) },
+      { label: "Causes that kept showing up", get: (r) => r.top_causes.map((c) => words(c[0]) + " x" + c[1]).join(", ") || "none" },
+    ], ch.history, "No attempt has finished yet", "An attempt ends when it reaches 10x, is down 90%, or runs out of its 30 days.");
+    const host = $("ch-trades");
+    const mine = ch.trades.filter((t) => (t.why_entered || {}).attempt === a.attempt);
+    if (!mine.length) empty(host, "No trades in this attempt yet", ch.enabled ? "A trade needs the lane's signal while the market is open, and the critic's approval." : "Switch the options lanes on under Controls.");
+    else { host.replaceChildren(); mine.slice(0, 60).forEach((t) => host.appendChild(tradeItem(t, OP_EXIT))); }
+    const r = $("ch-rules"), l = $("ch-limits");
+    r.replaceChildren(); l.replaceChildren();
+    ch.rules.forEach((x) => r.appendChild(el("li", x)));
+    ch.limitations.forEach((x) => l.appendChild(el("li", x)));
+  }
   async function loadOptions() {
-    const [ops, swing, st] = await Promise.all([api("/api/optlanes"), api("/api/swing"), api("/api/shortterm")]);
-    S.opt = { ops, swing, st };
+    const [ops, swing, st, ch] = await Promise.all([api("/api/optlanes"), api("/api/swing"), api("/api/shortterm"), api("/api/challenge")]);
+    S.opt = { ops, swing, st, ch };
     renderOptions();
   }
 
@@ -997,6 +1032,7 @@
       watchlist: $("cfg-watch").value.split(/[,\s]+/).filter(Boolean),
     }),
   })));
+  $("btn-ch-restart").addEventListener("click", () => act(async () => { await api("/api/challenge/restart", { method: "POST" }); }));
   $("btn-op-step").addEventListener("click", () => act(async () => { await api("/api/optlanes/step", { method: "POST" }); }));
   $("btn-sw-step").addEventListener("click", () => act(async () => { await api("/api/swing/step", { method: "POST" }); }));
   $("btn-st-step").addEventListener("click", () => act(async () => { await api("/api/shortterm/step", { method: "POST" }); }));

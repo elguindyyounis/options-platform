@@ -329,11 +329,25 @@ class OptionLane:
                    "stacked_on": [t["id"] for t in mine],
                    "size_vs_volume_pct": round(qty / row.volume * 100, 1) if row.volume else None,
                    "size_vs_oi_pct": round(qty / row.open_interest * 100, 1) if row.open_interest else None, **(extra or {})}
+        veto, new_qty = self._review(sym, right, row, qty, payload, held, now)
+        if veto:
+            out["skips"].append(f"{sym}: {veto}")
+            return None
+        if new_qty != qty:
+            qty = new_qty
+            payload.update({"fees_open": round(qty * FEE_PER_CONTRACT, 2), "size_vs_volume_pct": round(qty / row.volume * 100, 1) if row.volume else None,
+                            "size_vs_oi_pct": round(qty / row.open_interest * 100, 1) if row.open_interest else None})
         tid = self.store.lane_open(p.lane, sym, now, row.ask, qty, self.provider.fictional, payload)
         out["opened"].append({"symbol": sym, "contract": payload["contract"], "right": right, "stack_index": len(mine)})
         made = {"id": tid, "symbol": sym, "open_payload": payload, "entry_price": row.ask, "quantity": qty, "opened_at": now.isoformat()}
         held.append(made)
         return made
+
+    def _review(self, sym: str, right: str, row: ChainRow, qty: int, payload: dict[str, Any], held: list[dict[str, Any]],
+                now: datetime) -> tuple[Optional[str], int]:
+        """Last look before a trade opens. Returns (reason to refuse or None, quantity to buy). The base lanes accept
+        everything their rules already let through; the challenge account overrides this with a critic."""
+        return None, qty
 
     # -- the premium rules every lane shares
     def _premium_exit(self, t: dict[str, Any], mark: Optional[tuple[float, float]]) -> Optional[str]:
@@ -551,9 +565,17 @@ class OptionLanes:
         self.provider, self.store, self.clock = provider, store, clock
         self.feed = Feed(provider, clock)
         self.lanes = [OptionLane(provider, store, p, self.feed, clock=clock, calendar=calendar) for p in ALL_PARAMS]
+        from .challenge import ChallengeLane  # imported here: the challenge module builds on this one
+
+        self.challenge = ChallengeLane(provider, store, self.feed, clock=clock, calendar=calendar)
 
     def step(self, force: bool = False) -> list[dict[str, Any]]:
-        return [lane.step(force) for lane in self.lanes]
+        out = [lane.step(force) for lane in self.lanes]
+        try:
+            self.challenge.step(force)  # its own account and history; kept out of the five-lane list
+        except Exception:  # noqa: BLE001 - a research account must never raise into the engine
+            pass
+        return out
 
     def reports(self, now: datetime) -> dict[str, Any]:
         fict = self.provider.fictional
