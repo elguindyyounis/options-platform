@@ -275,6 +275,12 @@ def create_app(
 
             return {**build_trades(manager, limit), "fictional": engine.provider.fictional}
 
+        @app.get("/api/alltrades", dependencies=[Depends(auth)])
+        def all_trades() -> dict[str, Any]:
+            from .alltrades import build_all
+
+            return build_all(manager, engine.store, engine.provider.fictional, engine.clock(), engine.option_lanes)
+
         @app.get("/api/trades/{trade_id}", dependencies=[Depends(auth)])
         def trades_one(trade_id: str) -> dict[str, Any]:
             from .trades import trade_detail

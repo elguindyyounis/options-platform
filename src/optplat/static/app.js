@@ -15,7 +15,7 @@
   }
   const S = {
     killState: false, lastPoints: [], core: null, connected: false,
-    trades: null, filter: "all", query: "", sort: { key: "entry_time", dir: -1 }, openTrade: null, opener: null,
+    trades: null, filter: "all", kind: "all", source: "all", query: "", sort: { key: "opened_at", dir: -1 }, shown: 100, openTrade: null, opener: null,
     scan: null, marketTab: "heat", unusualFilter: "all", opt: null, optLane: "shortterm-options-base",
   };
 
@@ -194,12 +194,30 @@
   }
 
   // ---------------------------------------------------------------- shared formatting for contracts
+  // Contract names read like a person would say them: "SPY call 751 · Dec 11". An OCC symbol such as
+  // "SPY   261211P00751000" is split into those parts; if it cannot be read, the raw text is shown, never a guess.
+  function occParts(occ) {
+    const m = /^\s*([A-Z.\-]{1,6}?)\s*(\d{2})(\d{2})(\d{2})([CP])(\d{8})\s*$/.exec(occ || "");
+    if (!m) return null;
+    return { symbol: m[1], expiry: "20" + m[2] + "-" + m[3] + "-" + m[4], right: m[5], strike: Number(m[6]) / 1000 };
+  }
+  const expiryText = (iso) => {
+    const d = new Date(iso + "T12:00:00");
+    if (isNaN(d)) return String(iso);
+    return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+  };
+  const contractText = (t) => t.symbol + " " + (t.right === "C" ? "call " : "put ") + Number(t.strike) + " · " + expiryText(t.expiry);
   function ticket(t) {
     const w = el("span", null, "ticket");
+    w.setAttribute("title", contractText(t));
     w.appendChild(el("span", t.symbol, "sym"));
-    w.appendChild(el("span", (t.right === "C" ? "Call " : "Put ") + t.strike, "leg " + (t.right === "C" ? "call" : "put")));
-    w.appendChild(el("span", fmtDay(t.expiry), "muted"));
+    w.appendChild(el("span", (t.right === "C" ? "call " : "put ") + Number(t.strike), "leg " + (t.right === "C" ? "call" : "put")));
+    w.appendChild(el("span", expiryText(t.expiry), "muted"));
     return w;
+  }
+  function ticketOcc(occ) {
+    const p = occParts(occ);
+    return p ? ticket(p) : el("span", occ || "", "mono");
   }
   const EXIT_TEXT = {
     take_profit: "Take profit", stop_loss: "Stop loss", expiry_window: "Too close to expiry", max_days_held: "Held too long",
@@ -290,18 +308,18 @@
     ], eq.points.slice().reverse().slice(0, 200), "No equity points yet");
   }
 
-  // "SPY261218C00600000" -> days to expiry. Anything unparseable is shown as unknown, never guessed.
+  // An OCC symbol (padded or not) -> days to expiry. Anything unparseable is shown as unknown, never guessed.
   function dteOf(contract, now) {
-    const m = /^[A-Z.\-]{1,10}(\d{2})(\d{2})(\d{2})[CP]\d{8}$/.exec(contract || "");
-    if (!m) return null;
-    const exp = Date.UTC(2000 + Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const p = occParts(contract);
+    if (!p) return null;
+    const exp = Date.parse(p.expiry + "T00:00:00Z");
     return Math.round((exp - Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) / 86400000);
   }
 
   function renderPositions(report, cfg) {
     const now = new Date();
     table($("positions"), [
-      { label: "Contract", get: (r) => el("span", r.contract, "mono") }, { label: "Qty", right: true, get: (r) => r.quantity },
+      { label: "Contract", get: (r) => ticketOcc(r.contract) }, { label: "Qty", right: true, get: (r) => r.quantity },
       { label: "Avg cost", right: true, get: (r) => r.avg_cost },
       { label: "Bid mark", right: true, get: (r) => r.mark === null ? "unobservable" : r.mark },
       { label: "Unrealized", right: true, get: (r) => r.unrealized_pnl === null ? "n/a" : span(sgn(r.unrealized_pnl), tone(r.unrealized_pnl)) },
@@ -319,7 +337,7 @@
   function renderDecisions(list) {
     table($("decisions"), [
       { label: "Time", get: (d) => fmtTime(d.ts) }, { label: "Type", get: (d) => words(d.kind) },
-      { label: "Contract", get: (d) => el("span", d.contract || "", "mono") }, { label: "Outcome", get: (d) => words(d.disposition) },
+      { label: "Contract", get: (d) => ticketOcc(d.contract) }, { label: "Outcome", get: (d) => words(d.disposition) },
       { label: "Why", get: whyOf },
     ], list, "No decisions recorded yet", "Run one cycle from Controls to see what it considers.");
   }
@@ -327,7 +345,7 @@
   function renderOrders(orders) {
     table($("orders"), [
       { label: "Time", get: (o) => fmtTime(o.created_at) }, { label: "Side", get: (o) => o.intent.side },
-      { label: "Contract", get: (o) => o.intent.contract.underlying + " " + o.intent.contract.expiry + " " + o.intent.contract.right + o.intent.contract.strike },
+      { label: "Contract", get: (o) => ticket({ symbol: o.intent.contract.underlying, right: o.intent.contract.right, strike: o.intent.contract.strike, expiry: o.intent.contract.expiry }) },
       { label: "Qty", right: true, get: (o) => o.filled_qty + "/" + o.intent.quantity }, { label: "Limit", right: true, get: (o) => o.intent.limit_price },
       { label: "Fill", right: true, get: (o) => o.avg_fill_price === null ? "" : o.avg_fill_price },
       { label: "State", get: (o) => o.state }, { label: "Why", get: (o) => o.risk_failures.join("; ") },
@@ -352,64 +370,138 @@
   }
 
   // ---------------------------------------------------------------- Trades
+  // One list for every simulated trade: the long-term options account, the options lanes, the 10x challenge and the
+  // two share lanes. Each row says which of those took it and whether it was options or shares.
   const FILTERS = [
     { id: "all", label: "All", test: () => true }, { id: "open", label: "Open", test: (t) => t.status !== "CLOSED" },
     { id: "closed", label: "Closed", test: (t) => t.status === "CLOSED" },
     { id: "winners", label: "Winners", test: (t) => t.status === "CLOSED" && t.pnl > 0 },
     { id: "losers", label: "Losers", test: (t) => t.status === "CLOSED" && t.pnl <= 0 },
   ];
+  const KINDS = [{ id: "all", label: "Options and shares" }, { id: "options", label: "Options" }, { id: "shares", label: "Shares" }];
   const SORTS = {
-    entry_time: (t) => t.entry_time, symbol: (t) => t.symbol, pnl: (t) => (t.pnl === null ? -Infinity : t.pnl),
+    opened_at: (t) => t.opened_at || "", symbol: (t) => t.symbol, pnl: (t) => (t.pnl === null ? -Infinity : t.pnl),
     pnl_pct: (t) => (t.pnl_pct === null ? -Infinity : t.pnl_pct), held: (t) => (t.held_seconds === null ? Infinity : t.held_seconds),
+    kind: (t) => t.instrument + " " + (t.opened_at || ""), source: (t) => t.source_label,
   };
+  const instrumentTag = (t) => el("span", t.instrument === "options" ? "Options" : "Shares", "tag " + (t.instrument === "options" ? "info" : ""));
+  const tradeName = (t) => (t.instrument === "options" && t.right ? ticket(t) : el("b", t.symbol, "sym"));
 
   function pnlCell(t) {
     const w = el("span", null, "num");
-    if (t.pnl === null) { w.textContent = "unobservable"; w.className = "muted"; return w; }
-    w.appendChild(span(sgn(t.pnl), tone(t.pnl)));
+    if (t.pnl === null) { w.textContent = t.status === "CLOSED" ? "n/a" : "no quote yet"; w.className = "muted"; return w; }
+    w.appendChild(span(sgn(t.pnl) + (t.pnl_pct === null ? "" : " (" + pct(t.pnl_pct) + ")"), tone(t.pnl)));
     const bar = el("span", null, "bar"), i = el("i", null, t.pnl >= 0 ? "up" : "down");
     i.style.width = Math.min(50, Math.abs(t.pnl_pct || 0) / 2) + "%";
     bar.appendChild(i);
     w.appendChild(bar);
     return w;
   }
+  function laneExitLabel(t) {
+    const code = t.exit_reason;
+    return t.status === "OPEN" ? "Open" : t.status === "PARTIAL" ? "Partly closed" : (EXIT_TEXT[code] || OP_EXIT[code] || ST_EXIT[code] || SW_EXIT[code] || (code ? words(code) : "Closed"));
+  }
   function statusTag(t) {
-    if (t.status !== "CLOSED") return el("span", exitLabel(t), "tag info");
-    return el("span", exitLabel(t), "tag " + (t.pnl > 0 ? "gain" : "loss"));
+    const label = laneExitLabel(t);
+    if (t.status !== "CLOSED") return el("span", label, "tag info");
+    return el("span", label, "tag " + (t.pnl > 0 ? "gain" : "loss"));
+  }
+  const openedText = (t) => fmtTime(t.opened_at);
+  const exitText = (t) => (t.exit_price !== null ? Number(t.exit_price).toFixed(2) : (t.mark !== null && t.mark !== undefined ? Number(t.mark).toFixed(2) + " (mark)" : "no quote"));
+  const heldText = (t) => duration(t.held_seconds !== null ? t.held_seconds : Math.floor((Date.now() - new Date(t.opened_at).getTime()) / 1000));
+
+  // What opens when a row is chosen: the order-trail drawer for the options account, an inline file for lane trades.
+  function laneDetail(t) {
+    const d = t.detail;
+    if (t.instrument === "options") return tradeItem(Object.assign({}, d, { symbol: t.symbol }), Object.assign({}, OP_EXIT));
+    const box = el("div", null, "pm-body"), facts = el("dl", null, "facts");
+    const row = (k, v) => { facts.appendChild(el("dt", k)); facts.appendChild(el("dd", v)); };
+    const lane = t.source === "swing-pullback" ? LANES.sw : LANES.st;
+    row("Opened", fmtTime(t.opened_at));
+    row("Bought", t.quantity + " shares at " + Number(t.entry_price).toFixed(2));
+    if (t.exit_price !== null) row("Sold", Number(t.exit_price).toFixed(2) + " on " + fmtTime(t.closed_at));
+    row("Why it entered", lane.why(d.why_entered || {}));
+    if (t.status === "CLOSED") row("How it ended", d.close_text || laneExitLabel(t));
+    box.appendChild(facts);
+    return box;
+  }
+  function attachRow(node, t, onOpen) {
+    node.tabIndex = 0;
+    node.setAttribute("role", "button");
+    node.setAttribute("aria-label", "Open " + (t.instrument === "options" ? contractText(t) : t.symbol + " shares") + " from " + t.source_label);
+    node.addEventListener("click", onOpen);
+    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); onOpen(); } });
+  }
+  function toggleInline(after, t, colspan) {
+    const nxt = after.nextSibling;
+    if (nxt && nxt.classList && nxt.classList.contains("inline-file")) { nxt.remove(); return; }
+    const holder = colspan ? el("tr", null, "inline-file") : el("div", null, "inline-file");
+    let cell = holder;
+    if (colspan) { cell = el("td"); cell.colSpan = colspan; holder.appendChild(cell); }
+    cell.appendChild(laneDetail(t));
+    const det = cell.querySelector("details");
+    if (det) det.open = true;
+    after.after(holder);
+  }
+  function openRow(t, node, colspan) {
+    if (t.has_file) openTrade(t.id, node); else toggleInline(node, t, colspan);
   }
 
   function renderTrades() {
     const data = S.trades;
     if (!data) return;
-    const sm = data.summary, f = $("trade-summary");
-    $("trade-lede").textContent = sm.total
-      ? sm.total + " trade" + (sm.total === 1 ? "" : "s") + " so far, each one a filled buy matched to the sells that closed it. Select a row to see why it was entered, what the agents said, and how it ended. " + sm.caveat
-      : "Nothing has traded yet. Entries need automatic entries switched on in Controls and a candidate that passes the risk gate, the agents and the data-quality check.";
+    const all = data.trades;
+    const kindOk = (t) => S.kind === "all" || t.instrument === S.kind;
+    const srcOk = (t) => S.source === "all" || t.source === S.source;
+    const scoped = all.filter(kindOk).filter(srcOk);
+    const sm = { total: scoped.length, open: scoped.filter((t) => t.status !== "CLOSED").length };
+    const done = scoped.filter((t) => t.status === "CLOSED" && t.pnl !== null), wins = done.filter((t) => t.pnl > 0);
+    const realized = done.reduce((a, t) => a + t.pnl, 0), openPnl = scoped.filter((t) => t.status !== "CLOSED").reduce((a, t) => a + (t.pnl || 0), 0);
+    const best = done.length ? Math.max.apply(null, done.map((t) => t.pnl)) : null, worst = done.length ? Math.min.apply(null, done.map((t) => t.pnl)) : null;
+    const noQuote = scoped.filter((t) => t.status !== "CLOSED" && t.pnl === null).length;
+    $("trade-lede").textContent = all.length
+      ? all.length + " simulated trade" + (all.length === 1 ? "" : "s") + " from every account and lane. The long-term options account is the only one that trades the paper broker; the lanes and the 10x challenge are research experiments with their own simulated fills. Choose Options or Shares, pick a lane, or sort any column. " + data.caveat
+      : "Nothing has traded yet. The options account needs automatic entries switched on in Controls; the lanes and the challenge need the options lanes switched on.";
+    const f = $("trade-summary");
     f.replaceChildren();
     kids(f, [
-      fig(String(sm.total), "Trades", sm.open + " open, " + sm.closed + " closed"),
-      fig(sm.win_rate_pct === null ? "n/a" : sm.win_rate_pct + "%", "Winners", sm.closed ? sm.wins + " of " + sm.closed + " closed" : "no closed trades"),
-      fig(sgn(sm.realized_pnl), "Realized", "from closed and partly closed", tone(sm.realized_pnl)),
-      fig(sgn(sm.unrealized_pnl), "Unrealized", sm.unobservable_open ? sm.unobservable_open + " open without a usable bid" : "marked at the bid", tone(sm.unrealized_pnl)),
-      fig(sm.best === null ? "n/a" : sgn(sm.best), "Best closed", sm.worst === null ? "" : "worst " + sgn(sm.worst), tone(sm.best)),
+      fig(String(sm.total), "Trades", sm.open + " open, " + done.length + " closed"),
+      fig(done.length ? Math.round(wins.length / done.length * 1000) / 10 + "%" : "n/a", "Winners", done.length ? wins.length + " of " + done.length + " closed" : "no closed trades"),
+      fig(sgn(realized), "Realized", "closed trades, after fees", tone(realized)),
+      fig(sgn(openPnl), "Open now", noQuote ? noQuote + " open without a usable quote" : "marked at the bid", tone(openPnl)),
+      fig(best === null ? "n/a" : sgn(best), "Best closed", worst === null ? "" : "worst " + sgn(worst), tone(best)),
     ]);
-    chips($("trade-filters"), FILTERS.map((x) => ({ id: x.id, label: x.label + " " + data.trades.filter(x.test).length })), S.filter, (id) => { S.filter = id; renderTrades(); });
+    const count = (test) => all.filter(srcOk).filter(test).length;
+    chips($("trade-kind"), KINDS.map((k) => ({ id: k.id, label: k.label + " " + all.filter(srcOk).filter((t) => k.id === "all" || t.instrument === k.id).length })), S.kind, (id) => { S.kind = id; S.shown = 100; renderTrades(); });
+    const sel = $("trade-source");
+    if (!sel.dataset.ready || Number(sel.dataset.n) !== data.sources.length) {
+      sel.replaceChildren();
+      const first = el("option", "All accounts and lanes"); first.value = "all"; sel.appendChild(first);
+      data.sources.forEach((x) => { const o = el("option", x.label + " (" + x.total + ")"); o.value = x.source; sel.appendChild(o); });
+      sel.dataset.ready = "1"; sel.dataset.n = String(data.sources.length);
+    }
+    sel.value = S.source;
+    const base = all.filter(kindOk).filter(srcOk);
+    chips($("trade-filters"), FILTERS.map((x) => ({ id: x.id, label: x.label + " " + base.filter(x.test).length })), S.filter, (id) => { S.filter = id; S.shown = 100; renderTrades(); });
     const flt = FILTERS.find((x) => x.id === S.filter) || FILTERS[0], q = S.query.trim().toUpperCase();
-    const key = SORTS[S.sort.key], dir = S.sort.dir;
-    const rows = data.trades.filter(flt.test).filter((t) => !q || t.symbol.indexOf(q) >= 0 || t.contract.indexOf(q) >= 0)
+    const key = SORTS[S.sort.key] || SORTS.opened_at, dir = S.sort.dir;
+    const rows = base.filter(flt.test).filter((t) => !q || t.symbol.indexOf(q) >= 0 || t.label.toUpperCase().indexOf(q) >= 0)
       .sort((x, y) => (key(x) < key(y) ? -dir : key(x) > key(y) ? dir : 0));
+    renderSources(data, kindOk);
+    const matching = rows.length;
+    rows.length = Math.min(rows.length, S.shown);
     const host = $("trade-table");
     if (!rows.length) {
-      empty(host, data.trades.length ? "No trades match this filter" : "No trades yet",
-        data.trades.length ? "Clear the search box or pick All." : "Run a cycle from Controls, or let the loop run during market hours.");
+      empty(host, all.length ? "No trades match these filters" : "No trades yet",
+        all.length ? "Clear the search box, or pick All and Options and shares." : "Run a cycle from Controls, or let the loop run during market hours.");
       return;
     }
     host.replaceChildren();
-    if (window.matchMedia("(max-width:860px)").matches) {
+    if (phone.matches) {
       // Phones: one card per trade instead of a table that would scroll sideways.
       const sorter = el("select");
       sorter.setAttribute("aria-label", "Sort trades");
-      [["entry_time", -1, "Newest first"], ["entry_time", 1, "Oldest first"], ["pnl", -1, "Best profit first"], ["pnl", 1, "Worst result first"]].forEach((o) => {
+      [["opened_at", -1, "Newest first"], ["opened_at", 1, "Oldest first"], ["pnl", -1, "Best profit first"], ["pnl", 1, "Worst result first"], ["kind", 1, "Options first"], ["kind", -1, "Shares first"]].forEach((o) => {
         const opt = el("option", o[2]); opt.value = o[0] + ":" + o[1]; sorter.appendChild(opt);
       });
       sorter.value = S.sort.key + ":" + S.sort.dir;
@@ -417,60 +509,71 @@
       host.appendChild(sorter);
       rows.forEach((x) => {
         const card = el("div", null, "tcard");
-        card.tabIndex = 0; card.setAttribute("role", "button");
-        card.setAttribute("aria-label", "Open trade file for " + x.symbol + " " + (x.right === "C" ? "call " : "put ") + x.strike);
         const top = el("div", null, "tc-top");
-        top.appendChild(ticket(x)); top.appendChild(statusTag(x));
+        kids(top, [tradeName(x), statusTag(x)]);
         const mid = el("div", null, "tc-mid");
-        mid.appendChild(el("span", x.pnl === null ? "Unobservable" : sgn(x.pnl), "tc-pnl num " + tone(x.pnl)));
+        mid.appendChild(el("span", x.pnl === null ? "No quote" : sgn(x.pnl), "tc-pnl num " + tone(x.pnl)));
         if (x.pnl_pct !== null) mid.appendChild(el("span", pct(x.pnl_pct), "num " + tone(x.pnl_pct)));
-        const low = el("div", x.quantity + " at " + Number(x.entry_price).toFixed(2) + (x.exit_price !== null ? ", sold at " + Number(x.exit_price).toFixed(2) : (x.mark !== null ? ", bid " + Number(x.mark).toFixed(2) : ", no usable bid")) +
-          ". Opened " + fmtTime(x.entry_time) + ".", "muted");
+        const low = el("div", x.source_label + ". " + x.quantity + (x.instrument === "options" ? " contract" + (x.quantity === 1 ? "" : "s") : " share" + (x.quantity === 1 ? "" : "s")) + " at " + Number(x.entry_price).toFixed(2) +
+          (x.exit_price !== null ? ", sold at " + Number(x.exit_price).toFixed(2) : (x.mark !== null && x.mark !== undefined ? ", bid " + Number(x.mark).toFixed(2) : ", no usable quote")) + ". Opened " + openedText(x) + ".", "muted");
         kids(card, [top, mid, low]);
-        const open = () => openTrade(x.id, card);
-        card.addEventListener("click", open);
-        card.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+        attachRow(card, x, () => openRow(x, card, 0));
         host.appendChild(card);
       });
+      moreButton(host, rows.length, matching);
       return;
     }
     const t = el("table"), head = el("tr");
     const col = (label, sortKey, right) => {
       const th = el("th", null, right ? "r" : "");
       if (sortKey) {
-        const b = el("button", label + (S.sort.key === sortKey ? (sortKey === "entry_time" ? (S.sort.dir > 0 ? " (oldest first)" : " (newest first)") : (S.sort.dir > 0 ? " (low to high)" : " (high to low)")) : ""));
+        const on = S.sort.key === sortKey;
+        const b = el("button", label + (on ? (sortKey === "opened_at" ? (S.sort.dir > 0 ? " (oldest first)" : " (newest first)") : (S.sort.dir > 0 ? " (low to high)" : " (high to low)")) : ""));
         b.type = "button";
-        th.setAttribute("aria-sort", S.sort.key === sortKey ? (S.sort.dir > 0 ? "ascending" : "descending") : "none");
-        b.addEventListener("click", () => { S.sort = { key: sortKey, dir: S.sort.key === sortKey ? -S.sort.dir : -1 }; renderTrades(); });
+        th.setAttribute("aria-sort", on ? (S.sort.dir > 0 ? "ascending" : "descending") : "none");
+        b.addEventListener("click", () => { S.sort = { key: sortKey, dir: on ? -S.sort.dir : (sortKey === "kind" || sortKey === "source" || sortKey === "symbol" ? 1 : -1) }; renderTrades(); });
         th.appendChild(b);
       } else th.textContent = label;
       head.appendChild(th);
     };
-    col("Opened", "entry_time"); col("Contract", "symbol"); col("Qty", null, true); col("Entry", null, true); col("Exit or mark", null, true);
-    col("Profit or loss", "pnl", true); col("Return", "pnl_pct", true); col("Held", "held", true); col("Status", null);
+    col("Opened", "opened_at"); col("Trade", "symbol"); col("Type", "kind"); col("Account or lane", "source"); col("Qty", null, true); col("Entry", null, true);
+    col("Exit or mark", null, true); col("Profit or loss", "pnl", true); col("Held", "held", true); col("Status", null);
     t.appendChild(head);
-    const now = Date.now();
+    const ncols = head.children.length;
     rows.forEach((x) => {
       const tr = el("tr", null, "click");
-      tr.tabIndex = 0;
-      tr.setAttribute("aria-label", "Open trade file for " + x.symbol + " " + (x.right === "C" ? "call " : "put ") + x.strike);
       const cell = (content, right) => { const td = el("td", null, right ? "r num" : ""); if (content instanceof Node) td.appendChild(content); else td.textContent = content; tr.appendChild(td); };
-      cell(fmtTime(x.entry_time)); cell(ticket(x)); cell(String(x.quantity), true); cell(Number(x.entry_price).toFixed(2), true);
-      cell(x.exit_price !== null ? Number(x.exit_price).toFixed(2) : (x.mark !== null ? Number(x.mark).toFixed(2) + " (mark)" : "unobservable"), true);
-      cell(pnlCell(x), true);
-      cell(x.pnl_pct === null ? "n/a" : span(pct(x.pnl_pct), tone(x.pnl_pct)), true);
-      cell(duration(x.held_seconds !== null ? x.held_seconds : Math.floor((now - new Date(x.entry_time).getTime()) / 1000)), true);
-      cell(statusTag(x));
-      const open = () => openTrade(x.id, tr);
-      tr.addEventListener("click", open);
-      tr.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+      cell(openedText(x)); cell(tradeName(x)); cell(instrumentTag(x)); cell(x.source_label); cell(String(x.quantity), true); cell(Number(x.entry_price).toFixed(2), true);
+      cell(exitText(x), true); cell(pnlCell(x), true);
+      cell(heldText(x), true); cell(statusTag(x));
+      attachRow(tr, x, () => openRow(x, tr, ncols));
       t.appendChild(tr);
     });
     host.appendChild(t);
+    moreButton(host, rows.length, matching);
+  }
+  function moreButton(host, shown, total) {
+    if (total <= shown) return;
+    const b = el("button", "Show 100 more (" + shown + " of " + total + " shown)", "btn");
+    b.type = "button";
+    b.addEventListener("click", () => { S.shown += 100; renderTrades(); });
+    host.appendChild(b);
+  }
+
+  function renderSources(data, kindOk) {
+    const rows = data.sources.filter((x) => S.kind === "all" || x.instrument === S.kind);
+    table($("trade-sources"), [
+      { label: "Account or lane", get: (r) => { const b = el("button", r.label, "linkbtn"); b.type = "button"; b.addEventListener("click", () => { S.source = r.source; renderTrades(); }); return b; } },
+      { label: "Type", get: (r) => (r.instrument === "options" ? "Options" : "Shares") },
+      { label: "Trades", right: true, get: (r) => r.open + " open, " + r.closed + " closed" },
+      { label: "Winners", right: true, get: (r) => (r.win_rate_pct === null ? "n/a" : r.win_rate_pct + "%") },
+      { label: "Realized", right: true, get: (r) => span(arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)) },
+      { label: "Open now", right: true, get: (r) => span(arrow(r.open_pnl) + sgn(r.open_pnl), tone(r.open_pnl)) },
+    ], rows, "No lanes have traded yet");
   }
 
   async function loadTrades() {
-    S.trades = await api("/api/trades?limit=500");
+    S.trades = await api("/api/alltrades");
     renderTrades();
   }
 
@@ -494,8 +597,8 @@
     return s;
   }
   function renderTradeFile(t) {
-    $("drawer-title").textContent = t.symbol + " " + (t.right === "C" ? "call " : "put ") + t.strike + ", " + fmtDay(t.expiry);
-    $("drawer-sub").textContent = t.contract + " | " + exitLabel(t);
+    $("drawer-title").textContent = contractText(t);
+    $("drawer-sub").textContent = exitLabel(t);
     const body = $("drawer-body");
     body.replaceChildren();
     const res = el("div");
@@ -551,16 +654,17 @@
   }
 
   async function openTrade(id, opener) {
-    const t = S.trades && S.trades.trades.find((x) => x.id === id);
-    if (!t) return;
     S.openTrade = id; S.opener = opener || document.activeElement;
-    const trail = renderTradeFile(t);
     $("scrim").hidden = false; $("drawer").hidden = false;
     document.body.style.overflow = "hidden";
+    $("drawer-title").textContent = "Loading the trade file";
+    $("drawer-sub").textContent = "";
+    $("drawer-body").replaceChildren();
     $("btn-drawer-close").focus();
     try {
       const d = await api("/api/trades/" + encodeURIComponent(id));
       if (S.openTrade !== id) return;
+      const trail = renderTradeFile(d);
       trail.replaceChildren();
       const ol = el("ol", null, "timeline");
       (d.audit || []).forEach((e) => {
@@ -574,7 +678,7 @@
       });
       if (ol.children.length) trail.appendChild(ol); else trail.appendChild(el("p", "No audit events recorded.", "muted"));
     } catch (e) {
-      if (S.openTrade === id) { trail.replaceChildren(); trail.appendChild(el("p", "Could not load the order trail: " + e.message, "loss")); }
+      if (S.openTrade === id) { $("drawer-title").textContent = "Could not load the trade file"; $("drawer-body").appendChild(el("p", e.message, "loss")); }
     }
   }
   function closeTrade() {
@@ -786,8 +890,8 @@
     const d = el("details", null, "pm");
     const sum = el("summary");
     const label = open ? "Open" : (exits[t.close_reason] || words(t.close_reason));
-    kids(sum, [span(o.right === "C" ? "Call" : "Put", "tag " + (o.right === "C" ? "gain" : "loss")), el("b", t.symbol),
-      span(o.strike + " expiring " + shortDay(o.expiry) + " (" + o.dte + "d at entry)", "muted"),
+    kids(sum, [o.right ? ticket({ symbol: t.symbol, right: o.right, strike: o.strike, expiry: o.expiry }) : el("b", t.symbol),
+      span(o.dte !== undefined ? o.dte + " days to expiry at entry" : "", "muted"),
       span(t.quantity + " at " + Number(t.entry_price).toFixed(2) + (t.exit_price === null ? "" : " to " + Number(t.exit_price).toFixed(2)), "num"),
       span(label, "tag " + (open ? "info" : t.pnl > 0 ? "gain" : "loss"))]);
     const money_ = open ? (t.unrealized_pnl === null ? "no mark yet" : arrow(t.unrealized_pnl) + sgn(t.unrealized_pnl)) : arrow(t.pnl) + sgn(t.pnl) + " (" + pct(t.pnl_pct) + ")";
@@ -1047,6 +1151,7 @@
     };
     setTimeout(poll, 2000);
   }));
+  $("trade-source").addEventListener("change", (ev) => { S.source = ev.target.value; renderTrades(); });
   $("trade-search").addEventListener("input", (ev) => { S.query = ev.target.value; renderTrades(); });
   $("btn-drawer-close").addEventListener("click", closeTrade);
   $("scrim").addEventListener("click", closeTrade);

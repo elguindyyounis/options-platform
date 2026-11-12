@@ -113,6 +113,7 @@
   .empty { padding:22px 8px; color:var(--mut); }
   .empty b { display:block; color:var(--fg); font-weight:600; margin-bottom:2px; }
   .ticket { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+  td .ticket { flex-wrap:nowrap; white-space:nowrap; }
   .ticket .sym { font:600 14px var(--mono); }
   .ticket .leg { font-size:13px; } .ticket .leg.call { color:var(--gain); } .ticket .leg.put { color:var(--loss); }
   .bar { display:inline-block; width:56px; height:6px; background:var(--raised); border-radius:3px; position:relative; vertical-align:middle; margin-left:8px; }
@@ -140,6 +141,7 @@
   .tile small { color:var(--mut); font-size:11.5px; }
   .tile.up { background:color-mix(in srgb, var(--gain) var(--k, 10%), var(--raised)); }
   .tile.down { background:color-mix(in srgb, var(--loss) var(--k, 10%), var(--raised)); }
+  .inline-file { background:var(--bg); } .inline-file > td { padding:4px 8px 14px; } .inline-file .pm-body { padding:6px 8px; display:grid; gap:12px; }
   details.pm { border-bottom:1px solid var(--line-soft); }
   details.pm:last-child { border-bottom:0; }
   details.pm > summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; padding:11px 4px; cursor:pointer; list-style:none; }
@@ -273,17 +275,24 @@
         </div>
       </section>
 
-      <section id="view-trades" data-page="trades" data-question="What did the platform trade, why, and how did each trade end?" hidden>
+      <section id="view-trades" data-page="trades" data-question="What did the platform trade, in options or shares, in which lane, and how did each trade end?" hidden>
         <div>
           <h1>Trades</h1>
           <p id="trade-lede" class="lede"></p>
         </div>
         <div class="figures" id="trade-summary"></div>
         <div class="toolbar">
+          <div class="chips" id="trade-kind" role="group" aria-label="Options or shares"></div>
+          <select id="trade-source" aria-label="Which account or lane"></select>
           <div class="chips" id="trade-filters" role="group" aria-label="Filter trades"></div>
           <input id="trade-search" type="text" placeholder="Search by symbol" aria-label="Search trades by symbol">
         </div>
         <div class="panel" style="padding:6px 8px"><div class="scroll" id="trade-table"></div></div>
+        <div class="panel">
+          <h2>By account and lane</h2>
+          <p class="q">Which account or experiment is producing these trades, and how are they doing?</p>
+          <div class="scroll" id="trade-sources"></div>
+        </div>
       </section>
 
       <section id="view-options" data-page="options" data-question="Do simulated option trades beat shares on the same ideas, and what do the losses teach?" hidden>
