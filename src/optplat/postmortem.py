@@ -37,6 +37,10 @@ CAUSES: dict[str, tuple[str, str]] = {
     "TREND_BREAK": ("The underlying closed through its 50-day average, the swing trend rule.", "Check how often this exit saved a loss versus ended a winner early."),
     "TIME_STOP": ("The holding limit passed without the stop or the target.", "Check whether a shorter or longer limit changes the result."),
     "EXPIRY_NEAR": ("It was closed close to expiry to avoid assignment and pin risk.", "Check whether a longer expiry would have let the idea play out."),
+    "STACKED": ("This was added on top of an existing position in the same name, so one idea was bet on twice or more.",
+                "Compare stacked trades with first entries: if stacks lose more, stacking is not paying."),
+    "OVERSIZED_FOR_LIQUIDITY": ("The size was a large share of the contract's volume or open interest, so a real order would probably have moved the price or not filled.",
+                                "Cap size at a share of volume, and see whether the result survives."),
     "BIG_WIN": ("A large gain from a long-shot structure.", "Check how many similar trades lost; one big win is not an edge."),
     "UNMARKED": ("No usable quote at the close, so it was closed at the intrinsic value.", "Check the data feed for this contract."),
 }
@@ -84,6 +88,10 @@ def post_mortem(trade: dict[str, Any], exit_price: float, reason: str, closed_at
         tags.append("SPREAD_ATE_GAIN")
     if (spread_in or 0) >= 10:
         tags.append("WIDE_SPREAD_ENTRY")
+    if p.get("stack_index", 0) > 0:
+        tags.append("STACKED")
+    if (p.get("size_vs_volume_pct") or 0) > 10 or (p.get("size_vs_oi_pct") or 0) > 5:
+        tags.append("OVERSIZED_FOR_LIQUIDITY")
     if (p.get("open_interest") or 0) < 50:
         tags.append("THIN_MARKET")
     if p.get("earnings_state") in ("SOON", "UNKNOWN"):

@@ -2,6 +2,18 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-12: bigger sizes and stacking in the option lanes (owner request)
+
+* Owner asked for larger size caps and for positions to stack on one name. In the option lanes only: aggressive lanes now
+  risk $5,000 to $10,000 of premium per trade with 15 to 20 open, may hold up to 3 positions in one name (`stack="any"`),
+  and the flow lane doubles size on a very thin contract and adds a second position only to a winner. Base lanes grew
+  modestly and stay as the control. Each trade records its size against the contract's volume and open interest, and an
+  oversized or stacked trade is tagged in its post-mortem so the digest shows whether stacking and size pay.
+* NOT changed: the real paper account's `RiskPolicy` (`max_same_underlying_side` = 2, `max_position_pct`,
+  `max_total_premium_pct`). Those are the "already holding a position: concentration limit" rejections, and CLAUDE.md
+  reserves them for the owner. The share benchmark lanes are also unchanged.
+* Verified: 466 tests. Not verified: any claim that bigger or stacked trades do better; fills at this size are optimistic.
+
 ## 2026-11-12: options-first research lanes and scanner v2 (human-directed session)
 
 * Owner asked for options-heavy, more experimental, automated research. Added: `universe.py` (200 names, 19 sectors),

@@ -457,4 +457,70 @@ def test_the_lane_parameters_keep_the_aggressive_variants_larger_and_looser_than
     assert ol.SHORT_AGGR.budget_usd > ol.SHORT_BASE.budget_usd and ol.SHORT_AGGR.dte_max < ol.SHORT_BASE.dte_max
     assert ol.SWING_AGGR.experimental and not ol.SWING_BASE.experimental and ol.SWING_AGGR.both_ways and not ol.SWING_BASE.both_ways
     assert ol.SWING_BASE.earnings_gate and not ol.SWING_AGGR.earnings_gate
-    assert all(p.max_per_sector <= 3 for p in ol.ALL_PARAMS)           # biotech or any one sector cannot fill the book
+    assert all(p.max_per_sector < p.max_open for p in ol.ALL_PARAMS)   # no single sector can fill a whole book
+    assert ol.SWING_AGGR.budget_usd >= 4 * ol.SWING_BASE.budget_usd and ol.SHORT_AGGR.budget_usd >= 4 * ol.SHORT_BASE.budget_usd
+    assert ol.SHORT_AGGR.stack == ol.SWING_AGGR.stack == "any" and ol.SHORT_BASE.stack == ol.SWING_BASE.stack == "none"
+
+
+# ------------------------------------------------------------ stacking, size and liquidity
+def seed(lane, store, sym, contract, entry):
+    return store.lane_open(lane.p.lane, sym, OPEN, entry, 1, True, {"contract": contract, "right": "C", "expiry": "2026-12-18", "strike": 100.0,
+                                                                   "stop_pct": 40, "target_pct": 100, "multiplier": 100})
+
+
+@pytest.mark.parametrize("stack,marks_bid,expected", [
+    ("none", 3.0, False), ("any", 1.0, True), ("winners", 3.0, True), ("winners", 1.0, False), ("winners", None, False),
+])
+def test_stack_rules_decide_whether_a_second_position_in_a_name_may_open(stack, marks_bid, expected):
+    p = replace(ol.SHORT_AGGR, symbols=("SPY",), stack=stack, max_per_name=2)
+    lane, prov, store, _ = make(p)
+    seed(lane, store, "SPY", "SPY C1", 2.0)
+    marks = {} if marks_bid is None else {"SPY C1": (marks_bid, marks_bid + 0.1)}
+    assert lane._may_open("SPY", lane._held(), marks) is expected
+
+
+def test_the_name_limit_book_limit_and_sector_limit_still_hold_when_stacking_is_on():
+    p = replace(ol.SHORT_AGGR, stack="any", max_per_name=2, max_open=3, max_per_sector=2)
+    lane, prov, store, _ = make(p)
+    seed(lane, store, "SPY", "A", 2.0)
+    seed(lane, store, "SPY", "B", 2.0)
+    assert lane._may_open("SPY", lane._held(), {}) is False                 # two in the name already
+    assert lane._may_open("QQQ", lane._held(), {}) is False                 # same sector, and the sector holds two
+    assert lane._may_open("AAPL", lane._held(), {}) is True
+    seed(lane, store, "AAPL", "C", 2.0)
+    assert lane._may_open("MSFT", lane._held(), {}) is False                # the book is full
+
+
+def test_a_stacked_entry_records_what_it_was_stacked_on_and_is_tagged_in_its_post_mortem():
+    bars, now = short_up()
+    lane, prov, store, box = make(replace(SHORT, stack="any", max_per_name=2), bars, now=now)
+    lane.step(force=True)
+    held = lane._held()
+    first = held[0]
+    made = lane._enter("SPY", "C", now, lane._new_out(now), {"close": 100.0}, held)
+    assert made["open_payload"]["stack_index"] == 1 and made["open_payload"]["stacked_on"] == [first["id"]]
+    assert len(lane._held()) == 2
+    pm = post_mortem({**made, "opened_at": now.isoformat()}, 1.0, "stop", now + timedelta(hours=1), {"underlying": 99.0})
+    assert "STACKED" in pm["tags"]
+
+
+def test_an_oversized_trade_is_tagged_so_the_result_is_read_as_optimistic():
+    t = trade(size_vs_volume_pct=35.0)
+    assert "OVERSIZED_FOR_LIQUIDITY" in post_mortem(t, 6.0, "target", closed_at(1), {"underlying": 101.0})["tags"]
+    assert "OVERSIZED_FOR_LIQUIDITY" in post_mortem(trade(size_vs_oi_pct=8.0), 6.0, "target", closed_at(1), {"underlying": 101.0})["tags"]
+    assert "OVERSIZED_FOR_LIQUIDITY" not in post_mortem(trade(size_vs_volume_pct=2.0), 6.0, "target", closed_at(1), {"underlying": 101.0})["tags"]
+
+
+def test_entries_record_their_size_against_the_contract_and_the_flow_lane_doubles_on_a_thin_contract():
+    now = datetime(2026, 11, 12, 15, 0, tzinfo=timezone.utc)
+    def qty_for(low_oi):
+        lane, prov, store, _ = make(replace(ol.FLOW, budget_usd=20000.0), now=now)
+        f = {"symbol": "AAPL", "contract": "AAPL  261218C00300000", "prior_day": "2026-11-11", "prior_volume": 800, "prior_oi": 40, "oi_change": 520,
+             "oi_verdict": "OI_ROSE", "position_read": "BUY_TO_OPEN", "lean": "BULLISH", "prior_low_oi": low_oi, "prior_ratio": 20.0, "sector": "Mega-cap tech"}
+        store.record_scan(now, True, {"as_of": now.isoformat(), "session_day": "2026-11-12", "follow_ups": [f]})
+        lane.step(force=True)
+        t = store.lane_trades(lane.p.lane, True, 5)[0]
+        assert t["open_payload"]["size_vs_volume_pct"] is not None and t["open_payload"]["signal"]["conviction_mult"] == (2.0 if low_oi else 1.0)
+        return t["quantity"], t["open_payload"]["budget_usd"]
+    (q1, b1), (q2, b2) = qty_for(False), qty_for(True)
+    assert b2 == 2 * b1 and q2 >= 2 * q1 - 1

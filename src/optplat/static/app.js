@@ -797,6 +797,8 @@
     row("Paid", t.quantity + " contract" + (t.quantity > 1 ? "s" : "") + " at the ask of " + Number(t.entry_price).toFixed(2) + " ($" + num(Math.round(t.entry_price * t.quantity * 100)) + "), spread " + o.spread_pct + "%, open interest " + num(o.open_interest) + ", fees " + money(o.fees_open));
     row("Stop and target", "Stop if the bid reaches " + (t.entry_price * (1 - o.stop_pct / 100)).toFixed(2) + ", target at " + (t.entry_price * (1 + o.target_pct / 100)).toFixed(2));
     row("Earnings", STATE[o.earnings_state] || o.earnings_state);
+    if (o.stack_index > 0) row("Stacked", "Position " + (o.stack_index + 1) + " in this name, added on top of " + o.stacked_on.length + " earlier trade" + (o.stacked_on.length > 1 ? "s" : "") + ".");
+    if (o.size_vs_volume_pct !== null && o.size_vs_volume_pct !== undefined) row("Size against the market", o.size_vs_volume_pct + "% of the contract's volume" + (o.size_vs_oi_pct === null || o.size_vs_oi_pct === undefined ? "" : ", " + o.size_vs_oi_pct + "% of its open interest") + ". A real order this size could move the price.");
     if (open && t.mark_bid !== null) row("Last mark", "Bid " + Number(t.mark_bid).toFixed(2) + " at " + fmtTime(t.mark_at));
     body.appendChild(facts);
     const pm = t.postmortem;
