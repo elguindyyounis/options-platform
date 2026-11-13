@@ -546,3 +546,40 @@ def test_frozen_baseline_is_pinned_and_independent():
     assert (f.kind, f.budget_usd, f.max_open, f.stack, f.max_per_name) == ("short", 1000, 4, "none", 1)
     assert f.experimental is False and f.budget_usd <= ol.SHORT_AGGR.budget_usd
     assert f.max_per_sector < f.max_open and b.lane != f.lane
+
+
+# -- exit quote age (challenge 8): a close records how old its quote was, and an old or unknown age is tagged
+
+def test_a_close_records_the_age_and_verification_of_the_quote_it_was_priced_on():
+    lane, prov, store, box, t, now = open_one()
+    prov.override[t["open_payload"]["contract"]] = (t["entry_price"] * 1.7, t["entry_price"] * 1.75)
+    box[0] = now + timedelta(minutes=10)
+    lane.step(force=True)
+    cp = store.lane_trades(lane.p.lane, True, 5)[0]["close_payload"]
+    assert cp["exit_quote_age_s"] is not None and abs(cp["exit_quote_age_s"]) <= 60
+    assert isinstance(cp["exit_quote_verified"], bool) and cp["exit_quote_at"]  # the demo feed calls its own quotes verified
+    assert "STALE_EXIT_QUOTE" not in cp["postmortem"]["tags"]
+    assert cp["postmortem"]["exit_quote_age_s"] == cp["exit_quote_age_s"]
+
+
+def test_an_exit_priced_on_an_old_quote_is_tagged_stale():
+    lane, prov, store, box, t, now = open_one()
+    contract = t["open_payload"]["contract"]
+    prov.override[contract] = (t["entry_price"] * 1.7, t["entry_price"] * 1.75)
+    orig = prov.quotes_for
+    prov.quotes_for = lambda cs: [replace(q, as_of=q.as_of - timedelta(minutes=10)) for q in orig(cs)]
+    box[0] = now + timedelta(minutes=10)
+    lane.step(force=True)
+    cp = store.lane_trades(lane.p.lane, True, 5)[0]["close_payload"]
+    assert cp["exit_quote_age_s"] >= 600 and "STALE_EXIT_QUOTE" in cp["postmortem"]["tags"]
+
+
+def test_stale_tag_fails_closed_on_unknown_age_and_stays_silent_when_the_field_predates_it():
+    t = {"open_payload": {"right": "C", "multiplier": 100, "contract": "X"}, "entry_price": 5.0, "quantity": 1, "symbol": "SPY",
+         "opened_at": "2026-11-13T15:00:00+00:00"}
+    closed = datetime(2026, 11, 13, 16, 0, tzinfo=timezone.utc)
+    assert "STALE_EXIT_QUOTE" in post_mortem(t, 6.0, "target", closed, {"exit_quote_age_s": None})["tags"]
+    assert "STALE_EXIT_QUOTE" in post_mortem(t, 6.0, "target", closed, {"exit_quote_age_s": 61.0})["tags"]
+    assert "STALE_EXIT_QUOTE" in post_mortem(t, 6.0, "target", closed, {"exit_quote_age_s": -61.0})["tags"]
+    assert "STALE_EXIT_QUOTE" not in post_mortem(t, 6.0, "target", closed, {"exit_quote_age_s": 60.0})["tags"]
+    assert "STALE_EXIT_QUOTE" not in post_mortem(t, 6.0, "target", closed, {})["tags"]

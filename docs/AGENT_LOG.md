@@ -478,3 +478,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-13 (challenger run 3): exit quote age
+
+* Alerter unchanged since `1fc88f1`. Read `data_sources.py` (see COMPARISON_ALERTER.md).
+* Challenge 8: option-lane closes now store the age and venue-verification of the quote they were priced on; post-mortems tag
+  `STALE_EXIT_QUOTE` when it is over 60 s, or unknown (fail closed). Closes made before this field existed get no tag. Display and tags
+  only: no lane rule, risk limit or budget changed.
+* Verified: `python -m pytest -q` 512 passed (3 new tests). Not verified: live Yahoo quotes (their age is download time), dashboard
+  rendering, share-lane exits, alerter tests. Baseline note: local `main` is behind; this branch builds on `agent/2026-11-13-daily-challenger-7`.

@@ -73,7 +73,8 @@ Since the first review the alerter changed only CI and preflight scripts. Newly 
   from score, so a high score cannot buy past them.
 * Its council labels unusual volume "cannot establish who bought or sold". The platform goes further and infers side and
   open/close; challenge 7 notes that the second inference can span several sessions.
-* Still unread: `server.py`, `data_sources.py`.
+* `data_sources.py` read 2026-11-13: free yfinance chains only; every candidate carries `opening_trade_verified` and `trade_aggressor_verified` set to False; limitations text says download time is not market time; net GEX is refused (not shown partial) when the near-dated chain exceeds its row cap or a side is missing; held-contract quotes that cannot be found are reported as missing, never replaced. Underlying bars missing means research only, no entries.
+* Still unread: `server.py`.
 
 ## Added 2026-11-13 (alerter `1fc88f1`, second run): `storage.py`
 

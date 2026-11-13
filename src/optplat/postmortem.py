@@ -15,6 +15,7 @@ from typing import Any, Optional
 from .liquidity import liquidity_tier, stress_exit
 
 MIN_TRADES_FOR_PATTERN = 5
+MAX_FRESH_EXIT_QUOTE_S = 60  # same bound the risk policy uses for an entry quote
 
 # tag -> (what it means in a sentence, what to test next)
 CAUSES: dict[str, tuple[str, str]] = {
@@ -46,6 +47,8 @@ CAUSES: dict[str, tuple[str, str]] = {
     "EXIT_STRESS_FLIPS_RESULT": ("It made money at the bid, but not once a less friendly exit is assumed (wide spread, size against volume and open interest).",
                                  "Treat the gain as optimistic; test a tighter spread limit or smaller size and see if it survives."),
     "BIG_WIN": ("A large gain from a long-shot structure.", "Check how many similar trades lost; one big win is not an edge."),
+    "STALE_EXIT_QUOTE": ("The quote this exit was priced on was old or its age is unknown, so the exit price may not have been available when the trade closed.",
+                         "Treat the result as unconfirmed; check the feed's quote times before trusting this lane's exits."),
     "UNMARKED": ("No usable quote at the close, so it was closed at the intrinsic value.", "Check the data feed for this contract."),
 }
 
@@ -109,6 +112,10 @@ def post_mortem(trade: dict[str, Any], exit_price: float, reason: str, closed_at
                  "expiry_near": "EXPIRY_NEAR", "expired_unmarked": "UNMARKED"}.get(reason, ""))
     if won and stress_net <= 0:
         tags.append("EXIT_STRESS_FLIPS_RESULT")
+    if "exit_quote_age_s" in close_info:  # absent on closes made before this field existed: no claim either way
+        age = close_info["exit_quote_age_s"]
+        if age is None or age > MAX_FRESH_EXIT_QUOTE_S or age < -MAX_FRESH_EXIT_QUOTE_S:
+            tags.append("STALE_EXIT_QUOTE")
     if won and net_pct >= 100:
         tags.append("BIG_WIN")
     tags = [t for t in dict.fromkeys(tags) if t]
@@ -120,6 +127,7 @@ def post_mortem(trade: dict[str, Any], exit_price: float, reason: str, closed_at
     shown = [t for t in tags if t in CAUSES][:4]
     return {"tags": tags, "headline": headline, "net_pct": round(net_pct, 1), "stress_net": round(stress_net, 2), "stress_net_pct": round(stress_net_pct, 1), "stress_concession_pct": stress["concession_pct"],
             "liquidity_tier": liquidity_tier(p.get("volume"), p.get("open_interest"), spread_in), "gross_pct": round(gross_pct, 1),
+            "exit_quote_age_s": close_info.get("exit_quote_age_s"), "exit_quote_verified": close_info.get("exit_quote_verified"),
             "underlying_move_pct": None if move is None else round(move, 2), "held_hours": None if held_h is None else round(held_h, 1),
             "lessons": [CAUSES[t][0] for t in shown], "try_next": [CAUSES[t][1] for t in shown]}
 

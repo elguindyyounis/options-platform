@@ -78,6 +78,7 @@ Existing items, in order:
 
 ## Done
 
+* Exit quote age recorded on option-lane closes and tagged `STALE_EXIT_QUOTE` (challenge 8). Follow-ups: show it in the dashboard; do the same for share lanes.
 * Lane summaries report stressed-exit realized P&L beside the bid-exit total over the same trades (API only; dashboard display is a follow-up).
 
 * Frozen baseline lane (challenge 3): `frozen-baseline-options`, a literal copy of the first short-term rule, settings pinned by `FROZEN_FINGERPRINT` and a test. Simulated only.

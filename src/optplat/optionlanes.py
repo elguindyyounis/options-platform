@@ -296,6 +296,9 @@ class OptionLane:
             out["errors"].append(f"quotes unavailable: {type(exc).__name__}: {str(exc)[:80]}")
             return {}
         marks = {q.contract.occ_symbol.strip(): (q.bid, q.ask) for q in quotes if q.is_valid()}
+        # Remember how old each mark was and whether its time came from the venue, so a close can store it (display only).
+        self._mark_meta = {q.contract.occ_symbol.strip(): {"exit_quote_at": q.as_of.isoformat(), "exit_quote_age_s": round(q.age_seconds(now), 1),
+                                                           "exit_quote_verified": bool(q.timestamp_verified)} for q in quotes if q.is_valid()}
         for t in held:
             m = marks.get(t["open_payload"]["contract"])
             if m:
@@ -306,6 +309,9 @@ class OptionLane:
     def _close(self, t: dict[str, Any], bid: float, reason: str, now: datetime, out: dict[str, Any], info: dict[str, Any]) -> bool:
         fees = round(t["quantity"] * FEE_PER_CONTRACT, 2)
         info = {**info, "fees_close": fees}
+        if info.get("bid") is not None:  # a priced exit; an intrinsic-value close (bid None) has no quote to age
+            meta = getattr(self, "_mark_meta", {}).get(t["open_payload"].get("contract"))
+            info.update(meta or {"exit_quote_at": None, "exit_quote_age_s": None, "exit_quote_verified": False})
         info["postmortem"] = post_mortem(t, bid, reason, now, info)
         if self.store.lane_close(t["id"], now, bid, reason, info):
             out["closed"].append({"symbol": t["symbol"], "reason": reason})
