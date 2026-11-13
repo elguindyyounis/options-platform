@@ -7,7 +7,7 @@ of a trading edge, and nothing here should be read as saying one earns more than
 **What was read:** the alerter's README, `PRODUCT_DECISION_ARCHITECTURE.md`, `CHANGELOG.md`, `RELIABILITY_AUDIT.md`,
 `gex.py`, `unusual_activity.py`, `entry_quality.py`, `liquidity.py`, `risk.py`, `sizing.py`, `strategy_lanes.py`,
 `intraday_strategy.py`, `exit_decisions.py`, `feedback.py`, `adaptive.py`, `agent_lab.py`, `research_foundations.py`,
-`daily_review.py`, two agent skill files and the CI workflow. **Not read:** `agents.py`, `core.py`, `storage.py`,
+`daily_review.py`, two agent skill files and the CI workflow. **Not read at the first pass (`agents.py` and `core.py` read 2026-11-13, see the end of this file):** `storage.py`,
 `server.py`, `data_sources.py`, the other skill files, and its tests (none were run). Claims about those are not made.
 
 ## Side by side
@@ -58,3 +58,21 @@ These are challenges raised by reading the alerter. None is proven.
 * **Strict entry gates.** Applying them would shrink the experiments the owner asked for. The post-mortem tags show what
   they would have caught.
 * **Anything about the alerter's council, sizing or goal tracker.** Not read closely enough to judge.
+
+## Addendum 2026-11-13: `agents.py` and `core.py` (alerter still at `9210fd8`; nothing new to review)
+
+* **Optional local model can only be stricter.** `agents.py` lets a local Ollama model add risks and raise a VETO in the Skeptic
+  role, but never pass or upgrade a deterministic rejection; if the Skeptic vetoes, the CIO verdict is forced to REJECT. It also
+  refuses any non-localhost endpoint so trading data is not sent out. The platform's committee has no model in it, so there is
+  nothing to port, but the "may only tighten" rule is the same shape as the platform's flow agent.
+* **Hard veto list is tighter than the platform's lanes by design.** `core.research_case` vetoes: under 7 days to expiry, missing or
+  crossed quote, spread over 35%, zero volume, unknown data source. The platform's aggressive lanes deliberately trade closer to
+  expiry and thinner contracts (owner's choice); the post-mortem tags show what these gates would have caught. No change made.
+* **Scores are labelled as rankings.** `core.py` states agent scores "rank research opportunities, not calibrated likelihoods", and
+  the sizing agent is told never to turn an evidence index into a win probability. The platform's Research page does the same with
+  its "too few" labels; worth keeping that wording in any future scoring.
+* **Thin contracts are capped, not just penalised.** `candidate_score` caps the score at 52 below 5 volume, 55 below 20 open
+  interest and 56 above 20% spread, so a tiny denominator cannot rank high on volume/OI ratio. The platform's tracker groups flagged
+  contracts by what was known at the flag, but does not yet show whether the ratio is dominated by tiny open interest.
+  Logged as challenge 7.
+* **Still not read:** `storage.py`, `server.py`, `data_sources.py`, other skill files, the alerter's tests.

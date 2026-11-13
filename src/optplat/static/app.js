@@ -1095,6 +1095,7 @@
       fig(sm.avg_return_pct === null ? "n/a" : arrow(sm.avg_return_pct) + pct(sm.avg_return_pct), "Average per trade", "of the premium paid, after fees", tone(sm.avg_return_pct)),
       fig(arrow(sm.realized_pnl) + sgn(sm.realized_pnl), "Realized", "simulated", tone(sm.realized_pnl)),
       fig(arrow(sm.unrealized_pnl) + sgn(sm.unrealized_pnl), "Open now", "at the last bid", tone(sm.unrealized_pnl)),
+      fig(sm.stress_pnl === null ? "n/a" : arrow(sm.stress_pnl) + sgn(sm.stress_pnl), "Realized, harder exit", sm.stress_pnl === null ? "needs closed trades with a post-mortem" : "same " + sm.stress_trades + " trades, at the bid they made " + sgn(sm.stress_bid_pnl) + "; a what-if, not a price", tone(sm.stress_pnl)),
     ]);
     const host = $("op-trades");
     if (!lane.trades.length) empty(host, "No simulated trades yet", d.enabled ? "A trade needs this lane's signal while the market is open." : "Switch the options lanes on under Controls.");

@@ -118,7 +118,7 @@ def post_mortem(trade: dict[str, Any], exit_price: float, reason: str, closed_at
     headline = (f"{'Won' if won else 'Lost'} {abs(net_pct):.0f}% on {name}: {gross_pct:+.0f}% on the premium before fees, closed on "
                 f"{reason.replace('_', ' ')}.{moved}")
     shown = [t for t in tags if t in CAUSES][:4]
-    return {"tags": tags, "headline": headline, "net_pct": round(net_pct, 1), "stress_net_pct": round(stress_net_pct, 1), "stress_concession_pct": stress["concession_pct"],
+    return {"tags": tags, "headline": headline, "net_pct": round(net_pct, 1), "stress_net_pct": round(stress_net_pct, 1), "stress_net": round(stress_net, 2), "stress_concession_pct": stress["concession_pct"],
             "liquidity_tier": liquidity_tier(p.get("volume"), p.get("open_interest"), spread_in), "gross_pct": round(gross_pct, 1),
             "underlying_move_pct": None if move is None else round(move, 2), "held_hours": None if held_h is None else round(held_h, 1),
             "lessons": [CAUSES[t][0] for t in shown], "try_next": [CAUSES[t][1] for t in shown]}

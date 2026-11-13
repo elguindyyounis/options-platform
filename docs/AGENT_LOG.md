@@ -3,7 +3,17 @@
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
 
+## 2026-11-13: stressed exit beside the bid exit in lane summaries (daily challenger)
 
+* Alerter unchanged since `9210fd8`. Read its `agents.py` and `core.py` (notes added to `docs/COMPARISON_ALERTER.md`); the
+  local model there can only tighten, and thin contracts have score caps. Logged challenge 7 (tiny open interest vs the volume/OI flag).
+* Challenge 4: headline lane P&L assumed the bid at exit, which flatters big sizes. `post_mortem` now also stores `stress_net`
+  (money). `lane_report` adds `stress_pnl` per closed trade and `stress_trades`, `stress_bid_pnl`, `stress_pnl` to the summary, over
+  only the trades that have a stressed figure so both totals cover the same trades. The Options page shows "Realized, harder exit".
+  `realized_pnl`, what lanes trade, risk limits and defaults are untouched; share lanes show n/a.
+* 540 tests pass (3 added, none changed or removed).
+* Not verified: the new tile in a browser; behaviour on the owner's real data (I cannot see their database). The stressed price
+  is a pessimistic model from volume, open interest and spread, not a fill. Older trades without a post-mortem are not counted.
 
 ## 2026-11-13: readable contracts, one Trades page, options tracker, sector rotation, Research summary, Desk redesign
 
