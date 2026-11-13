@@ -135,3 +135,4 @@ Existing items, in order:
   an FOMC decision tomorrow weigh against; the skeptic now reports which calendar gaps remain.
 * Scanner and trade ledger: `scanner.py` (most-active names, unusual option activity, fixed universe),
   `trades.py` (entries matched to exits with reasoning), `/api/scan`, `/api/trades`.
+* Open-interest window honesty (2026-11-13): follow-ups and flow-lane trades carry `oi_sessions` and `oi_window_clean`. Open: owner to decide whether the flow lane should require a clean one-session window.

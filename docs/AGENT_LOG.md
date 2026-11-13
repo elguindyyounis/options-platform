@@ -5,6 +5,15 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-13: open-interest window honesty (challenge 7, scheduled run)
+
+* Alerter had only CI changes since `9210fd8`; read its `core.py` and `agents.py` (see the comparison doc).
+* Found: `compare_with_prior` allows a 4-calendar-day gap, so Monday to Friday mixes four sessions into one OI change but
+  still reads BUY_TO_OPEN / BULLISH. Added `sessions_in_oi_change` and `oi_sessions` / `oi_window_clean` fields (display-only; the
+  read and the flow lane's entry rules are unchanged), copied into flow-lane trade signals. Unknown holiday year gives None, not clean.
+* Challenges 1, 2, 4 and 5 already have unmerged `agent/2026-11-13-*` branches, so I did not redo them; many near-duplicate branches exist and need the owner to pick and merge.
+* Verified: 506 tests pass. Not verified: live Yahoo data; the dashboard does not show the new fields yet; the comment in an existing test calling Monday to Friday "a long weekend" is wrong (left as is).
+
 ## 2026-11-13: frozen baseline lane (challenge 3, scheduled run)
 
 * Added `FROZEN_BASELINE` in `optionlanes.py`: a lane written out in full (not derived from `SHORT_BASE`) so tuning

@@ -58,3 +58,19 @@ These are challenges raised by reading the alerter. None is proven.
 * **Strict entry gates.** Applying them would shrink the experiments the owner asked for. The post-mortem tags show what
   they would have caught.
 * **Anything about the alerter's council, sizing or goal tracker.** Not read closely enough to judge.
+
+## Added 2026-11-13 (alerter `1fc88f1`): `core.py` and `agents.py`
+
+Since the first review the alerter changed only CI and preflight scripts. Newly read, code only (tests not run):
+
+* **Learning can only tighten.** `research_case` lets adaptive scores and per-agent memory make an approval more
+  conservative, never upgrade an ineligible one or reverse a veto. A peer group with 8+ trades, mean return at or below
+  -30% and win rate at or below 25% turns a PASS into a stricter hold. The platform has no feedback loop yet; if one is added,
+  copy the "tighten only" and minimum-sample rules.
+* **A local model may only add caution.** `ollama_reasoning` accepts only localhost endpoints, treats headlines as
+  untrusted, and can add a veto but never remove one.
+* **Hard skeptic limits** (spread over 35%, no volume, invalid quote, unrecognised source) are deterministic and sit apart
+  from score, so a high score cannot buy past them.
+* Its council labels unusual volume "cannot establish who bought or sold". The platform goes further and infers side and
+  open/close; challenge 7 notes that the second inference can span several sessions.
+* Still unread: `storage.py`, `server.py`, `data_sources.py`.

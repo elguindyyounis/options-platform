@@ -157,6 +157,24 @@ def unusual_contracts(snap: MarketSnapshot, now: datetime) -> list[dict[str, Any
 
 
 # ------------------------------------------------------------ does it stick the next day, and was it an open or a close
+def sessions_in_oi_change(prior_day: date, day: date) -> Optional[int]:
+    """How many trading sessions the open-interest change between two readings spans.
+
+    Open interest read on `day` reflects the close of the session before `day`, so the change since the sighting day's
+    reading covers every session from the sighting day up to, not including, `day`. Only a count of 1 isolates the
+    sighting day's trades. Returns None when the holiday table has no year involved (fail closed: unknown, not clean)."""
+    if day <= prior_day:
+        return None
+    n, d = 0, prior_day
+    while d < day:
+        if d.year not in HOLIDAYS:
+            return None
+        if d.weekday() < 5 and d not in HOLIDAYS[d.year]:
+            n += 1
+        d += timedelta(days=1)
+    return n
+
+
 def compare_with_prior(prior: dict[str, Any], oi_now: Optional[int], day: date) -> dict[str, Any]:
     """Compare an earlier day's unusual sighting with today's reported open interest.
 
@@ -167,7 +185,8 @@ def compare_with_prior(prior: dict[str, Any], oi_now: Optional[int], day: date) 
     prior_day = date.fromisoformat(prior["day"])
     out: dict[str, Any] = {"prior_day": prior["day"], "prior_volume": prior["volume"], "prior_oi": prior.get("open_interest"),
                            "prior_side": prior.get("likely_side", "UNCLEAR"), "oi_now": oi_now, "oi_change": None,
-                           "oi_verdict": "UNKNOWN", "position_read": "UNCLEAR", "lean": "UNCLEAR"}
+                           "oi_verdict": "UNKNOWN", "position_read": "UNCLEAR", "lean": "UNCLEAR",
+                           "oi_sessions": None, "oi_window_clean": False}
     if (day - prior_day).days > MAX_DAYS_APART:
         out["oi_verdict"] = "TOO_FAR_APART"
         return out
@@ -175,6 +194,10 @@ def compare_with_prior(prior: dict[str, Any], oi_now: Optional[int], day: date) 
         return out
     change = oi_now - prior["open_interest"]
     out["oi_change"] = change
+    # Display-only: the read below is unchanged, but a change that spans several sessions mixes other days' trading in,
+    # so the label is weaker than it looks. `oi_window_clean` is True only when exactly one session is covered.
+    out["oi_sessions"] = sessions_in_oi_change(prior_day, day)
+    out["oi_window_clean"] = out["oi_sessions"] == 1
     vol = max(prior["volume"], 1)
     if change >= OI_CONFIRM_FRACTION * vol:
         out["oi_verdict"] = "OI_ROSE"

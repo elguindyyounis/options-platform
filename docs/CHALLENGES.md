@@ -6,7 +6,7 @@ never touches `main`, and never changes risk limits, lane budgets, defaults or a
 
 The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 
-**Last alerter commit reviewed:** `9210fd8`  (update this line each run)
+**Last alerter commit reviewed:** `1fc88f1`  (update this line each run)
 
 ## Open challenges (oldest first; the agent picks one per run)
 
@@ -22,9 +22,11 @@ The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 | 4 | Make lane P&L itself use the stressed exit alongside the bid exit (show both) | Headline results are optimistic for large sizes | Open |
 | 5 | Add a signal provenance doc listing each signal, where it came from and its validation status | Alerter's `research_foundations.py` does this; platform does not | Open |
 | 6 | Check whether stacking helps: compare stacked and first entries from the digest once there are enough trades | Owner asked for stacking as an experiment; nothing yet says whether it pays | Waiting for trades |
+| 7 | **Open/close read spans several sessions.** `compare_with_prior` accepts up to 4 calendar days, so a Monday sighting read on Friday mixes four sessions of trading into one open-interest change, yet is labelled BUY_TO_OPEN and a BULLISH lean like a clean next-day read. | Two stacked inferences presented as one fact; the flow lane enters on that lean | Display done 2026-11-13 (`oi_sessions`, `oi_window_clean`, also stored on lane trades). **Owner decision:** whether the flow lane should require a clean one-session window (tightening, but it changes what the lane trades) |
 
 ## Run log (newest first)
 
 | Date | Alerter commit | What was compared | What changed | What was not verified |
 | --- | --- | --- | --- | --- |
+| 2026-11-13 | `1fc88f1` | Alerter changed CI/preflight only; read `core.py`, `agents.py` | Open-interest window count (`oi_sessions`, `oi_window_clean`) on follow-ups and flow-lane trades | Alerter tests; live data; the alerter's `storage.py`, `server.py`, `data_sources.py` still unread |
 | 2026-11-12 | `9210fd8` | First full comparison | Ported liquidity tiers and exit stress into post-mortems | Alerter tests not run; several alerter modules not read; live Yahoo data |

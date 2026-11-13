@@ -188,7 +188,7 @@ def test_scan_endpoints_need_the_token_and_return_the_latest_result():
 from dataclasses import replace  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 
-from optplat.scanner import (LOW_OI, MIN_LOW_OI_VOLUME, compare_with_prior, heat_map, sentiment, session_day, trade_side)  # noqa: E402
+from optplat.scanner import (LOW_OI, MIN_LOW_OI_VOLUME, compare_with_prior, heat_map, sentiment, session_day, sessions_in_oi_change, trade_side)  # noqa: E402
 from optplat.universe import SECTOR_OF, SECTORS  # noqa: E402
 
 
@@ -381,3 +381,24 @@ def test_a_demo_scan_has_a_heat_map_sentiment_and_low_open_interest_cases():
     assert out["heat_map"]["sectors"] and out["sentiment"]["tone"] in ("BROAD_STRENGTH", "BROAD_WEAKNESS", "MIXED")
     assert any(u["low_oi"] for u in out["unusual"]) and {u["print"] for u in out["unusual"]} & {"AT_ASK", "AT_BID", "MID"}
     assert out["coverage"]["chains_planned"] >= 30 and out["fictional"] is True
+
+
+@pytest.mark.parametrize("prior_day,day,expected", [
+    (date(2026, 11, 9), date(2026, 11, 10), 1),    # next session: only the sighting day's trades
+    (date(2026, 11, 13), date(2026, 11, 16), 1),   # Friday sighting, Monday read: a weekend adds no session
+    (date(2026, 11, 9), date(2026, 11, 13), 4),    # Monday to Friday: four sessions are mixed into one change
+    (date(2026, 11, 25), date(2026, 11, 27), 1),   # Thanksgiving (26th) is not a session
+    (date(2026, 11, 10), date(2026, 11, 10), None), (date(2026, 11, 10), date(2026, 11, 9), None),
+    (date(2026, 12, 30), date(2027, 1, 4), None),  # no 2027 calendar: unknown, never "clean"
+])
+def test_counts_the_sessions_an_open_interest_change_spans(prior_day, day, expected):
+    assert sessions_in_oi_change(prior_day, day) == expected
+
+
+def test_only_a_single_session_window_is_called_clean_and_the_read_itself_is_unchanged():
+    one = compare_with_prior(prior_sighting(), 540, date(2026, 11, 10))
+    assert one["oi_sessions"] == 1 and one["oi_window_clean"] is True and one["position_read"] == "BUY_TO_OPEN"
+    four = compare_with_prior(prior_sighting(), 540, date(2026, 11, 13))
+    assert four["oi_sessions"] == 4 and four["oi_window_clean"] is False
+    assert four["position_read"] == "BUY_TO_OPEN" and four["lean"] == "BULLISH"   # display-only: the label itself did not change
+    assert compare_with_prior(prior_sighting(), None, date(2026, 11, 10))["oi_window_clean"] is False   # no numbers: not clean

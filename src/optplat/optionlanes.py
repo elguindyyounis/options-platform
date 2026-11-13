@@ -567,6 +567,7 @@ class OptionLane:
             made = self._enter(sym, "C" if f["lean"] == "BULLISH" else "P", now, out,
                                {"from_contract": f["contract"], "prior_day": f["prior_day"], "prior_volume": f["prior_volume"], "prior_oi": f["prior_oi"],
                                 "oi_change": f["oi_change"], "position_read": f["position_read"], "prior_ratio": f.get("prior_ratio"),
+                                "oi_sessions": f.get("oi_sessions"), "oi_window_clean": f.get("oi_window_clean"),
                                 "direction": "up" if f["lean"] == "BULLISH" else "down", "conviction_mult": conviction}, held,
                                {"earnings_state": self._earnings_state(sym, now.date())}, budget_mult=conviction)
             if made:
