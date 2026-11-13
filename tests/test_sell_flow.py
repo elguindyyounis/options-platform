@@ -170,3 +170,20 @@ def test_report_breaks_results_down_by_underlying_with_sample_labels(env):
     assert name == name.upper() and sl["closed_trades"] == 1
     assert sl["status"] == "INSUFFICIENT_SAMPLE"
     assert manager.report()["closed"][0]["underlying"] == name
+
+
+def test_manual_sell_is_labelled_manual_not_guessed(env):
+    manager, broker, _ = env
+    manager.submit(make_intent())
+    broker.set_quote(make_quote(2.90, 3.00))
+    manager.submit(sell(limit=sell_limit_for(2.90)))
+    assert manager.report()["closed"][0]["exit_reason"] == "MANUAL_OR_UNKNOWN"
+
+
+def test_exit_reason_parsing_is_conservative():
+    from optplat.orders import exit_reason_from_note
+
+    assert exit_reason_from_note("automatic exit: take_profit") == "TAKE_PROFIT"
+    assert exit_reason_from_note("automatic exit") == "MANUAL_OR_UNKNOWN"
+    assert exit_reason_from_note("") == "MANUAL_OR_UNKNOWN"
+    assert exit_reason_from_note("automatic exit: ") == "UNKNOWN"

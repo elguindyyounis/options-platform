@@ -45,6 +45,7 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Exit reason stored on automatic exits and sliced in `/api/report` (`by_exit_reason`), research-only (2026-11-13).
 * 2026-11-13 (branch `agent/2026-11-13-report-evidence`): report evidence labels (sample size, Wilson interval, best-trade dependence), display-only.
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,

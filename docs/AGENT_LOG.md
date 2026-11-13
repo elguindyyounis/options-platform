@@ -39,3 +39,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Alerter unchanged at `1fc88f1`. Read `sizing.py` (see COMPARISON_ALERTER.md): it shrinks size when comparable closed-trade samples are few; the platform does not (CHALLENGES C7, owner decision, not touched).
 * Added `slice_results` (evidence.py) and `by_underlying` in the report; closed rows now carry `underlying`. Display-only: no change to what is traded, risk, auth or defaults. 153 tests pass (3 new).
 * Not verified: behaviour on real data (none available here); per-exit-reason slicing not done because the exit reason is not stored on the order. Based on `agent/2026-11-13-report-evidence-b`, since main lacks the earlier challenger docs; sibling branches touch the same report code and may conflict on merge.
+
+## 2026-11-13: exit-reason slice (scheduled challenger, run 6)
+
+* Alerter: no new commits since `1fc88f1`. Read `storage.py`; its `trade_journal` keeps `exit_reason` per trade.
+* Challenged: the platform could not say why trades were closed. Engine exits now write `automatic exit: <trigger>` into the order note; `/api/report` rows carry `exit_reason` and a `by_exit_reason` breakdown with per-slice sample labels. Display/research only; no lane, risk, sizing or exit-threshold change.
+* Verified: `python -m pytest -q` 156 passed (3 new tests).
+* Not verified: the dashboard text in a browser; behaviour on a real database (not visible here). Orders created before this change show as MANUAL_OR_UNKNOWN.

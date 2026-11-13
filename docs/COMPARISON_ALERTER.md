@@ -30,9 +30,15 @@ Reviewed at alerter commit `1fc88f1`. First pass by the daily challenger (2026-1
 * yfinance candidates have quantity capped by 10% volume/OI participation and re-checked by the entry-quality gate; drawdown >=10%/20% shrinks size. Goals never raise risk (`goal_affects_size: False`).
 * Sizing returns NO_TRADE unless the skeptic says PASS and the CIO says SUBMIT_FOR_RISK.
 
+## Read in run 6 (2026-11-13): `storage.py`
+
+* SQLite in WAL mode, busy_timeout 10s, foreign keys on; orders have a UNIQUE idempotency key and the paper buy runs in one atomic transaction that rechecks the drawdown limit at fill time (`paper_buy_atomic`).
+* `trade_journal` stores per-trade `entry_reviews`, `exit_reason`, `exit_quote_at` and `return_pct`, so the alerter can attribute results to exit reasons. The platform did not store the exit reason until run 6.
+* Not compared: whether the platform rechecks risk limits inside the same transaction as the fill (worth a look in a later run).
+
 ## Still never read
 
-`core.py` (beyond header), `storage.py`, `server.py`, `data_sources.py`, `adaptive.py`,
+`core.py` (beyond header), `server.py`, `data_sources.py`, `adaptive.py`,
 `daily_review.py`, `exit_decisions.py`, `gex.py`, `unusual_activity.py`, other
 `agent_skills`.
 

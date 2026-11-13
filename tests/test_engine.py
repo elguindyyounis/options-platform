@@ -189,6 +189,18 @@ def test_stop_loss_exit():
     assert (item["trigger"], item["result"]) == ("stop_loss", "FILLED")
 
 
+def test_report_records_why_each_trade_was_exited():
+    engine, manager, broker, provider, _ = build(auto_entries=True)
+    engine.run_cycle()
+    provider.set_snapshot(snapshot(bid=3.0, ask=3.2))
+    engine.run_cycle()
+    rep = manager.report()
+    assert rep["closed"][0]["exit_reason"] == "STOP_LOSS"
+    by = rep["by_exit_reason"]
+    assert by["by"] == "exit_reason" and list(by["slices"]) == ["STOP_LOSS"]
+    assert by["slices"]["STOP_LOSS"]["status"] == "INSUFFICIENT_SAMPLE"
+
+
 def test_exits_off_means_shadow_only():
     engine, manager, broker, provider, _ = build(auto_entries=True)
     engine.run_cycle()

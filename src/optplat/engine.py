@@ -21,7 +21,7 @@ from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
 from .market_clock import session_status
 from .marketdata import MarketDataProvider, MarketSnapshot
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
-from .orders import OrderManager
+from .orders import AUTO_EXIT_NOTE_PREFIX, OrderManager
 from .pricing import sell_limit_for
 from .risk import RiskPolicy
 from .strategy import Strategy
@@ -298,11 +298,13 @@ class TradingEngine:
                 elif not trading_allowed:
                     item["result"] = "DEFERRED_MARKET_CLOSED"
                 else:
-                    item.update(self._submit_exit(cfg, pos, quote, now))
+                    item.update(self._submit_exit(cfg, pos, quote, now, decision.trigger))
             out.append(item)
         return out
 
-    def _submit_exit(self, cfg: EngineConfig, pos: Position, quote: Any, now: datetime) -> dict[str, Any]:
+    def _submit_exit(
+        self, cfg: EngineConfig, pos: Position, quote: Any, now: datetime, trigger: Optional[str] = None
+    ) -> dict[str, Any]:
         pending = self.manager._pending_close_qty(pos.contract)
         quantity = pos.quantity - pending
         if quantity <= 0:
@@ -314,7 +316,7 @@ class TradingEngine:
             contract=pos.contract,
             quantity=quantity,
             limit_price=sell_limit_for(quote.bid),
-            note="automatic exit",
+            note=f"{AUTO_EXIT_NOTE_PREFIX}{trigger}" if trigger else AUTO_EXIT_NOTE_PREFIX.rstrip(": "),
             side=Side.SELL_TO_CLOSE,
         )
         try:

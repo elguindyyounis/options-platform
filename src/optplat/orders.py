@@ -11,6 +11,15 @@ from typing import Any, Callable, Optional
 
 from .broker.base import BrokerAdapter, BrokerRejected
 from .evidence import assess_results, slice_results
+
+AUTO_EXIT_NOTE_PREFIX = "automatic exit: "
+
+
+def exit_reason_from_note(note: str) -> str:
+    """Recover why a sell was sent. Anything not written by the engine is MANUAL_OR_UNKNOWN."""
+    if note.startswith(AUTO_EXIT_NOTE_PREFIX):
+        return note[len(AUTO_EXIT_NOTE_PREFIX):].strip().upper() or "UNKNOWN"
+    return "MANUAL_OR_UNKNOWN"
 from .models import (
     STATUS_CANCELLED,
     STATUS_FILLED,
@@ -240,6 +249,7 @@ class OrderManager:
                         "order_id": o.id,
                         "contract": o.intent.contract.occ_symbol.strip(),
                         "underlying": o.intent.contract.underlying.upper(),
+                        "exit_reason": exit_reason_from_note(o.intent.note),
                         "quantity": o.filled_qty,
                         "entry": o.cost_basis,
                         "exit": o.avg_fill_price,
@@ -278,6 +288,7 @@ class OrderManager:
             "open": open_rows,
             "evidence": assess_results([c["pnl"] for c in closed]),
             "by_underlying": slice_results(closed, "underlying"),
+            "by_exit_reason": slice_results(closed, "exit_reason"),
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
         }
 
