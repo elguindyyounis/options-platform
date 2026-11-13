@@ -27,7 +27,7 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 9. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
    they find without changing behaviour.
 
-10. **Wire exit stress into reports.** Use \`stress.exit_stress\` in the strategy evaluation report (item 3)
+10. **Wire exit stress into reports.** Use `stress.exit_stress` in the strategy evaluation report (item 3)
     to show P&L under SIM_ASSUMPTION / THIN_MARKET / STRESSED_EXIT. Display only.
 11. **Counterfactual journal** for rejected/unselected setups (see COMPARISON_ALERTER.md).
 
@@ -51,4 +51,4 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market
   clock, trading engine + runner, same-underlying concentration limit, re-entry cooldown, dashboard.
-* Research-only exit-liquidity stress module (\`stress.py\`), not yet wired into any report.
+* Research-only exit-liquidity stress module (`stress.py`), not yet wired into any report.
