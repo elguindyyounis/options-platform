@@ -23,3 +23,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-13: exit-liquidity stress (scheduled challenger run)
+
+* Added `src/optplat/stress.py` and `tests/test_stress.py` (9 tests). Pure, research-only: re-prices
+  a liquidation with extra bid concession from spread and size vs volume/open interest. Unknown depth
+  is treated as worst case. Not wired into the engine, risk, orders or API; no lane/limit changes.
+* Created `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md` (neither existed). First alerter
+  review; read paper_engine.py, liquidity.py, part of feedback.py.
+* Verified: full suite 153 passed. Not verified: the concession heuristic is uncalibrated, so the
+  numbers are scenarios only. Platform quotes have no volume/OI, so depth is always "unknown" today.
+  Could not see the owner's database or any real results.
