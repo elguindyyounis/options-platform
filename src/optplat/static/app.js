@@ -68,8 +68,13 @@
 
       const a = portfolio.account;
       $("account").textContent = "Equity " + money(a.equity) + "  |  Cash " + money(a.cash) + "  |  Open premium " + money(a.open_premium);
+      const ev = report.evidence || { status: "INSUFFICIENT_SAMPLE", notes: [] };
+      const enough = ev.status !== "INSUFFICIENT_SAMPLE";
       $("report").textContent = report.closed_trades + " closed trades, realized " + money(report.realized_pnl) +
-        (report.win_rate_pct === null ? "" : ", win rate " + report.win_rate_pct + "%") + ". " + report.caveat;
+        (report.win_rate_pct === null ? "" : enough
+          ? ", win rate " + report.win_rate_pct + "% (95% range " + ev.win_rate_95ci_pct[0] + "-" + ev.win_rate_95ci_pct[1] + "%)"
+          : ", win rate not shown (too few trades)") +
+        ". " + report.caveat + (ev.notes.length ? " " + ev.notes.join(" ") : "");
 
       table($("positions"), [
         { label: "Contract", get: (r) => r.contract }, { label: "Qty", get: (r) => r.quantity },

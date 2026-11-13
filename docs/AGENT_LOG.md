@@ -23,3 +23,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-13: daily challenger, report evidence (scheduled run)
+
+* Created `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md` (first challenger run; neither existed).
+  Alerter HEAD `9210fd8`; no earlier reviewed commit, so the full tree was skimmed.
+* Changed: `/api/report` gained an `evidence` block (INSUFFICIENT_SAMPLE under 30 closed trades,
+  Wilson 95% win-rate interval, P&L without best trade, distinct underlyings, truncation flag). Fixed a
+  silent truncation: closed trades beyond the newest 1000 orders were dropped from totals. The dashboard
+  hides the win rate under 30 trades. Existing report fields are unchanged. 9 new tests; 153 pass.
+* Not changed: any risk limit, lane size, strategy, broker, auth, or default.
+* Not verified: the dashboard in a real browser (JS only syntax-checked with `node --check`); the
+  truncation path with >1000 real orders (covered by unit test of `evidence_summary` only); anything
+  about the alerter's runtime behaviour or the owner's data.

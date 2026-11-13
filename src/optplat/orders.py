@@ -66,6 +66,55 @@ class InvalidTransition(RuntimeError):
     pass
 
 
+REPORT_ORDER_LIMIT = 1000
+MIN_TRADES_FOR_DESCRIPTION = 30
+
+
+def _wilson_95(wins: int, n: int) -> list[float]:
+    """95% Wilson interval for a win rate, in percent. Wide when n is small, which is the point."""
+    z = 1.96
+    p = wins / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / denom
+    return [round(max(0.0, centre - half) * 100, 1), round(min(1.0, centre + half) * 100, 1)]
+
+
+def evidence_summary(closed: list[dict[str, Any]], truncated: bool = False) -> dict[str, Any]:
+    """How much weight the closed-trade numbers can bear. Display-only; changes nothing that trades.
+
+    Fail-closed wording: below MIN_TRADES_FOR_DESCRIPTION closed trades the status is
+    INSUFFICIENT_SAMPLE. Even above it the status is only DESCRIPTIVE_ONLY: paper fills on one
+    data feed never establish an edge.
+    """
+    n = len(closed)
+    wins = sum(1 for c in closed if c["pnl"] > 0)
+    pnls = [c["pnl"] for c in closed]
+    total = round(sum(pnls), 2)
+    best = max(pnls) if pnls else None
+    underlyings = {str(c["contract"]).strip()[:-15].strip() or str(c["contract"]).strip() for c in closed}
+    status = "INSUFFICIENT_SAMPLE" if n < MIN_TRADES_FOR_DESCRIPTION else "DESCRIPTIVE_ONLY"
+    notes = []
+    if n < MIN_TRADES_FOR_DESCRIPTION:
+        notes.append(f"Only {n} closed trades; fewer than {MIN_TRADES_FOR_DESCRIPTION}. Win rate and P&L are anecdotes.")
+    if truncated:
+        notes.append(f"More than {REPORT_ORDER_LIMIT} orders exist; older closed trades are NOT included in these totals.")
+    if n and best is not None and best > 0 and total > 0 and total - best <= 0:
+        notes.append("Total realized P&L is positive only because of the single best trade.")
+    if n and len(underlyings) == 1:
+        notes.append("All closed trades are in one underlying.")
+    return {
+        "status": status,
+        "min_trades_for_description": MIN_TRADES_FOR_DESCRIPTION,
+        "closed_trades": n,
+        "distinct_underlyings": len(underlyings),
+        "win_rate_95ci_pct": _wilson_95(wins, n) if n else None,
+        "realized_pnl_without_best_trade": round(total - best, 2) if n > 1 and best is not None else None,
+        "report_truncated": truncated,
+        "notes": notes,
+    }
+
+
 class OrderManager:
     def __init__(
         self,
@@ -226,7 +275,9 @@ class OrderManager:
     def report(self) -> dict[str, Any]:
         """Realized P&L from closed paper trades plus bid-marked open positions."""
         closed = []
-        for o in self.store.list_orders(limit=1000):
+        fetched = self.store.list_orders(limit=REPORT_ORDER_LIMIT + 1)
+        truncated = len(fetched) > REPORT_ORDER_LIMIT
+        for o in fetched[:REPORT_ORDER_LIMIT]:
             if (
                 o.intent.side is Side.SELL_TO_CLOSE
                 and o.state is S.FILLED
@@ -274,6 +325,7 @@ class OrderManager:
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
             "closed": closed[:50],
             "open": open_rows,
+            "evidence": evidence_summary(closed, truncated),
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
         }
 

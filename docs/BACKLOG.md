@@ -37,11 +37,17 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Exit/entry fill stress table (see docs/CHALLENGES.md #1, #5): re-mark closed trades with extra slippage.
+* "Inferred" tag on strategy direction labels (CHALLENGES #4).
+
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Report evidence block (2026-11-13, branch `agent/2026-11-13-report-evidence`): sample-size status, win-rate
+  95% interval, P&L without best trade, truncation flag; dashboard hides win rate under 30 trades.
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
