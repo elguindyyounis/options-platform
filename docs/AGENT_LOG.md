@@ -23,3 +23,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-13: report evidence labels (daily challenger)
+
+* Scanned options-alerter at `1fc88f1` (first scan). Wrote docs/COMPARISON_ALERTER.md and docs/CHALLENGES.md.
+* Changed: new `evidence.py`; `/api/report` gains an `evidence` block; dashboard appends the label.
+  Existing report fields are unchanged. Display-only: no change to trading, risk, auth or defaults.
+* Verified: baseline 144 tests passed; 150 pass after (6 new in tests/test_evidence.py plus one added
+  assertion in test_api_engine.py).
+* Not verified: dashboard rendering in a browser (JS change is one textContent string); the 30-trade
+  threshold is a labelling choice, not statistically derived. Owner's real database not visible.

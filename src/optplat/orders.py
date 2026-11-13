@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from .broker.base import BrokerAdapter, BrokerRejected
+from .evidence import assess_results
 from .models import (
     STATUS_CANCELLED,
     STATUS_FILLED,
@@ -274,6 +275,7 @@ class OrderManager:
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
             "closed": closed[:50],
             "open": open_rows,
+            "evidence": assess_results([c["pnl"] for c in closed]),
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
         }
 

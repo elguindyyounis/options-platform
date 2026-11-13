@@ -37,11 +37,14 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Volume/OI participation gate and exit-stress table (see docs/CHALLENGES.md C2, C3, C4).
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-13 (branch `agent/2026-11-13-report-evidence`): report evidence labels (sample size, Wilson interval, best-trade dependence), display-only.
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
