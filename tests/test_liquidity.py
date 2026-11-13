@@ -48,3 +48,34 @@ def test_losses_are_never_tagged_as_flipped_and_missing_volume_is_stressed_hard(
 
 def test_the_new_cause_has_a_lesson_and_a_next_step():
     assert "EXIT_STRESS_FLIPS_RESULT" in CAUSES and all(CAUSES["EXIT_STRESS_FLIPS_RESULT"])
+
+
+def _lane_with(store, rows):
+    """rows: (entry, exit, postmortem or None). Fictional option-lane trades, one contract each, qty 2, multiplier 100."""
+    from optplat.shortterm import lane_report
+    t0 = datetime(2026, 1, 5, 15, tzinfo=timezone.utc)
+    for i, (entry, exit_, pm) in enumerate(rows):
+        tid = store.lane_open("x-lane", "SPY", t0, entry, 2, True, {"multiplier": 100, "fees_open": 0.0})
+        store.lane_close(tid, t0 + timedelta(hours=1), exit_, "target", {"fees_close": 0.0, **({"postmortem": pm} if pm is not None else {})})
+    return lane_report(store, "x-lane", True, t0, rules=[], limitations=[], symbols=["SPY"], exit_text={})
+
+
+def test_lane_summary_shows_stressed_pnl_beside_bid_pnl_over_the_same_trades():
+    from optplat.store import Store
+    r = _lane_with(Store(":memory:"), [(1.0, 1.5, {"stress_net": 40.0}), (1.0, 0.5, {"stress_net": -80.0}), (1.0, 2.0, None)])
+    s = r["summary"]
+    assert s["realized_pnl"] == 200.0  # (100 - 100 + 200) over all three closed trades, qty 2
+    assert (s["stressed_trades"], s["stressed_missing"]) == (2, 1)
+    assert s["stressed_realized_pnl"] == -40.0 and s["bid_realized_pnl_same_trades"] == 0.0  # (100 - 100) the missing trade is in neither
+
+
+def test_lane_stressed_pnl_is_none_when_no_trade_has_a_usable_figure():
+    from optplat.store import Store
+    r = _lane_with(Store(":memory:"), [(1.0, 1.5, None), (1.0, 1.5, {"stress_net": "bad"}), (1.0, 1.5, {"stress_net": float("nan")}), (1.0, 1.5, {"stress_net": True})])
+    s = r["summary"]
+    assert s["stressed_realized_pnl"] is None and s["bid_realized_pnl_same_trades"] is None and s["stressed_missing"] == 4
+
+
+def test_post_mortem_stores_the_stressed_dollar_result():
+    pm = post_mortem(trade(), 2.0, "target", closed_at(2), {"fees_close": 0.0})
+    assert isinstance(pm["stress_net"], float) and pm["stress_net"] <= (2.0 - trade()["entry_price"]) * trade()["quantity"] * 100

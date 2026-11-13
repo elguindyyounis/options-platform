@@ -5,6 +5,17 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-13: stressed-exit P&L in lane summaries (challenge 4, scheduled run 2)
+
+* Alerter unchanged (`1fc88f1`); read its `storage.py` (see the comparison doc). Opened new challenge 8 (exit quote age).
+* Challenged: lane headline P&L is priced at the bid, which flatters large or thin trades. `post_mortem` now also stores
+  `stress_net` (dollars). `lane_report` adds per-trade `stressed_pnl` and summary `stressed_realized_pnl`,
+  `bid_realized_pnl_same_trades`, `stressed_trades`, `stressed_missing`. Trades without a usable figure are excluded from both
+  totals and counted, so the two are comparable; none usable gives None. Display-only: no lane trades differently, no limit touched.
+* Verified: `python -m pytest -q`, 509 pass (3 new tests); baseline was 506.
+* Not verified: dashboard rendering (no UI change), live data, alerter tests. Older trades closed before this change have no
+  `stress_net`, so they show as missing until new trades close.
+
 ## 2026-11-13: open-interest window honesty (challenge 7, scheduled run)
 
 * Alerter had only CI changes since `9210fd8`; read its `core.py` and `agents.py` (see the comparison doc).

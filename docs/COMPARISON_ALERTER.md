@@ -73,4 +73,16 @@ Since the first review the alerter changed only CI and preflight scripts. Newly 
   from score, so a high score cannot buy past them.
 * Its council labels unusual volume "cannot establish who bought or sold". The platform goes further and infers side and
   open/close; challenge 7 notes that the second inference can span several sessions.
-* Still unread: `storage.py`, `server.py`, `data_sources.py`.
+* Still unread: `server.py`, `data_sources.py`.
+
+## Added 2026-11-13 (alerter `1fc88f1`, second run): `storage.py`
+
+Code only, tests not run. A 413-line SQLite store: WAL, `busy_timeout`, `foreign_keys=ON`, JSON payload columns, candidates,
+orders, positions, events, audit and a `trade_journal` table.
+
+* Its `trade_journal` stores the exit quote's timestamp (`exit_quote_at`) next to the exit price, so a result can be checked for
+  how stale the price it was marked on was. The platform stores fill times but not the age of the quote an exit used; worth a
+  future display-only field.
+* Journal rows are written once at entry and updated once at exit (`UPDATE ... WHERE position_id=?` with a changed-row check),
+  the same close-only-once pattern as this platform's `lane_close`.
+* Nothing found that the platform lacks in safety terms.
