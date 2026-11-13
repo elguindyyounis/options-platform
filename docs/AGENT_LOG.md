@@ -2,6 +2,18 @@
 
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
+## 2026-11-13: daily challenger, scoreboard clusters stacked entries
+
+* Alerter unchanged since `9210fd8`. Read `server.py`; notes added to `docs/COMPARISON_ALERTER.md`.
+* Challenged: the scoreboard counted stacked entries on one name and day as independent trades, which understates uncertainty.
+  `lane_scoreboard` now groups closed trades by symbol and entry day and computes the interval and the 30-observation bar on
+  cluster means; the row gains `clusters`. Trades missing a symbol or entry time are never merged. Display only: it can turn a
+  verdict into TOO_FEW, never the reverse. No lane, limit, size, default or auth changed.
+* 520 tests pass (3 new, none weakened).
+* Not verified: the dashboard (no cluster column), live data, alerter tests. Consecutive-day and correlated-name clustering
+  (SPY/QQQ) is still not handled. Branch is based on `agent/2026-11-13-exit-stress-table`, which carries the earlier daily runs;
+  `main` has none of them.
+
 ## 2026-11-12: daily challenger, honest lane scoreboard
 
 * Alerter unchanged since `9210fd8`. Read `agents.py`, `core.py` and the skeptic skill; notes added to `docs/COMPARISON_ALERTER.md`.

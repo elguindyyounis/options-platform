@@ -81,3 +81,29 @@ def test_a_small_gap_does_not_change_the_reading_and_negative_readings_are_never
     assert lane_scoreboard(rows)["verdict"] == "ABOVE_ZERO"  # 1 of 121 missing is under the 10% bar
     bad = [tr(10, -5 - (i % 3)) for i in range(MIN_TRADES_FOR_VERDICT)] + [{"close_payload": None}] * 10
     assert lane_scoreboard(bad)["verdict"] == "BELOW_ZERO"
+
+
+def tc(net, stress, sym="SPY", day="2026-11-10"):
+    t = tr(net, stress)
+    t.update(symbol=sym, opened_at=f"{day}T15:00:00+00:00")
+    return t
+
+
+def test_stacked_same_name_same_day_entries_count_once():
+    from optplat.scoreboard import MIN_TRADES_FOR_VERDICT as N
+    stacked = [tc(30 + i % 3, 30 + i % 3) for i in range(N)]  # N trades, one symbol, one day: a single cluster
+    row = lane_scoreboard(stacked)
+    assert row["trades"] == N and row["clusters"] == 1
+    assert row["verdict"] == "TOO_FEW"  # was ABOVE_ZERO when every trade was treated as independent
+
+
+def test_separate_days_and_names_are_separate_clusters():
+    from optplat.scoreboard import MIN_TRADES_FOR_VERDICT as N
+    rows = [tc(30 + i % 3, 30 + i % 3, sym=f"S{i}") for i in range(N)]
+    row = lane_scoreboard(rows)
+    assert row["clusters"] == N and row["verdict"] == "ABOVE_ZERO"
+
+
+def test_trades_missing_symbol_or_day_are_never_merged():
+    rows = [tr(10, 10) for _ in range(5)]
+    assert lane_scoreboard(rows)["clusters"] == 5

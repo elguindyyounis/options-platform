@@ -9,11 +9,14 @@ Display-only research. It changes nothing a lane trades. It answers four questio
   positive reading is withheld (INCOMPLETE_DATA) when more than ``MAX_UNSCORED_SHARE`` of the lane's closed trades are
   unscored, because dropping them can only flatter a lane. Trades scored without a stressed figure are counted too
   (``stress_missing``) but do not change the reading.
+* Are the trades really separate bets? Stacked entries on the same name on the same day move together, so they are grouped
+  into clusters (same symbol, same entry day) and the interval and the 30-trade bar are computed on cluster means. Ten stacked
+  entries on one name count as one observation, not ten.
 * With several lanes on the table, one of them will look good by luck. The interval is widened for the number of lanes
   compared (Bonferroni), so the lane that happens to be best is judged against a stricter bar.
 
-What it is not: a test of skill or an estimate of future returns. Trades are not independent (stacked entries, one market
-regime), returns are fat-tailed, and the interval ignores both, so it is still too optimistic. Fewer than
+What it is not: a test of skill or an estimate of future returns. Clustering removes only the most obvious dependence; one
+market regime and fat-tailed returns remain, so the interval is still too optimistic. Fewer than
 ``MIN_TRADES_FOR_VERDICT`` closed trades is always reported as too few to say.
 """
 from __future__ import annotations
@@ -37,6 +40,28 @@ def _rets(closed: list[dict[str, Any]]) -> list[tuple[float, float]]:
     """(bid-exit net %, stressed net %) for each closed trade that carries a post-mortem."""
     out, _ = _rets_and_gaps(closed)
     return out
+
+
+def _cluster_key(t: dict[str, Any]) -> str:
+    """Same symbol and same entry day are one cluster. A trade missing either field stands alone (never merged by guess)."""
+    sym, opened = t.get("symbol"), t.get("opened_at")
+    if not sym or not opened:
+        return f"solo:{id(t)}"
+    return f"{sym}|{str(opened)[:10]}"
+
+
+def _clustered(closed: list[dict[str, Any]], stress_index: int) -> list[float]:
+    """Mean return per cluster of scored trades; ``stress_index`` 0 picks the bid exit, 1 the stressed exit."""
+    groups: dict[str, list[float]] = {}
+    for t in closed:
+        pm = (t.get("close_payload") or {}).get("postmortem")
+        if not pm or pm.get("net_pct") is None:
+            continue
+        net = float(pm["net_pct"])
+        stress = pm.get("stress_net_pct")
+        pair = (net, net if stress is None else float(stress))
+        groups.setdefault(_cluster_key(t), []).append(pair[stress_index])
+    return [mean(v) for v in groups.values()]
 
 
 def _rets_and_gaps(closed: list[dict[str, Any]]) -> tuple[list[tuple[float, float]], int]:
@@ -70,7 +95,7 @@ def lane_scoreboard(closed: list[dict[str, Any]], comparisons: int = 1) -> dict[
     stress = [s for _, s in pairs]
     n = len(pairs)
     unscored = len(closed) - n
-    row: dict[str, Any] = {"trades": n, "closed_total": len(closed), "unscored": unscored, "stress_missing": no_stress, "avg_net_pct": None, "avg_stressed_pct": None, "median_net_pct": None, "interval_pct": None,
+    row: dict[str, Any] = {"trades": n, "closed_total": len(closed), "clusters": 0, "unscored": unscored, "stress_missing": no_stress, "avg_net_pct": None, "avg_stressed_pct": None, "median_net_pct": None, "interval_pct": None,
                            "winners_pct": None, "winners_stressed_pct": None, "best_trade_share_pct": None, "verdict": "NO_TRADES"}
     if not n:
         return row
@@ -80,9 +105,11 @@ def lane_scoreboard(closed: list[dict[str, Any]], comparisons: int = 1) -> dict[
     gains = sum(x for x in bid if x > 0)
     row["best_trade_share_pct"] = round(100 * max(bid) / gains, 1) if gains > 0 and max(bid) > 0 else None
     # the verdict is judged on the stressed series, the stricter of the two views
-    iv = _interval(stress, comparisons)
+    clustered = _clustered(closed, 1)
+    row["clusters"] = len(clustered)
+    iv = _interval(clustered, comparisons)  # on cluster means: stacked same-name, same-day entries count once
     row["interval_pct"] = iv
-    if n < MIN_TRADES_FOR_VERDICT or iv is None:
+    if n < MIN_TRADES_FOR_VERDICT or len(clustered) < MIN_TRADES_FOR_VERDICT or iv is None:
         row["verdict"] = "TOO_FEW"
     elif iv[0] > 0:
         row["verdict"] = "ABOVE_ZERO"

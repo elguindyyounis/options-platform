@@ -115,3 +115,13 @@ Read `sizing.py` and the position-sizing skill.
 * **Drawdown shrinks size** (x0.65 at 10%, x0.5 more at 20%). The platform has no drawdown-scaled size; that is a risk
   policy question for the owner.
 * Still unread: `server.py` and six of the seven skill files. Alerter tests not run.
+
+## Third reading: `server.py` (2026-11-13, alerter `9210fd8`, unchanged)
+
+* **Entry is gated in a fixed order:** auto-paper consent, auto exits on, both schedulers on, no unreliable held marks, market
+  session open, kill switch, then per candidate: score and calibrated score, recent stop (3 days), already held, valid two-sided
+  quote, entry quality, position and total premium limits, cash, then the council and risk gates. Any unknown means skip.
+* **Held-mark health blocks new entries.** If any held option has a missing or very wide (over 35%) exit bid, no new automatic
+  buy is made. The platform has no portfolio-level version of this; it is a safety question for the owner.
+* **It says what it cannot know:** `quote_time_verified: False`, freshness by download time, and the Mac's uptime is not monitored.
+* Still unread: six of seven skill files. Alerter tests not run.

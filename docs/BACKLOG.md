@@ -148,3 +148,4 @@ Existing items, in order:
 * Scanner and trade ledger: `scanner.py` (most-active names, unusual option activity, fixed universe),
   `trades.py` (entries matched to exits with reasoning), `/api/scan`, `/api/trades`.
 * Scoreboard coverage (2026-11-13): unscored closed trades and missing stress figures are counted; positive readings are withheld when over 10% are unscored.
+* Scoreboard clusters stacked same-name, same-day entries for its interval and 30-observation bar (2026-11-13, challenge 11).
