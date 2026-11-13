@@ -115,3 +115,12 @@ def test_the_tracker_endpoint_returns_criteria_marks_and_the_watch_list():
         body = c.get("/api/tracker", headers={"X-API-Token": "t" * 24}).json()
     assert body["criteria"] and body["limitations"] and body["total_marks"] == 0 and body["fictional"] is True
     assert set(body["horizons"]) == {"1", "3", "7"} and body["findings"] == []
+
+
+def test_the_rotation_endpoint_reads_stored_scans():
+    manager = OrderManager(SimBroker(), Store(":memory:"))
+    engine = TradingEngine(manager, DemoDataProvider(), LiquidTrendStrategy(), default_config=EngineConfig())
+    with TestClient(create_app(manager, "t" * 24, engine, None)) as c:
+        assert c.get("/api/rotation").status_code == 401
+        body = c.get("/api/rotation", headers={"X-API-Token": "t" * 24}).json()
+    assert body["ready"] is False and body["sectors"] == [] and body["caveat"]

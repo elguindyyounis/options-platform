@@ -5,6 +5,31 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-13: readable contracts, one Trades page, options tracker, sector rotation, Research summary, Desk redesign
+
+* Owner asked (voice) for: single stocks and sector rotation, a better UX, contracts shown as "SPY call 751 · Dec 11", every lane's
+  trades on the Trades page with an options/shares sort, a tracker for what makes an option unusual, an options agent, and a
+  Research page that shows what was learned and whether it is improving. "Spineless decisions" was read as the SPY/QQQ-only decisions.
+* Contract names: `contracts.py` and a client-side OCC parser; also fixed days-to-expiry showing "unknown" for padded OCC symbols.
+* `GET /api/alltrades` merges the options account, five option lanes, the 10x challenge and both share lanes; the page filters by
+  options or shares and by lane and sorts every column. Lane trades open inline, account trades open the order trail.
+* `tracker.py`: every flagged contract is re-read on later scans and marked at 1, 3 and 7 trading days (ask in, bid out, plus the
+  underlying's move in the helpful direction), grouped by what was known at the flag. Groups under 20 marks are labelled too few.
+  `GET /api/tracker`, a Tracker page listing the exact criteria for "unusual". This is challenge 1 in `docs/CHALLENGES.md`, in part.
+* Options agent: the committee already had agents; what was missing was one that reads flagged flow on the candidate's own name.
+  Added `flow`, which can only OPPOSE (low confidence, starts at a quarter of normal weight). When flow agrees it records
+  `would_support` and does nothing, so it cannot add conviction or loosen entries. Letting it support is left to the owner.
+* `rotation.py` and Market, Sector rotation: each sector's share of dollar volume across days from stored scans. Needs scans from
+  two or more trading days. Controls got a sector picker that fills the watchlist box with a sector's four most traded names;
+  nothing is saved until Save settings. The 20-name cap, risk limits and defaults (SPY, QQQ) are unchanged.
+* `learning.py` and the Research page: older half against newer half of closed trades (no verdict under 20 each), lessons labelled
+  pattern, anecdote or lead, agent weights, a timeline. `GET /api/learning`.
+* Desk redesigned: large account value, open positions as cards with a stop-to-target ladder, a decisions feed.
+* 537 tests pass. Checked in headless Chromium on fictional demo data only (dark, phone width, every page, no script errors).
+  I updated one existing test, the nav list, because a Tracker page was added; no test was weakened or removed.
+* Not verified: any of this on the owner's Mac or live Yahoo data; the tracker and rotation need several real trading days to
+  show anything; single stocks have not been run through the engine (earnings handling is the events agent's existing behaviour).
+
 ## 2026-11-13: the 10x challenge account
 
 * Owner asked for an aggressive paper account (10x in a month, restartable, critical of every trade). Built it as a separate

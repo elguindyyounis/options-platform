@@ -151,7 +151,7 @@ def findings(groups: list[dict[str, Any]]) -> list[str]:
         if abs(g["vs_all_pct"]) < 3.0:
             continue
         word = "better" if g["vs_all_pct"] > 0 else "worse"
-        out.append(f"{g['feature_label']}: {g['bucket'].lower()} did {abs(g['vs_all_pct']):.1f} points {word} than the average flagged contract "
+        out.append(f"{g['feature_label']}: {g['bucket']} came out {abs(g['vs_all_pct']):.1f} points {word} than the average flagged contract "
                    f"after 3 trading days (average {g['avg_ret_pct']:+.1f}%, {g['n']} marks).")
     return out[:6]
 

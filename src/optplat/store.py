@@ -341,6 +341,13 @@ class Store:
                                  (int(fictional),)).fetchone()
         return json.loads(r["payload"]) if r else None
 
+    def scan_history(self, fictional: bool, limit: int = 200) -> list[dict[str, Any]]:
+        """Stored scans, oldest first (the store keeps the newest 200)."""
+        with self._lock:
+            rows = self._db.execute("SELECT payload FROM scan_results WHERE fictional=? ORDER BY id DESC LIMIT ?",
+                                    (int(fictional), max(1, min(limit, 200)))).fetchall()
+        return [json.loads(r["payload"]) for r in reversed(rows)]
+
     # ---- unusual option contracts, remembered by New York trading day so the next day can confirm them ----
     def record_unusual(self, day: str, fictional: bool, rows: list[dict[str, Any]]) -> None:
         """Keep the highest-volume sighting of each contract for the day (volume only grows through the session)."""

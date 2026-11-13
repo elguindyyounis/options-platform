@@ -30,6 +30,7 @@ from .orders import OrderManager
 from .pricing import sell_limit_for
 from .risk import RiskPolicy
 from .scanner import Scanner
+from .universe import SECTORS
 from .shortterm import ShortTermLane
 from .swing import SwingLane
 from .optionlanes import OptionLanes
@@ -184,6 +185,7 @@ class TradingEngine:
             "kill_switch": self.manager.kill_switch_active(),
             "last_cycle": self.last_cycle(),
             "clock": clock_status((self.last_cycle() or {}).get("clock_ahead_s"), MAX_FUTURE_SKEW_S),
+            "sectors": list(SECTORS),
             "recorder": self.store.snapshot_stats(),
             "data_quality": {
                 "window_hours": 24,
