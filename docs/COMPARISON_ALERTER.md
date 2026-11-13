@@ -76,3 +76,18 @@ These are challenges raised by reading the alerter. None is proven.
   contracts by what was known at the flag, but does not yet show whether the ratio is dominated by tiny open interest.
   Logged as challenge 7.
 * **Still not read:** `storage.py`, `server.py`, `data_sources.py`, other skill files, the alerter's tests.
+
+## Addendum 2026-11-13 (later): `storage.py` and `data_sources.py` (alerter still at `9210fd8`)
+
+* **Paper buys re-check everything inside one transaction.** `paper_buy_atomic` re-reads the candidate, rejects a changed quote,
+  a stale real-source quote (older than 30 min or more than 2 min in the future), a duplicate idempotency key, an open position
+  on the same contract, the kill switch, and re-runs entry quality, so a competing scan cannot slip an order past a limit.
+* **Limits use the more conservative equity.** For real-source quotes the drawdown and exposure checks use cash plus the lower of
+  cost and the bid mark of open holdings, and entries pause if any held contract has a stale, crossed or over-35% spread quote.
+  The platform's lanes mark open positions for display; whether any limit uses a pessimistic mark was not checked here.
+* **Fills are ask plus slippage** (default 0.5%, capped 3%), validated against the saved quote.
+* **Data honesty.** `data_sources.py` states that download time is not market time and tags activity rows
+  `opening_trade_verified: False` and `trade_aggressor_verified: False`. The platform's inferred side and open/close labels are
+  the same kind of guess and are labelled as inferences.
+* **Refuses biased GEX.** Over the row cap, or with missing call/put sides, the scan declines to publish a partial net exposure.
+* **Still not read:** `server.py`, other skill files, the alerter's tests.

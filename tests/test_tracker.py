@@ -124,3 +124,15 @@ def test_the_rotation_endpoint_reads_stored_scans():
         assert c.get("/api/rotation").status_code == 401
         body = c.get("/api/rotation", headers={"X-API-Token": "t" * 24}).json()
     assert body["ready"] is False and body["sectors"] == [] and body["caveat"]
+
+
+@pytest.mark.parametrize("oi,bucket", [(None, "Missing"), (0, "Zero"), (1, "1 to 9"), (9, "1 to 9"), (10, "10 to 19"), (19, "10 to 19"),
+                                       (20, "20 to 99"), (99, "20 to 99"), (100, "100 to 499"), (499, "100 to 499"), (500, "500 or more")])
+def test_open_interest_size_buckets_follow_the_alerter_cut_points(oi, bucket):
+    assert tr.features_of(sighting(open_interest=oi))["oi_size"] == bucket
+
+
+def test_a_new_mark_records_the_open_interest_size_and_old_marks_show_as_unknown():
+    out = tr.summarize(marks(30, 5.0, oi_size="1 to 9") + marks(30, -5.0))   # the second set predates the feature
+    names = {g["bucket"] for g in out["groups"] if g["feature"] == "oi_size" and g["horizon"] == 3}
+    assert names == {"1 to 9", "Unknown"}

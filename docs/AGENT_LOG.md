@@ -3,6 +3,18 @@
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
 
+## 2026-11-13: tracker splits flagged contracts by size of open interest (daily challenger)
+
+* Alerter unchanged since `9210fd8`. Read its `storage.py` and `data_sources.py` (notes in `docs/COMPARISON_ALERTER.md`).
+* Challenge 7: the tracker's only open-interest split was "under 10" vs "established", so it could not show whether a volume/OI
+  flag over a small base behaves differently. Added a display-only `oi_size` feature (Zero, 1 to 9, 10 to 19, 20 to 99,
+  100 to 499, 500 or more, Missing), cut where the alerter's score cap (under 20) and entry gate (100) cut. It rides the existing
+  group table and the 20-mark minimum before any group becomes a finding. Marks taken earlier show as "Unknown".
+* No lane, risk limit, default, order path or auth was touched. 552 tests pass (12 new).
+* Not verified: any real result (the tracker has no real marks I can see; the owner's database is on their Mac), the dashboard
+  rendering of the new rows in a browser (the table builds groups generically, no JS changed), the alerter's tests.
+* Branch is based on `agent/2026-11-13-lane-stress-pnl`, the newest branch holding these docs; `main` does not have them yet.
+
 ## 2026-11-13: stressed exit beside the bid exit in lane summaries (daily challenger)
 
 * Alerter unchanged since `9210fd8`. Read its `agents.py` and `core.py` (notes added to `docs/COMPARISON_ALERTER.md`); the

@@ -22,11 +22,12 @@ The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 | 4 | Make lane P&L itself use the stressed exit alongside the bid exit (show both) | Headline results are optimistic for large sizes | Done 2026-11-13: option lane summary has `stress_pnl` beside `stress_bid_pnl` over the same trades, shown as "Realized, harder exit". The headline `realized_pnl` is unchanged. Not yet on the 10x challenge panel or the All trades sources table |
 | 5 | Add a signal provenance doc listing each signal, where it came from and its validation status | Alerter's `research_foundations.py` does this; platform does not | Open |
 | 6 | Check whether stacking helps: compare stacked and first entries from the digest once there are enough trades | Owner asked for stacking as an experiment; nothing yet says whether it pays | Waiting for trades |
-| 7 | Do tiny open interest dominate the volume/OI ratio that flags a contract as unusual? The alerter caps scores for volume < 5, OI < 20 and spread > 20%. Add a tracker group split by OI size and compare marks | A ratio over a tiny denominator is easy to hit and may be noise | Open |
+| 7 | Do tiny open interest dominate the volume/OI ratio that flags a contract as unusual? The alerter caps scores for volume < 5, OI < 20 and spread > 20%. Add a tracker group split by OI size and compare marks | A ratio over a tiny denominator is easy to hit and may be noise | Done 2026-11-13: tracker feature `oi_size`. Needs real marks before it says anything |
 
 ## Run log (newest first)
 
 | Date | Alerter commit | What was compared | What changed | What was not verified |
 | --- | --- | --- | --- | --- |
+| 2026-11-13 (later) | `9210fd8` (no change) | Read `storage.py` and `data_sources.py` | Challenge 7: tracker `oi_size` split (display-only) | Alerter tests not run; no real marks seen; dashboard not checked in a browser |
 | 2026-11-13 | `9210fd8` (no change) | Read `agents.py` and `core.py` | Challenge 4: lane summary shows bid and stressed realized P&L side by side (display-only) | Alerter tests not run; the stressed number is a model, not a fill; no real trades seen; dashboard tile not checked in a browser |
 | 2026-11-12 | `9210fd8` | First full comparison | Ported liquidity tiers and exit stress into post-mortems | Alerter tests not run; several alerter modules not read; live Yahoo data |

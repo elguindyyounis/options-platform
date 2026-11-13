@@ -142,3 +142,4 @@ Existing items, in order:
 * Scanner and trade ledger: `scanner.py` (most-active names, unusual option activity, fixed universe),
   `trades.py` (entries matched to exits with reasoning), `/api/scan`, `/api/trades`.
 * Lane summaries show realized P&L at the bid and under the stressed exit side by side, over the same trades (challenge 4).
+* Tracker splits flagged contracts by size of open interest (challenge 7), display-only.

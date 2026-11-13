@@ -62,9 +62,23 @@ def _bucket_dte(s: dict[str, Any]) -> str:
     return "7 days or less" if d <= 7 else "8 to 30 days" if d <= 30 else "31 to 90 days" if d <= 90 else "Over 90 days"
 
 
+def _bucket_oi_size(s: dict[str, Any]) -> str:
+    """Open interest by size, cut where the alerter's rules cut (a score cap under 20, an entry gate at 100).
+
+    A volume to open interest ratio over a tiny denominator is easy to reach, so this shows whether flags that rest on a
+    tiny base did any differently. Old marks taken before this feature existed show as "Unknown", never as a guess.
+    """
+    oi = s.get("open_interest")
+    if oi is None:
+        return "Missing"
+    return ("Zero" if oi <= 0 else "1 to 9" if oi < 10 else "10 to 19" if oi < 20 else "20 to 99" if oi < 100
+            else "100 to 499" if oi < 500 else "500 or more")
+
+
 FEATURES: dict[str, tuple[str, Any]] = {
     "ratio": ("Volume against open interest", _bucket_ratio),
     "oi": ("Open interest before the flag", lambda s: "Fresh (under 10)" if s.get("low_oi") else "Established"),
+    "oi_size": ("Size of open interest before the flag", _bucket_oi_size),
     "side": ("Inferred side of the last trade", lambda s: {"BUY": "Looks like buying", "SELL": "Looks like selling"}.get(s.get("likely_side"), "Unclear")),
     "dte": ("Days to expiry", _bucket_dte),
     "tier": ("Liquidity grade", lambda s: "Grade " + str(s.get("liquidity_tier") or "?")),
