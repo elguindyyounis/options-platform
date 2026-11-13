@@ -120,6 +120,8 @@ class OrderIntent:
     limit_price: float
     note: str = ""
     side: Side = Side.BUY_TO_OPEN
+    # Label of the market-data provider that produced the decision ("" = unknown / manual order).
+    data_source: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -130,6 +132,7 @@ class OrderIntent:
             "limit_price": self.limit_price,
             "note": self.note,
             "side": self.side.value,
+            "data_source": self.data_source,
         }
 
     @classmethod
@@ -142,6 +145,7 @@ class OrderIntent:
             limit_price=d["limit_price"],
             note=d.get("note", ""),
             side=Side(d.get("side", Side.BUY_TO_OPEN.value)),
+            data_source=str(d.get("data_source", "")),
         )
 
 

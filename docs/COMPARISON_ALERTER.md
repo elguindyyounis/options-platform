@@ -15,6 +15,12 @@ Notes from reading the alerter's code. Claims here come from code only; the owne
   clipped to +/-100%, adjustment capped at +/-7 points, demo trades never train real candidates.
 * `storage.py` (headings only): `BEGIN IMMEDIATE` around buys and closes, i.e. atomic admission.
 
+* `entry_quality.py` (2026-11-13): strict real-source entry policy. Spread cap 15% of ask, volume >= 20, open interest
+  >= 100, requires a valid bid > 0 (exit observable), underlying reference and technical history; order size capped at
+  10% of daily volume and 10% of OI; same-symbol-side cap 2, market-ETF side cap 3, growth-tech side cap 4. Poor
+  candidates are kept for research but never traded. Does not apply to demo examples and never constrains exits.
+  Comparison only: the platform's own limits are owner decisions and were not changed.
+
 ## Where the alerter is stricter or more honest
 * Explicit minimum sample sizes before anything is "learned". The platform had none: `/api/report` showed a win rate
   from one trade with no qualification. (Addressed 2026-11-13 by `stats.py`, display only.)
@@ -29,4 +35,4 @@ Notes from reading the alerter's code. Claims here come from code only; the owne
 
 ## Never read yet
 `server.py`, `data_sources.py`, `storage.py` (body), `feedback.py`, `exit_decisions.py`, `strategy_lanes.py`,
-`sizing.py`, `agent_lab.py`, `daily_review.py`, `entry_quality.py`, `risk.py`, and all `agent_skills/*`.
+`sizing.py`, `agent_lab.py`, `daily_review.py`, `risk.py`, and all `agent_skills/*`.

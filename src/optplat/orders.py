@@ -227,7 +227,13 @@ class OrderManager:
     def report(self) -> dict[str, Any]:
         """Realized P&L from closed paper trades plus bid-marked open positions."""
         closed = []
-        for o in self.store.list_orders(limit=1000):
+        orders = self.store.list_orders(limit=1000)
+        # Source of the most recent filled entry per contract that precedes each exit (oldest first).
+        entries = sorted(
+            (o for o in orders if o.intent.side is Side.BUY_TO_OPEN and o.state is S.FILLED),
+            key=lambda o: o.created_at,
+        )
+        for o in orders:
             if (
                 o.intent.side is Side.SELL_TO_CLOSE
                 and o.state is S.FILLED
@@ -235,6 +241,10 @@ class OrderManager:
                 and o.avg_fill_price
             ):
                 pnl = round((o.avg_fill_price - o.cost_basis) * o.filled_qty * o.intent.contract.multiplier, 2)
+                prior = [e for e in entries
+                         if e.intent.contract == o.intent.contract and e.created_at <= o.created_at]
+                entry_source = prior[-1].intent.data_source if prior else ""
+                exit_source = o.intent.data_source
                 closed.append(
                     {
                         "order_id": o.id,
@@ -244,9 +254,17 @@ class OrderManager:
                         "exit": o.avg_fill_price,
                         "pnl": pnl,
                         "closed_at": o.updated_at.isoformat(),
+                        "entry_data_source": entry_source or "UNKNOWN",
+                        "exit_data_source": exit_source or "UNKNOWN",
                     }
                 )
         wins = sum(1 for c in closed if c["pnl"] > 0)
+        by_source: dict[str, dict[str, Any]] = {}
+        for c in closed:
+            key = c["entry_data_source"] if c["entry_data_source"] == c["exit_data_source"] else "MIXED"
+            row = by_source.setdefault(key, {"closed_trades": 0, "realized_pnl": 0.0})
+            row["closed_trades"] += 1
+            row["realized_pnl"] = round(row["realized_pnl"] + c["pnl"], 2)
         open_rows = []
         for p in self.broker.get_positions():
             row: dict[str, Any] = {
@@ -273,6 +291,8 @@ class OrderManager:
             "wins": wins,
             "realized_pnl": round(sum(c["pnl"] for c in closed), 2),
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
+            "by_data_source": by_source,
+            "data_sources_mixed": len(by_source) > 1 or "MIXED" in by_source,
             "closed": closed[:50],
             "open": open_rows,
             **sample_assessment([c["pnl"] for c in closed]),

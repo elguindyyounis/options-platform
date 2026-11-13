@@ -71,7 +71,9 @@
       $("report").textContent = report.closed_trades + " closed trades, realized " + money(report.realized_pnl) +
         (report.win_rate_pct === null ? "" : ", win rate " + report.win_rate_pct + "%" +
           (report.win_rate_ci95_pct ? " (95% range " + report.win_rate_ci95_pct[0] + "-" + report.win_rate_ci95_pct[1] + "%)" : "")) +
-        ". [" + report.sample_status + "] " + report.sample_note + " " + report.caveat;
+        ". [" + report.sample_status + "] " + report.sample_note + " " + report.caveat +
+        " Data sources: " + (Object.keys(report.by_data_source).join(", ") || "none") +
+        (report.data_sources_mixed ? " (MIXED: do not pool these results)" : "") + ".";
 
       table($("positions"), [
         { label: "Contract", get: (r) => r.contract }, { label: "Qty", get: (r) => r.quantity },

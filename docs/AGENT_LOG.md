@@ -34,3 +34,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Not verified: dashboard rendering in a browser; the 30-trade threshold is a convention, not a derived value, and the
   owner may want a different one. Real-data behaviour (no access to the owner's database).
 * Created `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md`, which did not exist yet.
+
+## 2026-11-13: data-source tags on closed trades (daily challenger)
+
+* Alerter had no new commits since 1fc88f1. Read `entry_quality.py` (see COMPARISON_ALERTER.md).
+* Challenge #2: `OrderIntent.data_source` (default empty, backward compatible) is set by the engine from the provider
+  name; `/api/report` tags each closed trade with entry/exit source, groups results `by_data_source`, and sets
+  `data_sources_mixed`. Manual/older orders show UNKNOWN, never assumed real. Dashboard line uses textContent.
+* Verified: `python -m pytest -q` passes (new tests/test_report_data_source.py). Not verified: against live Yahoo, or any
+  real database; trades closed before this change are all UNKNOWN. No risk limits, lanes or defaults were touched.
+* Note: this branch is based on `agent/2026-11-13-sample-size-honesty` because main does not yet contain the docs.

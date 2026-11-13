@@ -316,6 +316,7 @@ class TradingEngine:
             limit_price=sell_limit_for(quote.bid),
             note="automatic exit",
             side=Side.SELL_TO_CLOSE,
+            data_source=self.provider.name,
         )
         try:
             order = self.manager.submit(intent)
@@ -391,6 +392,7 @@ class TradingEngine:
                 quantity=quantity,
                 limit_price=proposal.limit_price,
                 note=json.dumps(proposal.rationale)[:200],
+                data_source=self.provider.name,
             )
             item: dict[str, Any] = {
                 "symbol": symbol,
