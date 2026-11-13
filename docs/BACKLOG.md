@@ -37,6 +37,10 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Show `report.evidence` in the dashboard (build with `textContent` only).
+* Per-trade source tag (synthetic vs real quotes) so reports can exclude demo trades.
+* Rejected/missed-setup journal with 1/7/30-day horizons (see CHALLENGES #3).
+
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
@@ -47,3 +51,6 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market
   clock, trading engine + runner, same-underlying concentration limit, re-entry cooldown, dashboard.
+* Sample-size context on `report()` (`evidence.py`): trade count, Wilson 95% interval on win rate,
+  best-trade dependence, truncation flag, `INSUFFICIENT_SAMPLE` below 30 trades. Branch
+  `agent/2026-11-13-evidence-context`.

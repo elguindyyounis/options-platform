@@ -9,6 +9,7 @@ import threading
 from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
+from .evidence import summarize_evidence
 from .broker.base import BrokerAdapter, BrokerRejected
 from .models import (
     STATUS_CANCELLED,
@@ -226,7 +227,8 @@ class OrderManager:
     def report(self) -> dict[str, Any]:
         """Realized P&L from closed paper trades plus bid-marked open positions."""
         closed = []
-        for o in self.store.list_orders(limit=1000):
+        all_orders = self.store.list_orders(limit=1000)
+        for o in all_orders:
             if (
                 o.intent.side is Side.SELL_TO_CLOSE
                 and o.state is S.FILLED
@@ -273,8 +275,9 @@ class OrderManager:
             "realized_pnl": round(sum(c["pnl"] for c in closed), 2),
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
             "closed": closed[:50],
+            "evidence": summarize_evidence([c["pnl"] for c in closed], truncated=len(all_orders) >= 1000),
             "open": open_rows,
-            "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
+            "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge. See evidence.",
         }
 
     # ---- queries ------------------------------------------------------

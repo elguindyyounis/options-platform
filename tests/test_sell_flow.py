@@ -157,3 +157,13 @@ def test_side_survives_persistence(env):
     manager, _, _ = env
     order = manager.submit(sell())
     assert manager.get(order.id).intent.side is Side.SELL_TO_CLOSE
+
+
+def test_report_attaches_sample_size_evidence(tmp_path):
+    from optplat.broker import SimBroker
+    from optplat.orders import OrderManager
+    from optplat.store import Store
+
+    report = OrderManager(SimBroker(), Store(":memory:")).report()
+    assert report["evidence"]["verdict"] == "INSUFFICIENT_SAMPLE"
+    assert report["evidence"]["trades"] == 0

@@ -23,3 +23,17 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-13: daily challenger, first run (agent/2026-11-13-evidence-context)
+
+* Created `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md` (neither existed). Alerter at
+  `1fc88f1`; read core, risk, paper_engine, liquidity, adaptive, feedback, research_foundations and
+  the security checks in server.
+* Challenge: `OrderManager.report()` printed `win_rate_pct` with no sample context. Added
+  `src/optplat/evidence.py` and an additive `evidence` key (trade count, Wilson 95% interval,
+  dependence on the best trade, truncation and non-finite flags, verdict). Verdict is
+  `INSUFFICIENT_SAMPLE` under 30 trades and never claims an edge. Existing report keys unchanged.
+* Display only: no risk, sizing, exit, auth or lane behaviour changed.
+* Verified: baseline 144 tests passed; 153 pass after. Wilson interval checked against a known value.
+* Not verified: the 30-trade threshold is a judgement call (owner may raise it); dashboard does not
+  show the new block yet; nothing run against real or Yahoo data; 1000-order truncation not fixed.
