@@ -69,6 +69,9 @@
       const a = portfolio.account;
       $("account").textContent = "Equity " + money(a.equity) + "  |  Cash " + money(a.cash) + "  |  Open premium " + money(a.open_premium);
       $("report").textContent = report.closed_trades + " closed trades, realized " + money(report.realized_pnl) +
+        ", marked incl. open " + money(report.marked_pnl) +
+        (report.marked_pnl_complete ? "" : " (INCOMPLETE: " + report.open_positions_unobservable + " open position(s) unobservable)") +
+        (report.history_truncated ? " (history truncated: older orders not counted)" : "") +
         (report.win_rate_pct === null ? "" : ", win rate " + report.win_rate_pct + "%" +
           (report.win_rate_ci95_pct ? " (95% range " + report.win_rate_ci95_pct[0] + "-" + report.win_rate_ci95_pct[1] + "%)" : "")) +
         ". [" + report.sample_status + "] " + report.sample_note + " " + report.caveat +

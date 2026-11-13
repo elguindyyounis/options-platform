@@ -44,3 +44,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Verified: `python -m pytest -q` passes (new tests/test_report_data_source.py). Not verified: against live Yahoo, or any
   real database; trades closed before this change are all UNKNOWN. No risk limits, lanes or defaults were touched.
 * Note: this branch is based on `agent/2026-11-13-sample-size-honesty` because main does not yet contain the docs.
+
+## 2026-11-13: marked P&L and truncation honesty (daily challenger, run 3)
+
+* Alerter unchanged (1fc88f1). Read `exit_decisions.py` (notes in COMPARISON_ALERTER.md).
+* Challenge #6: `/api/report` headline was realized P&L only, so a book holding losers looked better than it was, and
+  it silently read only the last 1000 orders. Added `open_unrealized_pnl`, `marked_pnl`, `open_positions_unobservable`,
+  `marked_pnl_complete`, `history_truncated`; dashboard line shows them. Display only; no trading, risk or auth change.
+* Verified: `python -m pytest -q` 158 passed (new tests/test_report_marked_pnl.py). Not verified: dashboard in a browser
+  (only `node --check`), real database, behaviour with real Yahoo marks.
+* Base: stacked on `agent/2026-11-13-challenger-3` because main still lacks the docs.

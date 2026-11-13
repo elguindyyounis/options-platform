@@ -21,6 +21,12 @@ Notes from reading the alerter's code. Claims here come from code only; the owne
   candidates are kept for research but never traded. Does not apply to demo examples and never constrains exits.
   Comparison only: the platform's own limits are owner decisions and were not changed.
 
+* `exit_decisions.py` (2026-11-13, second run): exits are shadow simulations by default; hard stop/target rules keep
+  precedence. A held contract absent from the latest refresh, non-real source, stale quote (outside -120..1800 s) or
+  invalid two-sided quote is `UNOBSERVABLE`, never a fill. Extra synthetic liquidity penalty on exit fills for wide
+  spreads, disclosed as friction not measured depth. Model exits are local-Ollama only. The platform already treats
+  missing/zero-bid/stale quotes as UNOBSERVABLE; it has no wide-spread exit penalty (relates to challenge #3).
+
 ## Where the alerter is stricter or more honest
 * Explicit minimum sample sizes before anything is "learned". The platform had none: `/api/report` showed a win rate
   from one trade with no qualification. (Addressed 2026-11-13 by `stats.py`, display only.)
@@ -34,5 +40,5 @@ Notes from reading the alerter's code. Claims here come from code only; the owne
 * Quote timestamp verification is required by default.
 
 ## Never read yet
-`server.py`, `data_sources.py`, `storage.py` (body), `feedback.py`, `exit_decisions.py`, `strategy_lanes.py`,
+`server.py`, `data_sources.py`, `storage.py` (body), `feedback.py`, `strategy_lanes.py`,
 `sizing.py`, `agent_lab.py`, `daily_review.py`, `risk.py`, and all `agent_skills/*`.

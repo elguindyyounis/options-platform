@@ -50,3 +50,6 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market
   clock, trading engine + runner, same-underlying concentration limit, re-entry cooldown, dashboard.
 * Report tags each closed trade with its entry/exit data source and flags mixed sources (challenge #2).
+
+* Done 2026-11-13: marked P&L / truncation fields in the report (challenge #6).
+* New: consider a disclosed wide-spread exit-fill penalty in research reports (alerter does this); needs replay data.

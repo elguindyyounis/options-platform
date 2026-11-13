@@ -224,10 +224,13 @@ class OrderManager:
                 return o.updated_at
         return None
 
+    REPORT_HISTORY_LIMIT = 1000
+
     def report(self) -> dict[str, Any]:
         """Realized P&L from closed paper trades plus bid-marked open positions."""
         closed = []
-        orders = self.store.list_orders(limit=1000)
+        history_limit = self.REPORT_HISTORY_LIMIT
+        orders = self.store.list_orders(limit=history_limit)
         # Source of the most recent filled entry per contract that precedes each exit (oldest first).
         entries = sorted(
             (o for o in orders if o.intent.side is Side.BUY_TO_OPEN and o.state is S.FILLED),
@@ -286,10 +289,20 @@ class OrderManager:
             except Exception:  # noqa: BLE001 - an unobservable mark is reported, never guessed
                 pass
             open_rows.append(row)
+        observable = [r["unrealized_pnl"] for r in open_rows if r["unrealized_pnl"] is not None]
+        unobservable = len(open_rows) - len(observable)
+        realized = round(sum(c["pnl"] for c in closed), 2)
+        unrealized = round(sum(observable), 2)
         return {
+            # Realized P&L alone flatters a book that is still holding its losers.
+            "open_unrealized_pnl": unrealized,
+            "open_positions_unobservable": unobservable,
+            "marked_pnl": round(realized + unrealized, 2),
+            "marked_pnl_complete": unobservable == 0,
+            "history_truncated": len(orders) >= history_limit,
             "closed_trades": len(closed),
             "wins": wins,
-            "realized_pnl": round(sum(c["pnl"] for c in closed), 2),
+            "realized_pnl": realized,
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
             "by_data_source": by_source,
             "data_sources_mixed": len(by_source) > 1 or "MIXED" in by_source,
