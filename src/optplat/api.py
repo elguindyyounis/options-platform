@@ -218,6 +218,14 @@ def create_app(
             return {"status": engine.scanner.status(), "result": engine.scanner.latest(),
                     "interval_s": engine.config().scan_interval_s}
 
+        @app.get("/api/tracker", dependencies=[Depends(auth)])
+        def tracker_report() -> dict[str, Any]:
+            from . import tracker
+            from .scanner import session_day, unusual_criteria
+
+            now = engine.clock()
+            return tracker.report(engine.store, engine.provider.fictional, now, session_day(now), unusual_criteria())
+
         @app.post("/api/scan/run", dependencies=[Depends(auth)])
         def scan_run() -> dict[str, Any]:
             started = engine.scanner.start()
