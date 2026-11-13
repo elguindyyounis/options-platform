@@ -101,3 +101,17 @@ Read `data_sources.py`. Points that matter here:
 * **Candidates that fail quality gates are kept and labelled** (up to five) for hypothesis tracking, as our decision journal does.
 
 Still unread: `server.py`, the other skill files. Alerter tests have not been run.
+
+## Fourth reading (2026-11-13, second run, alerter still at `9210fd8`)
+
+Read `sizing.py` and the position-sizing skill.
+
+* **Size is advisory and subordinate.** The sizing result becomes NO_TRADE unless the Skeptic says PASS and the CIO says
+  SUBMIT_FOR_RISK. Goals are tracking only ("falling behind does not increase risk budgets").
+* **Participation caps on free data.** For yfinance candidates, quantity is capped at fixed shares of daily volume and open
+  interest, and refused when the entry-quality check fails. The platform only tags this after the fact (challenge 10).
+* **Confidence is capped by sample size.** The evidence index is held at or below 0.78 under 20 comparable closed trades, and
+  the fraction under 0.60 (0.45 balanced) under 10. The platform's scoreboard has the same stance: too few trades, no verdict.
+* **Drawdown shrinks size** (x0.65 at 10%, x0.5 more at 20%). The platform has no drawdown-scaled size; that is a risk
+  policy question for the owner.
+* Still unread: `server.py` and six of the seven skill files. Alerter tests not run.

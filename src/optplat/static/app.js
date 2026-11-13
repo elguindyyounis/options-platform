@@ -870,7 +870,7 @@
     ], dg.tags, "No post-mortems yet", "Each closed trade is reviewed automatically when it closes.");
     const sb = d.scoreboard || { lanes: {}, note: "" };
     table($("op-scoreboard"), [
-      { label: "Lane", get: (r) => el("b", r.name) }, { label: "Closed", right: true, get: (r) => r.trades },
+      { label: "Lane", get: (r) => el("b", r.name) }, { label: "Closed", right: true, get: (r) => (r.unscored ? r.trades + " of " + r.closed_total + " scored" : r.trades) },
       { label: "Average at the bid", right: true, get: (r) => r.avg_net_pct === null ? "n/a" : pct(r.avg_net_pct) },
       { label: "Average, harder exit", right: true, get: (r) => r.avg_stressed_pct === null ? "n/a" : pct(r.avg_stressed_pct) },
       { label: "Likely range", right: true, get: (r) => r.interval_pct ? pct(r.interval_pct[0]) + " to " + pct(r.interval_pct[1]) : "n/a" },

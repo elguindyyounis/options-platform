@@ -54,3 +54,30 @@ def test_missing_stress_number_falls_back_to_the_bid_number_not_a_better_one():
 def test_scoreboard_counts_lanes_and_carries_the_caveat():
     sb = scoreboard({"a": [tr(5)], "b": []})
     assert sb["lanes_compared"] == 2 and "proof" in sb["note"] and sb["lanes"]["b"]["verdict"] == "NO_TRADES"
+
+
+def test_unscored_closed_trades_are_counted_not_silently_dropped():
+    row = lane_scoreboard([tr(5, 5), {"close_payload": None}, {"close_payload": {"postmortem": {"net_pct": None}}}])
+    assert row["trades"] == 1 and row["closed_total"] == 3 and row["unscored"] == 2
+
+
+def test_a_positive_reading_is_withheld_when_too_many_closed_trades_are_unscored():
+    scored = [tr(20 + (i % 4), 18 + (i % 4)) for i in range(MIN_TRADES_FOR_VERDICT)]
+    assert lane_scoreboard(scored)["verdict"] == "ABOVE_ZERO"
+    # the lane's losers have no post-mortem: the scored trades alone look great, the lane as a whole is unknown
+    hidden_losers = scored + [{"close_payload": None}] * 10
+    row = lane_scoreboard(hidden_losers)
+    assert row["verdict"] == "INCOMPLETE_DATA" and row["unscored"] == 10
+
+
+def test_missing_stress_figures_are_counted_but_do_not_change_the_reading():
+    rows = [tr(20 + (i % 4)) for i in range(MIN_TRADES_FOR_VERDICT)]  # no stress figure on any trade
+    row = lane_scoreboard(rows)
+    assert row["stress_missing"] == MIN_TRADES_FOR_VERDICT and row["verdict"] == "ABOVE_ZERO"
+
+
+def test_a_small_gap_does_not_change_the_reading_and_negative_readings_are_never_softened():
+    rows = [tr(20 + (i % 4), 18 + (i % 4)) for i in range(MIN_TRADES_FOR_VERDICT * 4)] + [{"close_payload": None}]
+    assert lane_scoreboard(rows)["verdict"] == "ABOVE_ZERO"  # 1 of 121 missing is under the 10% bar
+    bad = [tr(10, -5 - (i % 3)) for i in range(MIN_TRADES_FOR_VERDICT)] + [{"close_payload": None}] * 10
+    assert lane_scoreboard(bad)["verdict"] == "BELOW_ZERO"

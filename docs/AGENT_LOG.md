@@ -478,3 +478,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   trade-related path are unchanged. No risk limit, lane size, default or auth check touched. 513 tests pass (510 before).
 * Not verified: alerter tests, the label on live Yahoo chains (what share of real samples are one-sided is unknown), any
   dashboard display of the flag (none added), whether held-contract exits fail closed on a missing quote.
+
+## 2026-11-13 (second run): scoreboard coverage
+
+* Alerter unchanged since `9210fd8`. Read its `sizing.py` and position-sizing skill (COMPARISON_ALERTER.md, "Fourth reading").
+* Branch `agent/2026-11-13-exit-stress-table` is based on `agent/2026-11-13-challenger`. Note `agent/2026-11-13-fill-participation-tags`
+  was forked from `main` without the challenge chain (it carries its own, shorter docs); the owner will need to reconcile the two.
+* Challenged `scoreboard.lane_scoreboard`: closed trades with no post-mortem were skipped silently, which can flatter a lane.
+  Added `closed_total`, `unscored`, `stress_missing`, a verdict `INCOMPLETE_DATA` (only ever replaces ABOVE_ZERO, when more than 10%
+  of closed trades are unscored), and a "x of y scored" cell in the dashboard. Nothing a lane trades, no limit, default or auth changed.
+* 517 tests pass (513 before; no existing test edited).
+* Not verified: alerter tests, the dashboard cell in a browser, how often live trades lack post-mortems.

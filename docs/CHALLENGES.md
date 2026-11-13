@@ -6,7 +6,7 @@ never touches `main`, and never changes risk limits, lane budgets, defaults or a
 
 The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 
-**Last alerter commit reviewed:** `9210fd8`  (update this line each run; unchanged since 2026-11-12, checked again 2026-11-13)
+**Last alerter commit reviewed:** `9210fd8`  (update this line each run; unchanged since 2026-11-12, checked again 2026-11-13, second run)
 
 ## Open challenges (oldest first; the agent picks one per run)
 
@@ -23,12 +23,15 @@ The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 | 5 | Add a signal provenance doc listing each signal, where it came from and its validation status | Alerter's `research_foundations.py` does this; platform does not | Done 2026-11-12 (`provenance.py`, `GET /api/research/provenance`; 14 signals, all UNVALIDATED). Dashboard panel not added |
 | 7 | **Loss tripwire (from the alerter).** The alerter downgrades a cohort with at least 8 trades, mean at or below -30% and win rate at or below 25%. Consider a lane-level equivalent that pauses new entries. | A lane that keeps losing keeps trading | Needs the owner: changes what lanes trade |
 | 8 | **Judge lanes by the scoreboard, not by averages.** Read the new scoreboard once lanes have 30 closed trades; check whether any lane reads ABOVE_ZERO after widening for the number of lanes. | Many lanes on few trades will always produce a lucky one | Waiting for trades |
+| 9 | **Scoreboard dropped unscorable trades silently.** `lane_scoreboard` skipped closed trades with no post-mortem, so a lane whose losers were unscored looked better than it was. | A lane's reading must cover its closed trades, not only the convenient ones | Done 2026-11-13 (`closed_total`, `unscored`, `stress_missing`; positive reading becomes INCOMPLETE_DATA above 10% unscored). Why trades lack post-mortems on live data is unknown |
+| 10 | **Alerter caps order size at a share of reported volume and open interest** (`sizing.py`, yfinance data). The platform only tags it (see the 2026-11-13 participation-tags branch, which is not merged into this line). | Optimistic fills on big sizes | Needs the owner: it changes what lanes trade |
 | 6 | Check whether stacking helps: compare stacked and first entries from the digest once there are enough trades | Owner asked for stacking as an experiment; nothing yet says whether it pays | Waiting for trades |
 
 ## Run log (newest first)
 
 | Date | Alerter commit | What was compared | What changed | What was not verified |
 | --- | --- | --- | --- | --- |
+| 2026-11-13 (second run) | `9210fd8` (no change since) | Read alerter `sizing.py` and the position-sizing skill: sizing is subordinate to the Skeptic veto and CIO, caps quantity at a share of volume and open interest for yfinance data, goals never raise risk, confidence is an index not a probability | Scoreboard coverage: unscored closed trades and missing stress figures are counted and shown; a positive reading is withheld when over 10% of closed trades are unscored. Display and labelling only; tightening only | Alerter tests not run; `server.py` and six skill files still unread; live share of trades without post-mortems unknown; the participation-tags branch (forked from `main`, not from this line) was not merged in |
 | 2026-11-13 | `9210fd8` (no change since) | Read alerter `data_sources.py`: it requires both call and put sides per expiry before computing net GEX, refuses past a row cap, labels coverage, and keeps held contracts pinned and reports missing ones. Our `signals.gex` summed any sample | GEX coverage labels: `coverage_label`, `one_sided_expiries`, `net_is_interpretable`, three tests, provenance caveat. Display-only; the `gex_total` value is unchanged | Alerter tests not run; `server.py` and the other skill files still unread; no dashboard panel shows the new flag; whether held-contract pinning has a platform equivalent (not checked) |
 | 2026-11-12 | `9210fd8` (no change since) | Read alerter `storage.py`: atomic `merge_state_map`, a `trade_journal` that snapshots the council reviews at entry, a unique index allowing one open position per candidate. Nothing new to port today | Challenge 5: signal provenance registry and endpoint, with tests that every computed signal is listed and none is VALIDATED unless the owner lists it | Alerter tests not run; `agents.py`, `core.py`, `server.py`, `data_sources.py` still unread; no dashboard panel; whether the caveat text is complete |
 | 2026-11-12 (second run) | `9210fd8` (no new commits) | Read `agents.py`, `core.py`, skeptic skill | Added the honest lane scoreboard (`scoreboard.py`): stressed average, widened interval, best-trade share, a verdict that needs 30 trades | Alerter tests not run; scoreboard on live data (none seen); its interval ignores overlap between trades |
