@@ -28,6 +28,7 @@ from .models import (
 )
 from .risk import RiskPolicy, evaluate
 from .store import Store
+from .stats import sample_assessment
 
 S = OrderState
 
@@ -274,6 +275,7 @@ class OrderManager:
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
             "closed": closed[:50],
             "open": open_rows,
+            **sample_assessment([c["pnl"] for c in closed]),
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
         }
 

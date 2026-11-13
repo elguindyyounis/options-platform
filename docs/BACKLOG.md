@@ -37,12 +37,14 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Tag each closed trade with its data source (demo vs real) in `/api/report` (CHALLENGES #2).
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
 
+* 2026-11-13: report sample-size honesty (`stats.py`): INSUFFICIENT/PRELIMINARY status, Wilson 95% interval, avg win/loss. Display only.
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market

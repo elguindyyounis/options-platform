@@ -23,3 +23,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-13: sample-size honesty in the report (scheduled challenger run)
+
+* Compared with options-alerter (`core.py`, `agents.py`, part of `adaptive.py`). The alerter enforces minimum sample
+  sizes before learning; the platform's `/api/report` printed a win rate from any number of trades.
+* Added `src/optplat/stats.py` and report fields `sample_status`, `win_rate_ci95_pct`, `avg_win`, `avg_loss`,
+  `best_trade`, `worst_trade`, `sample_note`; dashboard line shows them. Display only: no trading, risk, or auth path touched.
+* Verified: `python -m pytest -q` 150 passed (6 new tests plus one API assertion).
+* Not verified: dashboard rendering in a browser; the 30-trade threshold is a convention, not a derived value, and the
+  owner may want a different one. Real-data behaviour (no access to the owner's database).
+* Created `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md`, which did not exist yet.
