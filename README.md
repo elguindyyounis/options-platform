@@ -72,7 +72,12 @@ positions, and a re-entry cooldown after selling a contract.
 ./run.sh                 # fictional demo market, works at any hour
 ./run.sh yahoo           # free, delayed Yahoo data (US market hours only)
 ./run.sh yahoo --loop    # same, and start the cycle loop automatically
+./watch.sh               # same as ./run.sh yahoo --loop, and restarts itself when your branch gets new commits
 ```
+
+`watch.sh` checks GitHub every minute; when your branch has new commits and your copy has no local edits it fast-forwards, restarts
+the platform and you just refresh the page. It keeps a stable dashboard token in `.venv/.optplat_token`, and the simulated account is rebuilt
+from the database on each start. Whatever is pushed to the branch it follows runs on your computer, so follow a branch you trust.
 
 `run.sh` finds Python 3.10+, creates `.venv`, installs what is needed (first run only), starts the
 server and opens the dashboard already connected. It needs Python 3.10 or newer; on a Mac install it
