@@ -31,6 +31,10 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
     to show P&L under SIM_ASSUMPTION / THIN_MARKET / STRESSED_EXIT. Display only.
 11. **Counterfactual journal** for rejected/unselected setups (see COMPARISON_ALERTER.md).
 
+10. **Wire the counterfactual journal.** Record rejected/unselected setups from `engine._run_entries`
+    and call `mark()` each cycle. Touches engine.py (safety code), so keep it observe-only, fail-closed
+    and well tested.
+
 ## Blocked on a human
 
 * **Real broker adapter (IBKR paper).** Owner is implementing `broker/ibkr.py`. Do not start it.
@@ -47,6 +51,7 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Counterfactual journal module (`counterfactual.py`), research-only, not yet wired (agent/2026-11-13-counterfactual-journal).
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market

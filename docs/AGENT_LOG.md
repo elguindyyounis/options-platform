@@ -34,3 +34,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Verified: full suite 153 passed. Not verified: the concession heuristic is uncalibrated, so the
   numbers are scenarios only. Platform quotes have no volume/OI, so depth is always "unknown" today.
   Could not see the owner's database or any real results.
+
+## 2026-11-13: counterfactual journal (scheduled challenger run)
+
+* Added `src/optplat/counterfactual.py` and `tests/test_counterfactual.py` (8 tests): a research-only
+  table of rejected/unselected/taken setups re-marked at 1/7/30 days from later quotes. Later quote
+  must be 12h+ after the decision; unresolved cases are counted (no survivorship); means withheld
+  below 30 resolved. Not wired into engine, risk, orders or API; no limits or lane sizes touched.
+* Alerter unchanged since `9210fd8`. Read `sizing.py` and `adaptive.py`; notes in the comparison doc.
+* Based on `agent/2026-11-13-exit-stress` because `main` has none of the challenger docs; sibling
+  agent branches (e.g. sample-evidence, report-evidence) diverge from main and are unmerged, so
+  expect merge work between them.
+* Verified: full suite 161 passed. Not verified: behaviour against real quotes or the owner's database;
+  the 12h gap and 30-case gate are judgement values, not calibrated.
