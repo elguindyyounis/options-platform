@@ -25,6 +25,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * `learning.py` and the Research page: older half against newer half of closed trades (no verdict under 20 each), lessons labelled
   pattern, anecdote or lead, agent weights, a timeline. `GET /api/learning`.
 * Desk redesigned: large account value, open positions as cards with a stop-to-target ladder, a decisions feed.
+* Owner follow-up: the Desk now has an "All accounts and lanes" block (options account, every option lane, the 10x challenge, both share lanes,
+  and a total) so lane results are visible on the front page. It reuses `/api/alltrades`; no new backend. The total adds simulated dollars from
+  lanes with different sizes and is labelled as not an account balance. Checked in headless Chromium on demo data at desktop and phone width.
 * 537 tests pass. Checked in headless Chromium on fictional demo data only (dark, phone width, every page, no script errors).
   I updated one existing test, the nav list, because a Tracker page was added; no test was weakened or removed.
 * Not verified: any of this on the owner's Mac or live Yahoo data; the tracker and rotation need several real trading days to
