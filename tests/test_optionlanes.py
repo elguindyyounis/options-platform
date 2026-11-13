@@ -435,7 +435,7 @@ def test_the_option_lanes_are_off_by_default_and_the_endpoints_say_so(client):
     assert EngineConfig().option_lanes_enabled is False and engine.maybe_option_lanes() is None
     assert c.get("/api/optlanes").status_code == 401
     body = c.get("/api/optlanes", headers=H).json()
-    assert body["enabled"] is False and body["fictional"] is True and len(body["lanes"]) == 5 and "digest" in body
+    assert body["enabled"] is False and body["fictional"] is True and len(body["lanes"]) == 6 and "digest" in body
     assert {l["lane"] for l in body["lanes"]} == {p.lane for p in ol.ALL_PARAMS}
     assert c.post("/api/optlanes/step", headers=H).status_code == 409
 
@@ -444,7 +444,7 @@ def test_switching_the_lanes_on_runs_them_and_every_trade_is_labelled_fictional_
     c, engine = client
     engine.set_config({"option_lanes_enabled": True, "enforce_market_hours": False})
     res = c.post("/api/optlanes/step", headers=H).json()
-    assert len(res["lanes"]) == 5 and all("errors" in x for x in res["lanes"])
+    assert len(res["lanes"]) == 6 and all("errors" in x for x in res["lanes"])
     body = c.get("/api/optlanes", headers=H).json()
     assert body["enabled"] is True and all(l["fictional"] is True for l in body["lanes"])
     assert all(l["rules"] and l["limitations"] and l["params"] for l in body["lanes"])
@@ -533,3 +533,16 @@ def test_a_lane_remembers_what_its_last_check_did_and_why_it_did_not_trade():
     lane.step(force=True)  # no scan results exist, so the flow lane has nothing to act on
     saved = json.loads(store.get_state(f"optlane_last_result:{lane.p.lane}", ""))
     assert saved["opened"] == 0 and saved["at"] == now.isoformat() and "errors" in saved and "skips" in saved
+
+
+def test_frozen_baseline_is_pinned_and_independent():
+    """Challenge 3: the yardstick lane must never drift. Changing its settings is an owner decision (new lane id, new fingerprint)."""
+    assert ol.params_fingerprint(ol.FROZEN_BASELINE) == ol.FROZEN_FINGERPRINT
+    assert ol.FROZEN_BASELINE in ol.ALL_PARAMS
+    assert len({p.lane for p in ol.ALL_PARAMS}) == len(ol.ALL_PARAMS)
+    # It is the first short-term rule at the base size, and no looser than the base lane it mirrors.
+    b = ol.SHORT_BASE
+    f = ol.FROZEN_BASELINE
+    assert (f.kind, f.budget_usd, f.max_open, f.stack, f.max_per_name) == ("short", 1000, 4, "none", 1)
+    assert f.experimental is False and f.budget_usd <= ol.SHORT_AGGR.budget_usd
+    assert f.max_per_sector < f.max_open and b.lane != f.lane

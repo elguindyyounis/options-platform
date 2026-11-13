@@ -21,7 +21,7 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 ## Next up
 
-0. **Challenger agent's list.** The open challenges (counterfactual journal, display-only GEX, frozen baseline, stressed lane P&L,
+0. **Challenger agent's list.** The open challenges (counterfactual journal, display-only GEX, stressed lane P&L,
    signal provenance doc) live in `docs/CHALLENGES.md`; the daily agent takes one per run.
 
 1. **Schedule the weekly report.** `python -m optplat.weekly` exists; running it on a timer and where the
@@ -78,6 +78,7 @@ Existing items, in order:
 
 ## Done
 
+* Frozen baseline lane (challenge 3): `frozen-baseline-options`, a literal copy of the first short-term rule, settings pinned by `FROZEN_FINGERPRINT` and a test. Simulated only.
 * 10x challenge account (owner request 2026-11-13): `challenge.py`, restartable, critic on every trade, attempt history, dashboard panel.
 * Alerter comparison (owner request 2026-11-12): `docs/COMPARISON_ALERTER.md`, liquidity tiers and exit stress in post-mortems
   (`liquidity.py`), and `docs/CHALLENGES.md` as the log for the daily challenger agent. Open challenges are listed there.

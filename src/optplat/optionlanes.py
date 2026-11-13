@@ -15,6 +15,7 @@ requires one) means no entry. A trade that cannot be marked stays open and is re
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 from dataclasses import dataclass, replace
@@ -91,7 +92,21 @@ FLOW = Params("flow-options", "Unusual flow that stuck", "flow",
               "When a contract had a very high volume to open interest ratio and its open interest rose the next day, buy a call (if the read is bullish) or a put (if bearish) on the same name. Double size when the contract had almost no open interest before the flow; add a second position only when the first is winning.",
               5000, 15, 6, 21, 60, 1.0, 15.0, 50, 5, 0.30, 50, 100, 10, True, True, False, (),
               max_per_name=2, stack="winners")
-ALL_PARAMS = (SHORT_BASE, SHORT_AGGR, SWING_BASE, SWING_AGGR, FLOW)
+# Frozen reference lane (challenge 3). Written out in full on purpose, NOT derived from SHORT_BASE, so that tuning
+# SHORT_BASE can never silently move the yardstick. Its settings are pinned by FROZEN_FINGERPRINT and a test; changing
+# either is an owner decision, and a changed lane must get a new lane id so old and new results are never mixed.
+FROZEN_BASELINE = Params("frozen-baseline-options", "Frozen baseline (never tuned)", "short",
+                         "A fixed copy of the first short-term rule (EMA9/VWAP, weekly expiry, at the money, $1,000 a trade). Its settings are pinned by a fingerprint and never change, so every other lane can be compared with the same yardstick.",
+                         1000, 4, 3, 2, 10, 0.0, 12.0, 100, 10, 0.20, 30, 50, 0, False, True, False, st_mod.LANE_SYMBOLS)
+
+
+def params_fingerprint(p: Params) -> str:
+    return hashlib.sha256(repr(p).encode()).hexdigest()
+
+
+FROZEN_FINGERPRINT = "47e1f4eeb081e86c5f9c711eaac3bd599dadf7a7efdb3c7724f541aa4f119f99"
+
+ALL_PARAMS = (SHORT_BASE, SHORT_AGGR, SWING_BASE, SWING_AGGR, FLOW, FROZEN_BASELINE)
 
 EXIT_TEXT = {
     "stop": "The option's bid fell to the stop set when the trade opened.",

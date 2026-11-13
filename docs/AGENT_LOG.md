@@ -5,6 +5,17 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-13: frozen baseline lane (challenge 3, scheduled run)
+
+* Added `FROZEN_BASELINE` in `optionlanes.py`: a lane written out in full (not derived from `SHORT_BASE`) so tuning
+  the base lane cannot move the yardstick. `FROZEN_FINGERPRINT` and a test pin its settings; any change needs the owner
+  and a new lane id. Simulated trades only: no orders, no risk policy change. Lane count is now six (two tests updated
+  from 5 to 6; no assertion loosened).
+* Skipped because other `agent/2026-11-13-*` branches already hold them (not in integration yet): counterfactual journal,
+  stressed lane P&L, signal provenance, GEX labels. Those may conflict with this commit on `optionlanes.py`/docs.
+* Verified: 498 tests pass. Not verified: the lane running against live Yahoo data; it duplicates the base lane's signals, so
+  until the base is tuned the two will look alike.
+
 ## 2026-11-13: the 10x challenge account
 
 * Owner asked for an aggressive paper account (10x in a month, restartable, critical of every trade). Built it as a separate
