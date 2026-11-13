@@ -23,3 +23,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-13: fill participation tags (daily challenger, first run)
+
+* Compared with options-alerter. It refuses entries above 10% of reported volume/OI; the platform's
+  sim fills any size at ask + 0.5%, so results could look better than they are.
+* Added `liquidity.py` and a `liquidity` field on each entry in the cycle report (qty as % of
+  reported volume and OI, flagged above 10%, unknown data flagged). Display only: no order, size
+  or limit changes. 154 tests pass (10 new).
+* Created `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md` (neither existed).
+* Not verified: any real data; the dashboard does not show the tags yet; alerter modules listed as
+  unread in the comparison doc.

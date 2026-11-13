@@ -37,6 +37,9 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Depth-aware slippage and exit-stress scenarios in the sim broker (owner decision: changes fills).
+* Show the entry `liquidity` tags on the dashboard (textContent only).
+
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
@@ -47,3 +50,4 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market
   clock, trading engine + runner, same-underlying concentration limit, re-entry cooldown, dashboard.
+* Display-only participation tags (qty vs reported volume/OI) on entry cycle reports; branch `agent/2026-11-13-fill-participation-tags`.
