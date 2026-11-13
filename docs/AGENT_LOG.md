@@ -23,3 +23,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-13: daily challenger, sample-size evidence
+
+* First challenger run. Read alerter `entry_quality.py` and `feedback.py`; created
+  `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md` (neither existed).
+* Challenged: `/api/report` showed a win rate with no uncertainty, so one winning paper trade read as
+  100%. Added `optplat/evidence.py`; the report now has `win_rate_ci95_pct`, `sample_verdict`,
+  `min_trades_for_result` (30, a label threshold only) and `evidence_note`; dashboard shows them.
+  No trading, risk, auth or lane behaviour changed.
+* Verified: baseline 144 tests passed; 150 pass after (new `tests/test_evidence.py`, one assertion
+  added to `test_sell_flow.py`, none weakened).
+* Not verified: the dashboard text in a browser; the alerter modules listed as unread; the owner's
+  real database (not visible from here). No PR opened, per instructions.

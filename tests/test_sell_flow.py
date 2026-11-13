@@ -99,6 +99,7 @@ def test_round_trip_records_cost_basis_and_realized_pnl(env):
     assert broker.get_positions() == []
     report = manager.report()
     assert report["closed_trades"] == 1 and report["wins"] == 1
+    assert report["sample_verdict"] == "INSUFFICIENT_SAMPLE" and report["win_rate_ci95_pct"][1] == 100.0
     assert report["realized_pnl"] == round((2.89 - 2.01) * 4 * 100, 2)
     assert manager.get(order.id).cost_basis == 2.01  # survives persistence
 

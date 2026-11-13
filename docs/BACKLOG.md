@@ -37,11 +37,16 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* `/api/report` scans only the newest 1000 orders; paginate or count truncation (CHALLENGES #3).
+* Volume/OI participation check in risk (CHALLENGES #1; needs owner decision).
+
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-13: Sample-size evidence on `/api/report` (Wilson 95% interval, INSUFFICIENT_SAMPLE under 30 trades). Branch `agent/2026-11-13-sample-evidence`. Part of item 3's honesty requirement; out-of-sample split still open.
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
