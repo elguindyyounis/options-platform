@@ -6,7 +6,7 @@ never touches `main`, and never changes risk limits, lane budgets, defaults or a
 
 The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 
-**Last alerter commit reviewed:** `9210fd8`  (update this line each run; unchanged on 2026-11-12 second run)
+**Last alerter commit reviewed:** `9210fd8`  (update this line each run; unchanged since 2026-11-12, checked again 2026-11-13)
 
 ## Open challenges (oldest first; the agent picks one per run)
 
@@ -17,7 +17,7 @@ The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 | C | **Show clock skew loudly.** The Mac clock runs 7 to 11 s behind quote timestamps; the data-quality gate allows 5 s, so 29 of 30 scan chains and nearly every SPY/QQQ entry were rejected (FUTURE_TIMESTAMP, 496 rejects since 2026-11-11). Measure the skew from quote timestamps and show "your clock is N s behind" on the dashboard. **Do not raise the 5 s tolerance: that is the owner's call.** The owner can sync the Mac clock instead. | The flow lane, scanner and real account are all starved by this | Display done 2026-11-13 (Controls trust panel and status). Tolerance and the Mac clock fix need the owner |
 | D | **Challenge the 10x account's critic.** Once `challenge:history` has several finished attempts, compare what the critic vetoed with what it let through, which objections preceded the worst trades, and whether any attempt reached 10x by luck of one big trade. Propose rule changes only as tightening or as new tests; never judge an attempt on its best trade. | The challenge only teaches something if the critic is itself tested | Waiting for attempts |
 | 1 | Add a counterfactual journal: for each scan, record unselected and rejected contracts and mark them at 1, 7 and 30 days (ask in, bid out) | The platform has no way to tell whether its unusual-activity labels predict anything | Open |
-| 2 | Display-only modeled net GEX per scanned name, with the assumption stated | Alerter has it; platform lacks any positioning context | Open |
+| 2 | Display-only modeled net GEX per scanned name, with the assumption stated | Alerter has it; platform lacks any positioning context | Partly done: `signals.gex` exists per symbol and, from 2026-11-13, says when an expiry has only calls or only puts (`net_is_interpretable`). Still no per-name scan view, no strike heat map, no row cap |
 | 3 | Add a frozen-baseline lane that never changes, to compare the others against | Lanes are only compared with each other | Open |
 | 4 | Make lane P&L itself use the stressed exit alongside the bid exit (show both) | Headline results are optimistic for large sizes | Partly done 2026-11-12: per-lane scoreboard shows average at the bid and at the harder exit side by side. Dollar P&L cards still use the bid |
 | 5 | Add a signal provenance doc listing each signal, where it came from and its validation status | Alerter's `research_foundations.py` does this; platform does not | Done 2026-11-12 (`provenance.py`, `GET /api/research/provenance`; 14 signals, all UNVALIDATED). Dashboard panel not added |
@@ -29,6 +29,7 @@ The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 
 | Date | Alerter commit | What was compared | What changed | What was not verified |
 | --- | --- | --- | --- | --- |
+| 2026-11-13 | `9210fd8` (no change since) | Read alerter `data_sources.py`: it requires both call and put sides per expiry before computing net GEX, refuses past a row cap, labels coverage, and keeps held contracts pinned and reports missing ones. Our `signals.gex` summed any sample | GEX coverage labels: `coverage_label`, `one_sided_expiries`, `net_is_interpretable`, three tests, provenance caveat. Display-only; the `gex_total` value is unchanged | Alerter tests not run; `server.py` and the other skill files still unread; no dashboard panel shows the new flag; whether held-contract pinning has a platform equivalent (not checked) |
 | 2026-11-12 | `9210fd8` (no change since) | Read alerter `storage.py`: atomic `merge_state_map`, a `trade_journal` that snapshots the council reviews at entry, a unique index allowing one open position per candidate. Nothing new to port today | Challenge 5: signal provenance registry and endpoint, with tests that every computed signal is listed and none is VALIDATED unless the owner lists it | Alerter tests not run; `agents.py`, `core.py`, `server.py`, `data_sources.py` still unread; no dashboard panel; whether the caveat text is complete |
 | 2026-11-12 (second run) | `9210fd8` (no new commits) | Read `agents.py`, `core.py`, skeptic skill | Added the honest lane scoreboard (`scoreboard.py`): stressed average, widened interval, best-trade share, a verdict that needs 30 trades | Alerter tests not run; scoreboard on live data (none seen); its interval ignores overlap between trades |
 | 2026-11-12 | `9210fd8` | First full comparison | Ported liquidity tiers and exit stress into post-mortems | Alerter tests not run; several alerter modules not read; live Yahoo data |

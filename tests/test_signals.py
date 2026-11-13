@@ -70,6 +70,26 @@ def test_gex_is_always_marked_partial_and_states_its_assumptions():
     assert out["partial_chain"] is True and any("contested" in a for a in out["assumptions"])
 
 
+def test_gex_says_when_an_expiry_has_only_one_side_so_the_net_is_not_readable():
+    one = gex(snap(cr(160, Right.CALL), cr(165, Right.CALL)), NOW)
+    assert one["coverage_label"] == "ONE_SIDED_EXPIRIES" and one["net_is_interpretable"] is False
+    assert one["one_sided_expiries"] == [EXPIRY.isoformat()] and one["expiries_used"] == 1
+    both = gex(snap(cr(160, Right.CALL), cr(160, Right.PUT)), NOW)
+    assert both["coverage_label"] == "BOTH_SIDES_EVERY_EXPIRY" and both["net_is_interpretable"] is True
+    assert both["one_sided_expiries"] == []
+
+
+def test_gex_one_side_per_expiry_is_judged_per_expiry_not_across_the_chain():
+    later = EXPIRY + timedelta(days=7)
+    out = gex(snap(cr(160, Right.CALL), cr(160, Right.PUT), cr(160, Right.CALL, expiry=later)), NOW)
+    assert out["net_is_interpretable"] is False and out["one_sided_expiries"] == [later.isoformat()]
+
+
+def test_gex_with_no_usable_rows_is_not_interpretable():
+    out = gex(snap(cr(160, iv=None)), NOW)
+    assert out["coverage_label"] == "NO_ROWS_USED" and out["net_is_interpretable"] is False
+
+
 def test_the_gamma_flip_strike_is_where_cumulative_exposure_changes_sign():
     # puts below spot dominate at low strikes (negative), calls above dominate at higher strikes (positive)
     rows = [cr(150, Right.PUT, oi=5000), cr(155, Right.PUT, oi=3000), cr(160, Right.CALL, oi=4000), cr(170, Right.CALL, oi=9000)]

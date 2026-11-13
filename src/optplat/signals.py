@@ -116,6 +116,7 @@ def gex(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
     """Dollar gamma exposure per 1% move in the underlying, summed over the sampled chain. Partial by construction."""
     by_strike: dict[float, float] = {}
     used = skipped = 0
+    sides: dict[Any, set[Right]] = {}  # expiry -> sides that actually contributed
     spot = snap.underlying
     for r in snap.rows:
         dte = (r.contract.expiry - now.date()).days
@@ -129,6 +130,14 @@ def gex(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
         sign = 1.0 if r.contract.right is Right.CALL else -1.0
         by_strike[r.contract.strike] = by_strike.get(r.contract.strike, 0.0) + sign * g * r.open_interest * r.contract.multiplier * spot * spot * 0.01
         used += 1
+        sides.setdefault(r.contract.expiry, set()).add(r.contract.right)
+    one_sided = sorted(e.isoformat() for e, got in sides.items() if len(got) < 2)
+    if not sides:
+        coverage_label = "NO_ROWS_USED"
+    elif one_sided:
+        coverage_label = "ONE_SIDED_EXPIRIES"
+    else:
+        coverage_label = "BOTH_SIDES_EVERY_EXPIRY"
     cum, flip, prev = 0.0, None, None  # flip: first strike where cumulative exposure changes sign
     for strike in sorted(by_strike):
         cum += by_strike[strike]
@@ -139,6 +148,10 @@ def gex(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
     return {
         "total_usd_per_1pct": round(total), "flip_strike": flip,
         "rows_used": used, "rows_skipped": skipped, "partial_chain": True,
+        # The alerter refuses a net figure unless calls and puts were both sampled. We still show the number, but say
+        # when it cannot be read as a net: a one-sided expiry is a sum of one sign, not an exposure balance.
+        "expiries_used": len(sides), "one_sided_expiries": one_sided, "coverage_label": coverage_label,
+        "net_is_interpretable": coverage_label == "BOTH_SIDES_EVERY_EXPIRY",
         "assumptions": ["Customers are long calls and short puts, so dealers hold the opposite (contested).",
                         "Open interest is the previous day's; IV is Yahoo's; the chain is a sample; no risk-free rate."],
     }

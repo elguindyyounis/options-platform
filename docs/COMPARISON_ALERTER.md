@@ -85,3 +85,19 @@ that stores the council's review text at entry next to the exit result; and a pa
 position per candidate. The platform's SQLite store already uses transactions per operation; the entry-time review snapshot is
 roughly what `lane_trades` payloads and post-mortems hold. Still not read: `agents.py`, `core.py`, `server.py`, `data_sources.py`.
 Ported today: the provenance idea (`research_foundations.py`) as `provenance.py`.
+
+## Third reading (2026-11-13, alerter still at `9210fd8`)
+
+Read `data_sources.py`. Points that matter here:
+
+* **GEX needs both sides.** It samples up to six near expiries in full (all strikes, including zero volume) and marks an
+  expiry as failed when calls or puts are missing. Past a row cap it refuses to compute rather than return a biased number.
+  It labels coverage `SAMPLED_OPTIONS_CHAIN` or `ALL_LISTED_NEAR_EXPIRIES_ATTEMPTED`. Our `signals.gex` summed whatever rows
+  were present, so a calls-only sample looked like a large positive exposure. It now reports `net_is_interpretable`.
+* **Held contracts are pinned.** The scan always fetches the exact held contract ids and reports `held_missing` ("no
+  quote-backed exits for them") instead of substituting another. Not checked whether the platform's exit path fails the same way.
+* **Free-data honesty.** Every scan returns a `limitations` list (no exchange timestamp, delayed chains, volume does not
+  identify the counterparty). The platform has similar text per lane; not per scan.
+* **Candidates that fail quality gates are kept and labelled** (up to five) for hypothesis tracking, as our decision journal does.
+
+Still unread: `server.py`, the other skill files. Alerter tests have not been run.

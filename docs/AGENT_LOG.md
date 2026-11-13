@@ -468,3 +468,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   validation status. Nothing is VALIDATED; tests tie it to `signals.SIGNAL_NAMES` and `VALIDATED_SIGNALS`.
 * No risk limit, lane size, default, auth check or trade behaviour changed. 510 tests pass.
 * Not verified: alerter tests, completeness of the caveats, the endpoint in the live dashboard (none shown yet).
+
+## 2026-11-13: daily challenger, GEX coverage labels
+
+* Alerter unchanged since `9210fd8`. Read its `data_sources.py` (notes in COMPARISON_ALERTER.md, "Third reading").
+* Based the branch on `agent/2026-11-12-challenge-run`; `main` still lacks the challenge docs and lanes.
+* Challenged `signals.gex`: it summed any sampled rows, so a calls-only or puts-only expiry looked like a real net exposure.
+  Added `coverage_label`, `one_sided_expiries`, `expiries_used`, `net_is_interpretable`. The `gex_total` number and every
+  trade-related path are unchanged. No risk limit, lane size, default or auth check touched. 513 tests pass (510 before).
+* Not verified: alerter tests, the label on live Yahoo chains (what share of real samples are one-sided is unknown), any
+  dashboard display of the flag (none added), whether held-contract exits fail closed on a missing quote.

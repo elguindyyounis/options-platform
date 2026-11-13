@@ -70,6 +70,8 @@ Existing items, in order:
 
 ## Ideas (unscheduled)
 
+* Check the exit path when a held contract has no quote in a snapshot (the alerter reports `held_missing`); confirm it fails closed and shows a warning.
+* Show `net_is_interpretable` beside the GEX number wherever the dashboard displays it.
 * Show the provenance table in the dashboard next to the lane scoreboard.
 
 * Recorder storage: snapshots are about 20 KB of JSON each. At the default 5-minute interval and two
@@ -81,6 +83,8 @@ Existing items, in order:
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* GEX coverage labels (2026-11-13, branch `agent/2026-11-13-challenger`): `signals.gex` reports `coverage_label`, `one_sided_expiries`, `net_is_interpretable`. Display-only.
 
 * Signal provenance registry and `GET /api/research/provenance` (challenge 5). Every listed signal is UNVALIDATED; a test keeps it in step with `signals.VALIDATED_SIGNALS`.
 

@@ -54,7 +54,7 @@ PROVENANCE: tuple[dict[str, Any], ...] = (
      "definition": "Number of contracts passing the unusual-activity test in the sampled chain.", "caveat": "Inherits every limit of volume_vs_open_interest."},
     {"id": "gex_total", "where": "signals.gex", "origin": "STANDARD_MODEL",
      "definition": "Modeled net gamma exposure, assuming customers are long calls and short puts.",
-     "caveat": "That dealer-positioning assumption is contested, and the sampled chain makes the sum partial."},
+     "caveat": "That dealer-positioning assumption is contested, and the sampled chain makes the sum partial. It also carries net_is_interpretable: false when any expiry has only calls or only puts in the sample."},
 )
 
 
