@@ -29,6 +29,17 @@ earlier comparison was not in this repo, so this file starts fresh and records o
   (not yet wired into the engine), stricter in three ways: a later quote must be 12h+ after the
   decision, unresolved cases are counted in every summary, and means are withheld below 30 resolved.
 
+## Read on 2026-11-13 (third pass)
+* `risk.py` (alerter): deterministic gate. Stale check uses the *fetch* time (30 min), and a missing
+  exchange quote time is only a warning, so a delayed yfinance chain can pass. Spread cap is 35% of
+  ask, sizing/caps are percent-of-equity. The platform is stricter on all of these (60s age, 15%
+  spread, verified quote time required by default). Do not copy the alerter's looser gates.
+* `agents.py` (alerter): optional local Ollama overlay can only make a verdict more cautious
+  (VETO, never PASS), endpoint restricted to localhost, headlines marked untrusted. A good pattern
+  if the platform ever adds a model reviewer: tighten-only, local-only.
+* `data_sources.py` (partial): yfinance rows carry `quote_time=None` and `exchange_quote_time_verified=False`,
+  so alerter "freshness" really means "when we downloaded it". Same caveat applies to any platform
+  run on the free Yahoo provider.
+
 ## Never read yet
-`agents.py`, `core.py`, `storage.py`, `server.py`, `data_sources.py`, `agent_skills/`, rest of
-`feedback.py`, `risk.py`.
+`core.py`, `storage.py`, `server.py`, `agent_skills/`, rest of `data_sources.py` and `feedback.py`.

@@ -35,6 +35,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
     and call `mark()` each cycle. Touches engine.py (safety code), so keep it observe-only, fail-closed
     and well tested.
 
+* **Wire `oos.py` into the strategy evaluation report** (item 3) and show `best_of_k_null_prob` next to the lane scoreboard. Display only.
+
 ## Blocked on a human
 
 * **Real broker adapter (IBKR paper).** Owner is implementing `broker/ibkr.py`. Do not start it.

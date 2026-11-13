@@ -47,3 +47,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   expect merge work between them.
 * Verified: full suite 161 passed. Not verified: behaviour against real quotes or the owner's database;
   the 12h gap and 30-case gate are judgement values, not calibrated.
+
+## 2026-11-13: out-of-sample gate (scheduled challenger run)
+
+* Added `src/optplat/oos.py` and `tests/test_oos.py` (8 tests): chronological split of closed trades,
+  test window withheld below 60 total / 20 test trades, malformed rows counted as excluded, plus
+  `best_of_k_null_prob` (chance that at least one of k no-edge lanes looks this good). Pure and
+  research-only; not wired into engine, risk, orders or API. No limits, lane sizes or defaults touched.
+* Alerter still at `9210fd8`. Read risk.py, agents.py, part of data_sources.py (notes in comparison doc).
+  Finding: the alerter's gate is looser than the platform's; nothing to copy there.
+* Based on `agent/2026-11-13-counterfactual-journal` (main lacks the challenger docs). The sibling
+  `sample-evidence` branch has a separate Wilson helper; expect to reconcile when merging.
+* Verified: full suite 169 passed. Not verified: thresholds (60/20/30%) are judgement values; no real
+  data or owner database seen; independence assumption in the best-of-k figure is optimistic.
