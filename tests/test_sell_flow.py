@@ -157,3 +157,16 @@ def test_side_survives_persistence(env):
     manager, _, _ = env
     order = manager.submit(sell())
     assert manager.get(order.id).intent.side is Side.SELL_TO_CLOSE
+
+
+def test_report_breaks_results_down_by_underlying_with_sample_labels(env):
+    manager, broker, _ = env
+    manager.submit(make_intent())
+    broker.set_quote(make_quote(2.90, 3.00))
+    manager.submit(sell(limit=sell_limit_for(2.90)))
+    by = manager.report()["by_underlying"]
+    assert by["by"] == "underlying" and by["slice_count"] == 1
+    (name, sl), = by["slices"].items()
+    assert name == name.upper() and sl["closed_trades"] == 1
+    assert sl["status"] == "INSUFFICIENT_SAMPLE"
+    assert manager.report()["closed"][0]["underlying"] == name

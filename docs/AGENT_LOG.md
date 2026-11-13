@@ -33,3 +33,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   assertion in test_api_engine.py).
 * Not verified: dashboard rendering in a browser (JS change is one textContent string); the 30-trade
   threshold is a labelling choice, not statistically derived. Owner's real database not visible.
+
+## 2026-11-13: challenger run 5, per-underlying breakdown with sample labels
+
+* Alerter unchanged at `1fc88f1`. Read `sizing.py` (see COMPARISON_ALERTER.md): it shrinks size when comparable closed-trade samples are few; the platform does not (CHALLENGES C7, owner decision, not touched).
+* Added `slice_results` (evidence.py) and `by_underlying` in the report; closed rows now carry `underlying`. Display-only: no change to what is traded, risk, auth or defaults. 153 tests pass (3 new).
+* Not verified: behaviour on real data (none available here); per-exit-reason slicing not done because the exit reason is not stored on the order. Based on `agent/2026-11-13-report-evidence-b`, since main lacks the earlier challenger docs; sibling branches touch the same report code and may conflict on merge.

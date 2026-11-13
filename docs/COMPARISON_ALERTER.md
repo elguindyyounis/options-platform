@@ -23,10 +23,17 @@ Reviewed at alerter commit `1fc88f1`. First pass by the daily challenger (2026-1
 `risk.py`, `liquidity.py`, `entry_quality.py`, `strategy_lanes.py`, `paper_engine.py`, parts of
 `feedback.py` and `agents.py`.
 
+## Read in run 5 (2026-11-13): `sizing.py`
+
+* Sizing is an ordinal "evidence index" explicitly labelled NOT a win probability; `calibrated_probability` is None.
+* Fewer than 20 real-source closed comparable trades caps the index at 0.78; fewer than 10 caps the size fraction (0.60, or 0.45 for balanced). Sizing is more conservative when evidence is thin; the platform sizes the same regardless (see CHALLENGES C7, owner decision).
+* yfinance candidates have quantity capped by 10% volume/OI participation and re-checked by the entry-quality gate; drawdown >=10%/20% shrinks size. Goals never raise risk (`goal_affects_size: False`).
+* Sizing returns NO_TRADE unless the skeptic says PASS and the CIO says SUBMIT_FOR_RISK.
+
 ## Still never read
 
 `core.py` (beyond header), `storage.py`, `server.py`, `data_sources.py`, `adaptive.py`,
-`daily_review.py`, `exit_decisions.py`, `gex.py`, `sizing.py`, `unusual_activity.py`, other
+`daily_review.py`, `exit_decisions.py`, `gex.py`, `unusual_activity.py`, other
 `agent_skills`.
 
 ## Where the alerter is stricter or more honest

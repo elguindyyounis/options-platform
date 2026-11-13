@@ -37,6 +37,7 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Store the exit reason (take-profit / stop-loss / time) on the SELL order so the report can slice by it.
 * Volume/OI participation gate and exit-stress table (see docs/CHALLENGES.md C2, C3, C4).
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
@@ -50,3 +51,4 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market
   clock, trading engine + runner, same-underlying concentration limit, re-entry cooldown, dashboard.
+* Per-underlying breakdown of closed trades with per-slice sample labels (agent/2026-11-13-challenger-5).

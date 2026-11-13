@@ -35,3 +35,24 @@ def test_wilson_known_value_and_bad_input():
     lo, hi = wilson_interval(5, 10)
     assert (lo, hi) == (23.7, 76.3)
     assert wilson_interval(0, 0) is None and wilson_interval(3, 2) is None
+
+
+def test_slice_results_labels_each_slice_and_warns_about_slicing():
+    from optplat.evidence import slice_results
+
+    rows = [{"underlying": "SPY", "pnl": 100.0}, {"underlying": "SPY", "pnl": -20.0},
+            {"underlying": "QQQ", "pnl": 50.0}, {"pnl": -10.0}, {"underlying": "IWM", "pnl": float("nan")}]
+    out = slice_results(rows, "underlying")
+    assert set(out["slices"]) == {"SPY", "QQQ", "UNKNOWN"}  # NaN-only slice dropped, missing key kept
+    assert out["slices"]["SPY"]["closed_trades"] == 2 and out["slices"]["SPY"]["realized_pnl"] == 80.0
+    assert all(v["status"] == "INSUFFICIENT_SAMPLE" for v in out["slices"].values())
+    assert out["insufficient_slices"] == 3
+    assert any("slices from 4 trades" in n for n in out["notes"])
+
+
+def test_slice_results_single_slice_has_no_multiplicity_warning_and_empty_ok():
+    from optplat.evidence import slice_results
+
+    assert slice_results([], "underlying")["slices"] == {}
+    one = slice_results([{"underlying": "SPY", "pnl": 1.0}], "underlying")
+    assert not any("slices from" in n for n in one["notes"])

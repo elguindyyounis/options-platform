@@ -52,3 +52,39 @@ def assess_results(pnls: Sequence[float]) -> dict[str, Any]:
         "depends_on_best_trade": depends_on_best,
         "notes": notes,
     }
+
+
+def slice_results(rows: Sequence[dict[str, Any]], key: str) -> dict[str, Any]:
+    """Break closed trades down by ``key`` (e.g. underlying), labelling every slice on its own sample.
+
+    Display-only. Slicing a small sample many ways invites cherry-picking: with 30 trades and
+    10 slices each slice holds ~3, so each carries its own label and the whole breakdown carries
+    a multiple-slices warning. Rows with a missing key land in UNKNOWN rather than being dropped.
+    """
+    groups: dict[str, list[float]] = {}
+    for r in rows:
+        name = str(r.get(key) or "UNKNOWN")
+        pnl = r.get("pnl")
+        if isinstance(pnl, (int, float)) and math.isfinite(pnl):
+            groups.setdefault(name, []).append(float(pnl))
+    slices = {}
+    for name in sorted(groups):
+        vals = groups[name]
+        ev = assess_results(vals)
+        slices[name] = {
+            "closed_trades": len(vals),
+            "realized_pnl": round(sum(vals), 2),
+            "status": ev["status"],
+            "win_rate_interval_pct": ev["win_rate_interval_pct"],
+            "depends_on_best_trade": ev["depends_on_best_trade"],
+        }
+    insufficient = sum(1 for v in slices.values() if v["status"] == "INSUFFICIENT_SAMPLE")
+    notes = []
+    if len(slices) > 1:
+        notes.append(
+            f"{len(slices)} slices from {sum(len(v) for v in groups.values())} trades; "
+            "the best-looking slice is expected to look good by chance."
+        )
+    if insufficient:
+        notes.append(f"{insufficient} of {len(slices)} slices have too few trades to be called a result.")
+    return {"by": key, "slices": slices, "slice_count": len(slices), "insufficient_slices": insufficient, "notes": notes}

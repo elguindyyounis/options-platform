@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from .broker.base import BrokerAdapter, BrokerRejected
-from .evidence import assess_results
+from .evidence import assess_results, slice_results
 from .models import (
     STATUS_CANCELLED,
     STATUS_FILLED,
@@ -239,6 +239,7 @@ class OrderManager:
                     {
                         "order_id": o.id,
                         "contract": o.intent.contract.occ_symbol.strip(),
+                        "underlying": o.intent.contract.underlying.upper(),
                         "quantity": o.filled_qty,
                         "entry": o.cost_basis,
                         "exit": o.avg_fill_price,
@@ -276,6 +277,7 @@ class OrderManager:
             "closed": closed[:50],
             "open": open_rows,
             "evidence": assess_results([c["pnl"] for c in closed]),
+            "by_underlying": slice_results(closed, "underlying"),
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
         }
 
