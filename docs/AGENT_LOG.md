@@ -59,6 +59,15 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Not verified: any of this on the owner's Mac or live Yahoo data; the tracker and rotation need several real trading days to
   show anything; single stocks have not been run through the engine (earnings handling is the events agent's existing behaviour).
 
+## 2026-11-14: folded the open branches into agent/integration (owner present)
+
+* Merged `agent/2026-11-14-gex-display` (PR #4; carries the daily-challenger, tracker, rotation and Desk work) and
+  `agent/2026-11-13-reliability-and-ports` (adds `watch.sh`) into `agent/integration`. Conflicts were docs only; I kept both sides.
+* Not merged: PR #3 (`agent/2026-11-10-quote-recorder`). It is an older copy of the recorder that integration already has
+  in a newer form, and it conflicts in `engine.py`, `store.py` and tests. Owner may close it.
+* Nothing was merged into `main`, per the earlier owner decision and CLAUDE.md rule 6.
+* Verified: 560 tests pass. Not verified: `watch.sh` on the owner's Mac.
+
 ## 2026-11-14: recorded the owner's standing direction (owner present, docs only)
 
 * Added "Standing direction: research first, broker last" and a broker-readiness checklist to `docs/BACKLOG.md`.
