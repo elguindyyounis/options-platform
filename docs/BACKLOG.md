@@ -142,3 +142,4 @@ Existing items, in order:
 * Open-P&L completeness (2026-11-14): `report()` counts unobservable and wide-spread open marks and says when open P&L is incomplete. Open: show it on the dashboard; owner to decide on pausing entries while held marks are unreliable.
 * Open-interest window honesty (2026-11-13): follow-ups and flow-lane trades carry `oi_sessions` and `oi_window_clean`. Open: owner to decide whether the flow lane should require a clean one-session window.
 * Signal provenance page with a test that keeps it in step with `SIGNAL_NAMES`, `VALIDATED_SIGNALS` and the lane list (2026-11-14, branch `agent/2026-11-14-challenger-b`).
+* Options-lane dashboard shows stressed-exit P&L beside bid-exit P&L and says how many open trades have no usable bid (2026-11-14, challenges 4 and 9). Display only. Still open: share-lane equivalents.

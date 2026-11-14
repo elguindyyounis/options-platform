@@ -218,6 +218,10 @@ def lane_report(store: Store, lane: str, fictional: bool, now: datetime, *, rule
                     "realized_pnl": round(sum(t["pnl"] for t in done), 2),
                     "avg_return_pct": round(sum(rets) / len(rets), 2) if rets else None,
                     "unrealized_pnl": round(sum(t["unrealized_pnl"] or 0 for t in trades if t["status"] == "OPEN"), 2),
+                    # unrealized_pnl above counts an open trade with no usable bid as 0, so on its own it can look more
+                    # complete than it is. These two say how many open trades it silently left out (display only).
+                    "unobservable_open": sum(1 for t in trades if t["status"] == "OPEN" and t["unrealized_pnl"] is None),
+                    "unrealized_complete": all(t["unrealized_pnl"] is not None for t in trades if t["status"] == "OPEN"),
                     "min_trades_for_evidence": 30,
                     # Same closed trades re-priced with a pessimistic exit (see liquidity.stress_exit). Only trades that stored
                     # a stressed figure count, and the bid-exit total over those same trades is shown beside it, so the two

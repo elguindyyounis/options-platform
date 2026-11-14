@@ -378,6 +378,12 @@
     return el("span", exitLabel(t), "tag " + (t.pnl > 0 ? "gain" : "loss"));
   }
 
+  // Closed P&L at the bid, with the same trades re-priced at a pessimistic exit beside it. A what-if, not a price anyone got.
+  function stressNote(sm) {
+    if (sm.stressed_realized_pnl === null || sm.stressed_realized_pnl === undefined) return "simulated, at the bid; no stressed exit stored yet";
+    return "simulated, at the bid. Stressed exit on the same " + sm.stressed_trades + " trade" + (sm.stressed_trades === 1 ? "" : "s") + ": " + sgn(sm.stressed_realized_pnl) + " (bid " + sgn(sm.bid_realized_pnl_same_trades) + ")";
+  }
+
   function renderTrades() {
     const data = S.trades;
     if (!data) return;
@@ -854,8 +860,8 @@
       fig(String(sm.total), "Simulated trades", sm.open + " open, " + sm.closed + " closed"),
       fig(sm.win_rate_pct === null ? "n/a" : sm.win_rate_pct + "%", "Winners", sm.closed ? sm.wins + " of " + sm.closed + " closed" : "no closed trades"),
       fig(sm.avg_return_pct === null ? "n/a" : arrow(sm.avg_return_pct) + pct(sm.avg_return_pct), "Average per trade", "of the premium paid, after fees", tone(sm.avg_return_pct)),
-      fig(arrow(sm.realized_pnl) + sgn(sm.realized_pnl), "Realized", "simulated", tone(sm.realized_pnl)),
-      fig(arrow(sm.unrealized_pnl) + sgn(sm.unrealized_pnl), "Open now", "at the last bid", tone(sm.unrealized_pnl)),
+      fig(arrow(sm.realized_pnl) + sgn(sm.realized_pnl), "Realized", stressNote(sm), tone(sm.realized_pnl)),
+      fig(arrow(sm.unrealized_pnl) + sgn(sm.unrealized_pnl), "Open now", sm.unobservable_open ? "at the last bid; " + sm.unobservable_open + " open with no usable bid are left out" : "at the last bid", tone(sm.unrealized_pnl)),
     ]);
     const host = $("op-trades");
     if (!lane.trades.length) empty(host, "No simulated trades yet", d.enabled ? "A trade needs this lane's signal while the market is open." : "Switch the options lanes on under Controls.");

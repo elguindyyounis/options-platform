@@ -115,3 +115,13 @@ Code only, tests not run. The alerter's exit manager is 72 lines.
 * `position-sizing` and `skeptic-red-team` skill texts require a forward held-out comparison against the unchanged prior version
   before saying anything is better. The platform's provenance page (`SIGNAL_PROVENANCE.md`) adopts that standard.
 * Still unread: the HTTP handlers and `scheduled_scan_loop` in `server.py`, and the other five skill files.
+
+## Added 2026-11-14 (alerter `1fc88f1`, third run): `technical-options` and `entry-strategist` skill files
+
+Text only. Both are the same template as the two read earlier: same five-step review, same safety paragraph (no broker orders, a skill cannot
+override the Skeptic veto, CIO rejection, quote validation or paper caps, and a forward held-out comparison is needed before calling a
+version better). Only the one-line role goal differs. The alerter's `entry-strategist` asks for fresh quote checks and no market-order
+assumptions; the platform already prices entries at the ask and exits at the bid.
+
+* A weakness found on the platform side: lane summaries summed `unrealized_pnl` with an unmarked open trade counted as 0. Fixed as a count.
+* Still unread: the HTTP handlers and `scheduled_scan_loop` in `server.py`, and the `market-sentiment`, `news-flow` and `portfolio-cio` skill files.

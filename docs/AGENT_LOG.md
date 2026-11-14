@@ -507,3 +507,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   under `src/`, no lane, limit, default or auth changed.
 * Verified: `python -m pytest -q` all passing (518). Not verified: alerter tests, live data, the cited papers (copied from the
   alerter). Branch builds on `agent/2026-11-14-daily-challenger`; no PR opened (not requested in docs or CLAUDE.md).
+
+## 2026-11-14 (challenger, third run): stressed P&L and incomplete open P&L on the dashboard
+
+* Alerter unchanged since `1fc88f1`. Read two more skill files (templates; see COMPARISON_ALERTER.md).
+* Options-lane dashboard now shows stressed-exit realized P&L beside the bid-exit total over the same trades. Lane summaries gain
+  `unobservable_open` and `unrealized_complete`: `unrealized_pnl` counted an open trade with no usable bid as 0, so it could look
+  complete when it was not. Display and counts only: no lane rule, limit, budget, default or auth changed.
+* Verified: `python -m pytest -q` 521 passed (3 new), `node --check` on app.js. Not verified: rendering in a browser, share lanes,
+  alerter tests, live data. Base: `main` is stale (no challenge docs), so this builds on `agent/2026-11-14-challenger-b`; the
+  counterfactual-journal branch (challenge 1) is still not in that line. No PR opened (not requested).

@@ -79,3 +79,30 @@ def test_lane_stressed_pnl_is_none_when_no_trade_has_a_usable_figure():
 def test_post_mortem_stores_the_stressed_dollar_result():
     pm = post_mortem(trade(), 2.0, "target", closed_at(2), {"fees_close": 0.0})
     assert isinstance(pm["stress_net"], float) and pm["stress_net"] <= (2.0 - trade()["entry_price"]) * trade()["quantity"] * 100
+
+
+def test_lane_summary_counts_open_trades_with_no_usable_bid_instead_of_silently_zeroing_them():
+    import json
+    from optplat.shortterm import lane_report
+    from optplat.store import Store
+    store = Store(":memory:")
+    t0 = datetime(2026, 1, 5, 15, tzinfo=timezone.utc)
+    a = store.lane_open("x-lane", "SPY", t0, 1.0, 2, True, {"multiplier": 100, "fees_open": 0.0})
+    store.lane_open("x-lane", "SPY", t0, 1.0, 2, True, {"multiplier": 100, "fees_open": 0.0})  # never marked
+    store.set_state(f"lane_mark:{a}", json.dumps({"bid": 1.5, "ask": 1.6, "at": t0.isoformat()}))
+    s = lane_report(store, "x-lane", True, t0, rules=[], limitations=[], symbols=["SPY"], exit_text={})["summary"]
+    assert s["unrealized_pnl"] == 100.0  # only the marked trade counts
+    assert s["unobservable_open"] == 1 and s["unrealized_complete"] is False
+
+
+def test_lane_summary_is_complete_with_no_open_trades():
+    from optplat.store import Store
+    s = _lane_with(Store(":memory:"), [(1.0, 1.5, None)])["summary"]
+    assert s["unobservable_open"] == 0 and s["unrealized_complete"] is True
+
+
+def test_dashboard_shows_the_stressed_exit_and_the_left_out_open_trades():
+    import pathlib
+    js = (pathlib.Path(__file__).parents[1] / "src/optplat/static/app.js").read_text()
+    assert "stressed_realized_pnl" in js and "bid_realized_pnl_same_trades" in js and "unobservable_open" in js
+    assert "innerHTML" not in js
