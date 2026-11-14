@@ -23,3 +23,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: daily challenger run (agent, first run)
+
+* Alerter: reviewed `feedback.py`, `core.py`, `liquidity.py`, `entry_quality.py`, `paper_engine.py`,
+  `risk.py`, `exit_decisions.py`, `storage.py`, `data_sources.py` (head). No earlier baseline existed, so
+  there was no diff to read; baseline commit `1fc88f1` recorded. Created `docs/COMPARISON_ALERTER.md`
+  and `docs/CHALLENGES.md`.
+* Changed: `src/optplat/evidence.py` (new, pure), `OrderManager.report()` gains an additive `evidence`
+  key. Existing keys unchanged. No risk, auth, broker, holiday or lane behaviour touched.
+* Verified: `python -m pytest -q` 150 passed (144 baseline + 6 new; one existing API test gained an
+  assertion, none weakened).
+* Not verified: dashboard rendering of the new field (not wired in); real data of any kind; the 30-trade
+  threshold is a display convention, not a statistical power calculation; no PR opened (not requested).

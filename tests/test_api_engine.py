@@ -88,6 +88,7 @@ def test_buy_then_sell_through_the_api_updates_the_report(client):
     assert sell["state"] == "FILLED" and sell["cost_basis"] == 2.01
     report = client.get("/api/report", headers=H).json()
     assert report["closed_trades"] == 1 and report["open"] == []
+    assert report["evidence"]["verdict"] == "INSUFFICIENT_SAMPLE"  # one trade never reads as a result
 
 
 def test_selling_without_a_position_is_rejected_not_errored(client):

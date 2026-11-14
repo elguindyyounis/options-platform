@@ -37,12 +37,15 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Shadow-outcome journal for rejected/missed setups, modelled on the alerter's `feedback.py` (after item 1).
+* Show the `evidence` verdict in the dashboard next to win rate (use `textContent`).
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
 
+* Evidence labels on `/api/report` (sample verdict, Wilson interval, truncation flag). Branch `agent/2026-11-14-evidence-labels`. Display only.
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market

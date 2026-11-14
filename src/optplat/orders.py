@@ -26,6 +26,7 @@ from .models import (
     Side,
     utcnow,
 )
+from .evidence import evidence_summary
 from .risk import RiskPolicy, evaluate
 from .store import Store
 
@@ -64,6 +65,9 @@ class LiveTradingDisabled(RuntimeError):
 
 class InvalidTransition(RuntimeError):
     pass
+
+
+_REPORT_ORDER_LIMIT = 1000
 
 
 class OrderManager:
@@ -226,7 +230,8 @@ class OrderManager:
     def report(self) -> dict[str, Any]:
         """Realized P&L from closed paper trades plus bid-marked open positions."""
         closed = []
-        for o in self.store.list_orders(limit=1000):
+        history = self.store.list_orders(limit=_REPORT_ORDER_LIMIT)
+        for o in history:
             if (
                 o.intent.side is Side.SELL_TO_CLOSE
                 and o.state is S.FILLED
@@ -273,6 +278,9 @@ class OrderManager:
             "realized_pnl": round(sum(c["pnl"] for c in closed), 2),
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
             "closed": closed[:50],
+            "evidence": evidence_summary(
+                [c["pnl"] for c in closed], truncated=len(history) >= _REPORT_ORDER_LIMIT
+            ),
             "open": open_rows,
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
         }
