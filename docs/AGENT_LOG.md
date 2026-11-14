@@ -5,6 +5,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-14: recorded the owner's standing direction (owner present, docs only)
+
+* Added "Standing direction: research first, broker last" and a broker-readiness checklist to `docs/BACKLOG.md`.
+  Docs only: no code, risk policy or tests changed. Not verified: nothing to verify beyond the text.
+
 ## 2026-11-13: frozen baseline lane (challenge 3, scheduled run)
 
 * Added `FROZEN_BASELINE` in `optionlanes.py`: a lane written out in full (not derived from `SHORT_BASE`) so tuning

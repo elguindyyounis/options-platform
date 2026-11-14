@@ -19,6 +19,33 @@ and tests better approaches, with entries and exits automated in paper mode only
 * Free Yahoo data is delayed, unofficial, and updates open interest once a day. True unusual-activity
   detection needs licensed trade-level data (blocked on the owner). GEX is model-dependent.
 
+## Standing direction: research first, broker last (owner, 2026-11-14)
+
+The end goal is to place real trades through a broker one day, once entries and exits have been understood and
+optimised well. Until then this is pure research on simulated and paper trades. Each run follows this loop, and
+every run starts from what the previous one learned:
+
+1. Form a hypothesis from what the data and post-mortems show. Write its pass criteria down **before** results exist.
+2. Implement it as a research-only lane or challenger beside the frozen baseline (`frozen-baseline-options`).
+3. Collect the evidence. Judge it only by the written criteria (minimum trades, out-of-sample split, stressed exits).
+4. Post-mortem: what worked, what did not, and which assumption failed. Log it in `docs/AGENT_LOG.md`.
+5. Repeat.
+
+Agents never decide that the platform is ready for a broker. That is the owner's call, and it never loosens a risk
+limit. Agents report evidence plainly, including when it is too thin to say anything.
+
+**Broker-readiness checklist (the owner judges; an agent only fills in the evidence):**
+
+* Entry quality: results by lane against the frozen baseline, above the 30-trade minimum, out-of-sample.
+* Exit quality: results by exit reason, with stressed (size-aware) exits shown beside bid exits.
+* Not a one-trade story: results with the best trade removed, and by underlying and by day.
+* Real data only: nothing on synthetic data counts. Quotes need verified timestamps.
+* Costs: fees and slippage included, and no lane judged on its best trade.
+* Operations: restart recovery, the runner staying healthy, and the kill switch tested.
+* Owner decisions still open: risk limits, position sizing caps, promotion, and the broker adapter.
+
+Own data the owner provides stays out of commits and logs, and results are labelled by source.
+
 ## Next up
 
 0. **Challenger agent's list.** The open challenges (counterfactual journal, display-only GEX, stressed lane P&L,
