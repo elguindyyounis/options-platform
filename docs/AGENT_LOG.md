@@ -559,3 +559,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Logged challenge 9 (freshness and spot-agreement flags) and an alerter note on its holdout study discipline.
 * Verified: full suite, 566 passed (1 new test). Not verified: alerter tests, real chains, dashboard rendering of the flag.
   GEX remains UNVALIDATED; nothing here is evidence of an edge. No PR opened (owner reviews branches).
+
+## 2026-11-14: GEX freshness and spot-agreement flags (challenge 9, scheduled run on agent/2026-11-14-challenger-n)
+
+* Based on `origin/agent/2026-11-14-challenger-m` (main lacks the challenge docs). Alerter unchanged at `48ccf71`.
+* `signals.gex` gained `age_minutes`, `fresh` (<=90 min, missing or future timestamp is not fresh), `parity_spot_gap_pct`
+  (put-call parity at the strike nearest spot, nearest expiry with a two-sided pair) and `spot_agrees` (<=2%; unknown is false).
+  Figures, `gex_total` and all gates are unchanged; nothing consumes the flags. Thresholds are the alerter's, unvalidated.
+* Verified: full suite, 569 passed (3 new). Not verified: alerter tests, real chains, dashboard display, that parity gaps behave
+  on real Yahoo data (rates, dividends and wide spreads add error). GEX remains UNVALIDATED; no edge is claimed. No PR opened.

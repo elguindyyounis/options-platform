@@ -105,5 +105,8 @@ These are challenges raised by reading the alerter. None is proven.
   GEX is used only if the scan is under 90 minutes old, covers the near expiries, has usable call AND put gamma, and agrees with
   spot within 2%. The platform has no spot-disagreement or freshness gate on its GEX display; logged as challenge 9 (owner decision
   on thresholds is not needed for a display flag, but not done this run).
+* **Run challenger-n (alerter still `48ccf71`):** the alerter checks GEX spot against an independent reference spot; the platform
+  snapshot has only its own spot, so the display flag cross-checks it with put-call parity instead. This is weaker than the alerter's
+  check and says so. Still not read: `server.py`, `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, its tests.
 * **Read this run:** the diffs of `gex.py`, `intraday_strategy.py`, `intraday_reel_study.study`, and `GEX_CONFLUENCE_POLICY.md`.
   Not read in depth: `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, `server.py`, the alerter's tests (not run).

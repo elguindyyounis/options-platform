@@ -236,3 +236,32 @@ def test_gex_flags_a_one_sided_chain_because_its_net_is_not_a_net():
     assert empty["two_sided"] is False and empty["sides_used"] == []
     # existing figures are untouched
     assert calls_only["total_usd_per_1pct"] > 0
+
+
+# ------------------------------------------------------------ GEX freshness and spot-agreement flags (display only)
+def test_gex_flags_a_stale_snapshot_and_missing_timestamp_is_not_fresh():
+    s = snap(cr(160, Right.CALL), cr(160, Right.PUT))
+    fresh = gex(replace(s, as_of=NOW - timedelta(minutes=30)), NOW)
+    stale = gex(replace(s, as_of=NOW - timedelta(minutes=91)), NOW)
+    future = gex(replace(s, as_of=NOW + timedelta(minutes=30)), NOW)
+    assert fresh["fresh"] is True and fresh["age_minutes"] == 30.0
+    assert stale["fresh"] is False and future["fresh"] is False
+    assert gex(replace(s, as_of=None), NOW)["fresh"] is False
+
+
+def test_gex_parity_cross_check_agrees_or_flags_a_mismatched_spot():
+    # call 5.0 mid, put 5.0 mid at strike 160: parity implies spot 160
+    rows = (cr(160, Right.CALL), cr(160, Right.PUT))
+    ok = gex(snap(*rows, underlying=160.0), NOW)
+    assert ok["parity_spot_gap_pct"] == 0.0 and ok["spot_agrees"] is True
+    off = gex(snap(*rows, underlying=170.0), NOW)
+    assert off["parity_spot_gap_pct"] == pytest.approx(5.88, abs=0.01) and off["spot_agrees"] is False
+
+
+def test_gex_parity_check_is_unknown_without_a_two_sided_pair_and_never_changes_figures():
+    one = gex(snap(cr(160, Right.CALL), cr(165, Right.PUT), underlying=160.0), NOW)
+    assert one["parity_spot_gap_pct"] is None and one["spot_agrees"] is False
+    bad_quote = gex(snap(cr(160, Right.CALL), cr(160, Right.PUT, bid=0.0), underlying=160.0), NOW)
+    assert bad_quote["parity_spot_gap_pct"] is None
+    base = gex(snap(cr(160, Right.CALL), cr(150, Right.PUT)), NOW)
+    assert base["total_usd_per_1pct"] == gex(snap(cr(160, Right.CALL), cr(150, Right.PUT)), NOW)["total_usd_per_1pct"]

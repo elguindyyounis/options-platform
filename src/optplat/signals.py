@@ -117,6 +117,30 @@ MAX_GEX_LOG_MONEYNESS = 0.30   # strikes further than ~30% from spot add almost 
 ZERO_GAMMA_GRID = [round(0.85 + 0.01 * i, 2) for i in range(31)]  # spot revaluation, 85% to 115% of spot
 
 
+GEX_MAX_AGE_MINUTES = 90      # alerter's freshness bar; a display flag only, nothing here gates on it
+GEX_MAX_SPOT_GAP_PCT = 2.0    # alerter's spot-agreement bar, applied here to a put-call-parity cross-check
+
+
+def parity_spot_gap_pct(snap: MarketSnapshot) -> float | None:
+    """Cross-check the snapshot's spot against put-call parity (strike + call mid - put mid) at the strike nearest spot,
+    nearest expiry that has both sides with two-sided quotes. Ignores rates and dividends, so it is a rough sanity check
+    on a mismatched or stale spot, not a measurement. None when no usable pair exists."""
+    spot = snap.underlying
+    if spot <= 0:
+        return None
+    mids: dict[tuple, dict] = {}
+    for r in snap.rows:
+        if r.bid is None or r.ask is None or r.bid <= 0 or r.ask < r.bid:
+            continue
+        mids.setdefault((r.contract.expiry, r.contract.strike), {})[r.contract.right] = (r.bid + r.ask) / 2
+    pairs = [(k, v) for k, v in mids.items() if Right.CALL in v and Right.PUT in v]
+    if not pairs:
+        return None
+    (expiry, strike), v = min(pairs, key=lambda kv: (kv[0][0], abs(kv[0][1] - spot), kv[0][1]))
+    implied = strike + v[Right.CALL] - v[Right.PUT]
+    return round(abs(implied - spot) / spot * 100, 2)
+
+
 def gex(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
     """Dollar gamma exposure per 1% move in the underlying, summed over the sampled chain. Partial by construction.
 
@@ -196,12 +220,22 @@ def gex(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
         # publish net GEX in that case; here the numbers stay (existing consumers) but are flagged as unreliable.
         "two_sided": sides_used == {Right.CALL, Right.PUT},
         "sides_used": sorted(r.value for r in sides_used),
+        **_gex_trust(snap, now),
         "rows_used": used, "rows_skipped": skipped, "skip_reasons": reasons, "partial_chain": True,
         "assumptions": ["Customers are long calls and short puts, so dealers hold the opposite (contested).",
                         "The two net figures are exact mirrors: the sign comes from the assumption, not from data.",
                         "Open interest is the previous day's; IV is Yahoo's; the chain is a sample; no risk-free rate.",
                         "zero_gamma_spot revalues the sampled chain at 85-115% of spot: a model estimate, not a boundary."],
     }
+
+
+def _gex_trust(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
+    """Display-only freshness and spot-agreement flags (alerter thresholds, unvalidated). Missing data means not fresh."""
+    age = (now - snap.as_of).total_seconds() / 60 if snap.as_of else None
+    fresh = age is not None and -1 <= age <= GEX_MAX_AGE_MINUTES
+    gap = parity_spot_gap_pct(snap)
+    return {"age_minutes": round(age, 1) if age is not None else None, "fresh": fresh,
+            "parity_spot_gap_pct": gap, "spot_agrees": gap is not None and gap <= GEX_MAX_SPOT_GAP_PCT}
 
 
 def compute_signals(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
