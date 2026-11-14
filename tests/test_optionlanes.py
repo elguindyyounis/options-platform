@@ -546,3 +546,30 @@ def test_frozen_baseline_is_pinned_and_independent():
     assert (f.kind, f.budget_usd, f.max_open, f.stack, f.max_per_name) == ("short", 1000, 4, "none", 1)
     assert f.experimental is False and f.budget_usd <= ol.SHORT_AGGR.budget_usd
     assert f.max_per_sector < f.max_open and b.lane != f.lane
+
+
+# ------------------------------------------------------------ stressed lane P&L (shown beside, never instead of, the bid exit)
+def test_lane_summary_shows_realized_pnl_with_the_stressed_exit_beside_the_bid_exit():
+    from optplat.shortterm import lane_report
+    store = Store(":memory:")
+    pay = {"multiplier": 100, "fees_open": 1.3, "contract": "AAA C"}
+    a = store.lane_open("x", "AAA", NOW, 5.0, 2, True, dict(pay))
+    store.lane_close(a, NOW, 6.0, "target", {"fees_close": 1.3, "postmortem": {"stress_concession_pct": 10.0}})
+    b = store.lane_open("x", "BBB", NOW, 5.0, 1, True, dict(pay))
+    store.lane_close(b, NOW, 4.0, "stop", {"fees_close": 1.3})  # no post-mortem: unknown, not zero concession
+    sm = lane_report(store, "x", True, NOW, rules=[], limitations=[], symbols=[], exit_text={})["summary"]
+    # stressed price 6.0 * 0.9 = 5.4 -> (5.4 - 5.0) * 2 * 100 - 2.6
+    assert sm["stress_realized_pnl"] == pytest.approx(77.4) and sm["stress_trades"] == 1
+    assert sm["stress_basis_realized_pnl"] == pytest.approx(197.4) and sm["stress_realized_pnl"] < sm["stress_basis_realized_pnl"]
+    assert sm["realized_pnl"] == pytest.approx(197.4 + (4.0 - 5.0) * 100 - 2.6)  # headline figure itself is unchanged
+    t = {x["symbol"]: x for x in lane_report(store, "x", True, NOW, rules=[], limitations=[], symbols=[], exit_text={})["trades"]}
+    assert t["AAA"]["stress_pnl"] == pytest.approx(77.4) and t["BBB"]["stress_pnl"] is None
+
+
+def test_lane_without_postmortems_has_no_stress_figure_and_share_lanes_are_untouched():
+    from optplat.shortterm import lane_report
+    store = Store(":memory:")
+    tid = store.lane_open("s", "AAA", NOW, 100.0, 10, True, {})
+    store.lane_close(tid, NOW, 101.0, "target", {})
+    sm = lane_report(store, "s", True, NOW, rules=[], limitations=[], symbols=[], exit_text={})["summary"]
+    assert sm["stress_realized_pnl"] is None and sm["stress_trades"] == 0 and sm["realized_pnl"] == 10.0

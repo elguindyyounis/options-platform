@@ -105,6 +105,7 @@ Existing items, in order:
 
 ## Done
 
+* Lane summaries show realized P&L at the stressed exit beside the bid-exit figure (challenge 4, 2026-11-14, `shortterm._stress_pnl`). Display only.
 * Open-position marks require a fresh (30 min) and tight (35%) quote, as in the alerter (2026-11-14, `marks.py`). New idea: alerter pauses entries when a held option's quote is stale; needs an owner decision (changes trading).
 * Frozen baseline lane (challenge 3): `frozen-baseline-options`, a literal copy of the first short-term rule, settings pinned by `FROZEN_FINGERPRINT` and a test. Simulated only.
 * 10x challenge account (owner request 2026-11-13): `challenge.py`, restartable, critic on every trade, attempt history, dashboard panel.

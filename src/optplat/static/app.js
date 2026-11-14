@@ -843,6 +843,7 @@
       { label: "Winners", right: true, get: (r) => r.s.win_rate_pct === null ? "n/a" : r.s.win_rate_pct + "%" },
       { label: "Average per trade", right: true, get: (r) => r.s.avg_return_pct === null ? "n/a" : span(arrow(r.s.avg_return_pct) + pct(r.s.avg_return_pct), tone(r.s.avg_return_pct)) },
       { label: "Realized", right: true, get: (r) => span(arrow(r.s.realized_pnl) + sgn(r.s.realized_pnl), tone(r.s.realized_pnl)) },
+      { label: "Realized if sold harder", right: true, get: (r) => r.s.stress_realized_pnl == null ? "n/a" : span(arrow(r.s.stress_realized_pnl) + sgn(r.s.stress_realized_pnl) + (r.s.stress_trades < r.s.closed ? " (" + r.s.stress_trades + " of " + r.s.closed + " trades)" : ""), tone(r.s.stress_realized_pnl)) },
       { label: "Open now", right: true, get: (r) => r.s.unrealized_pnl === undefined ? "n/a" : span(arrow(r.s.unrealized_pnl) + sgn(r.s.unrealized_pnl), tone(r.s.unrealized_pnl)) },
     ], rows, "No lanes");
     chips($("op-tabs"), lanes.map((l) => ({ id: l.lane, label: l.label })), S.optLane, (id) => { S.optLane = id; renderOptions(); }, "tab");

@@ -485,3 +485,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Alerter unchanged since `1fc88f1`. Read `research_foundations.py` and `data_sources.py`.
 * Challenge: platform labels (`likely_side`, `position_read`, `flow_lean`, cause tags) had no written statement of status or caveat. Added `docs/SIGNALS.md` and `tests/test_signal_provenance.py` (4 tests) so the doc cannot drift from `SIGNAL_NAMES`, `VALIDATED_SIGNALS` or `postmortem.CAUSES`. Docs and test only; no behaviour, limit or default changed.
 * Verified: full test suite passes. Not verified: alerter tests, live data, whether other unmerged branches already cover related items.
+
+## 2026-11-14: challenger-k, stressed realized P&L beside the bid-exit figure
+
+* Branch cut from `agent/2026-11-14-challenger-j`. Alerter unchanged since `1fc88f1`; read `server.py` autopilot and readiness (see COMPARISON_ALERTER.md).
+* Challenge 4: lane headline P&L sold at the bid with no size allowance. `lane_report` now adds `stress_pnl` per closed trade and `stress_realized_pnl`, `stress_trades`, `stress_basis_realized_pnl` to the summary, using the post-mortem's stored concession; trades without a post-mortem are excluded and counted. Dashboard lane table gains a "Realized if sold harder" column. `realized_pnl` is unchanged. Display only; no limit, lane size or default touched.
+* Verified: `python -m pytest -q` passes (512 tests, 2 new). Not verified: alerter tests, live data, the dashboard column in a browser.

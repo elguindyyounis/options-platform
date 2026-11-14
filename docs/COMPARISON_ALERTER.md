@@ -80,3 +80,11 @@ These are challenges raised by reading the alerter. None is proven.
 * Alerter keeps a machine-readable signal list with origin, validation status and caveat, and says its scoring weights are developer hypotheses. The platform now has the same as `SIGNALS.md`, checked against the code by a test. The platform's list is shorter and every entry is UNVALIDATED.
 * `data_sources.option_rows` drops quotes with bid above ask, nulls implied volatility outside 0 to 10 instead of guessing, and tags each row `is_demo`, `exchange_quote_time_verified: False` and `trade_level_flow: False`. The platform's data-quality gate covers similar ground; the per-row `is_demo` flag in stored data is still open (see challenge list on other branches).
 * Alerter commits since `1fc88f1`: none.
+
+## Update 2026-11-14 (d): `server.py` autopilot and readiness
+
+* Alerter refuses all new automatic entries while any held option has a stale, missing, invalid or over-35%-wide mark, while exits or held-position monitoring are off, while the kill switch is on, and outside the options session. The platform has no portfolio-wide pause on bad held marks; it would change trading behaviour, so it is noted for the owner, not changed.
+* Alerter blocks re-entry into a contract for 3 days after a simulated stop; the platform has its own re-entry cooldown.
+* Alerter's readiness report states that quote freshness is download time, not exchange time, and that Mac uptime is not monitored. The platform's `require_verified_quote_time` covers the first point.
+* Not read: `server.py` POST handlers, `scheduled_scan_loop`, remaining agent skills.
+* Challenge 4 closed from the platform side: lane summaries now show realized P&L at the bid exit and at the stressed exit side by side.
