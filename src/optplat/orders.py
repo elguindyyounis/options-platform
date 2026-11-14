@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from .broker.base import BrokerAdapter, BrokerRejected
+from .stats import sample_assessment
 from .models import (
     STATUS_CANCELLED,
     STATUS_FILLED,
@@ -273,6 +274,7 @@ class OrderManager:
             "realized_pnl": round(sum(c["pnl"] for c in closed), 2),
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
             "closed": closed[:50],
+            "sample": sample_assessment([c["pnl"] for c in closed]),
             "open": open_rows,
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
         }

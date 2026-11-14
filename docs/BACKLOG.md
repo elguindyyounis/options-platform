@@ -37,11 +37,18 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* From the alerter comparison: size-vs-volume/OI flag on sim fills; exit-friction stress scenarios
+  (see `docs/CHALLENGES.md` #1, #2).
+
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-14 (branch `agent/2026-11-14-sample-honesty`): report now carries a `sample` block
+  (INSUFFICIENT_SAMPLE under 30 closed trades, Wilson 95% win-rate range, P&L without best trade);
+  dashboard shows them. Display-only.
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.

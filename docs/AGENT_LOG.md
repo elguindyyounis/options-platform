@@ -23,3 +23,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: small-sample honesty in the report (scheduled challenger run)
+
+* Compared with options-alerter (liquidity.py, agents.py, part of core.py); notes in
+  `docs/COMPARISON_ALERTER.md`, open challenges in `docs/CHALLENGES.md`.
+* Changed: new `stats.py`; `/api/report` gains a `sample` block (status, Wilson 95% win-rate range,
+  P&L without best trade); dashboard text shows it. Existing fields unchanged. No risk, sizing, auth
+  or broker code touched.
+* Verified: `python -m pytest -q`, 147 passed (144 baseline + 3 new stats tests, 1 added assertion).
+* Not verified: the dashboard text in a browser; anything against real or live data. The 30-trade
+  threshold is a display label only, not evidence that 30 trades suffices.
