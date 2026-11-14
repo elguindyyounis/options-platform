@@ -35,13 +35,20 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * **2027 NYSE holiday table.** Needs an official source; the clock fails closed for unknown years.
 * **Risk-limit tuning, strategy promotion.** Owner decisions, driven by evidence from items 1-3.
 
+* **Participation cap and basket cap as risk checks.** Needs a decision: see docs/CHALLENGES.md #1 and #3.
+
 ## Ideas (unscheduled)
+
+* Show the `liquidity` evidence in the dashboard (textContent only) and in the order audit view.
 
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Liquidity evidence (display only): `liquidity.py`, attached to each entry in the cycle report
+  (branch `agent/2026-11-14-liquidity-evidence`, pending owner review).
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.

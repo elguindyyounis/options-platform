@@ -23,3 +23,15 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: daily challenger, liquidity evidence
+
+* Baseline: 144 tests passed. First challenger run, so `docs/COMPARISON_ALERTER.md` and
+  `docs/CHALLENGES.md` are new (alerter reviewed at `1fc88f1`).
+* Added `src/optplat/liquidity.py` (idea from the alerter's `liquidity.py`): order size as % of reported
+  volume/OI, flags, and base/thin/stressed exit scenarios. Engine adds it as `liquidity` on each entry in
+  the cycle report. It is display only: it does not allow, block, or resize anything. Unknown volume/OI
+  is flagged and treated as maximum participation in the stress case.
+* Verified: 150 tests pass (6 new). Not verified: usefulness on real data, dashboard display (not
+  wired), behaviour with the real broker. The stress coefficients are the alerter's heuristics, not fitted
+  to any fills. Enforcing a participation cap is a risk-policy decision left to the owner.

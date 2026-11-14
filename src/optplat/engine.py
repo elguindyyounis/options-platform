@@ -18,6 +18,7 @@ from typing import Any, Callable, Optional
 
 from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
+from .liquidity import liquidity_evidence
 from .market_clock import session_status
 from .marketdata import MarketDataProvider, MarketSnapshot
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
@@ -399,6 +400,16 @@ class TradingEngine:
                 "limit_price": proposal.limit_price,
                 "rationale": proposal.rationale,
             }
+            chain_row = next((r for r in snap.rows if r.contract == proposal.contract), None)
+            if chain_row is not None:  # display-only evidence; never affects whether the order is allowed
+                item["liquidity"] = liquidity_evidence(
+                    bid=chain_row.bid,
+                    ask=chain_row.ask,
+                    volume=chain_row.volume,
+                    open_interest=chain_row.open_interest,
+                    quantity=quantity,
+                    slippage_pct=getattr(self.manager.broker, "slippage_pct", 0.5),
+                )
             try:
                 order = self.manager.submit(intent)
             except ValueError as exc:
