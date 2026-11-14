@@ -58,6 +58,10 @@ _BROKER_STATUS_TO_STATE = {
 }
 
 
+# Display threshold only (the alerter flags >35%); it gates nothing here.
+WIDE_MARK_SPREAD_PCT = 35.0
+
+
 class LiveTradingDisabled(RuntimeError):
     """Raised if an adapter that is not in PAPER mode is handed to the order manager."""
 
@@ -259,14 +263,17 @@ class OrderManager:
             try:
                 q = self.broker.get_quote(p.contract)
                 if q.is_valid() and q.bid > 0:
+                    wide = q.spread_pct_of_ask() > WIDE_MARK_SPREAD_PCT
                     row.update(
                         mark=q.bid,
                         unrealized_pnl=round((q.bid - p.avg_cost) * p.quantity * p.contract.multiplier, 2),
-                        mark_quality="BID",
+                        mark_quality="WIDE_SPREAD_BID" if wide else "BID",
                     )
             except Exception:  # noqa: BLE001 - an unobservable mark is reported, never guessed
                 pass
             open_rows.append(row)
+        unobservable = sum(1 for r in open_rows if r["mark"] is None)
+        wide_marks = sum(1 for r in open_rows if r["mark_quality"] == "WIDE_SPREAD_BID")
         return {
             "closed_trades": len(closed),
             "wins": wins,
@@ -274,6 +281,14 @@ class OrderManager:
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
             "closed": closed[:50],
             "open": open_rows,
+            # Display only. The sum covers observable marks alone, so it is not the account's open P&L unless
+            # open_marks_complete is true. A wide-spread bid is a pessimistic mark, shown separately.
+            "open_unrealized_pnl_observable": round(
+                sum(r["unrealized_pnl"] for r in open_rows if r["unrealized_pnl"] is not None), 2
+            ),
+            "open_unobservable_marks": unobservable,
+            "open_wide_spread_marks": wide_marks,
+            "open_marks_complete": unobservable == 0,
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
         }
 

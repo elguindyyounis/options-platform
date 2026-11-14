@@ -5,6 +5,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-14: open-P&L completeness (challenge 9, scheduled run)
+
+* Alerter unchanged (`1fc88f1`); read `server.py` autopilot and readiness gates (see the comparison doc).
+* Challenged: `report()` had no way to say that some open positions had no observable mark. Added display-only
+  `open_unrealized_pnl_observable`, `open_unobservable_marks`, `open_wide_spread_marks`, `open_marks_complete`, and a
+  `WIDE_SPREAD_BID` mark quality over 35% spread (the alerter's threshold). No gate, limit or default changed.
+* Verified: `python -m pytest -q` 514 passed (2 new tests, none weakened). Built on `agent/2026-11-13-daily-challenger-8`
+  because `main` does not yet contain the earlier agent branches.
+* Not verified: alerter tests, live data, dashboard display, the 35% threshold's fit to real chains.
+
 ## 2026-11-13: stressed-exit P&L in lane summaries (challenge 4, scheduled run 2)
 
 * Alerter unchanged (`1fc88f1`); read its `storage.py` (see the comparison doc). Opened new challenge 8 (exit quote age).

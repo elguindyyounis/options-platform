@@ -157,3 +157,26 @@ def test_side_survives_persistence(env):
     manager, _, _ = env
     order = manager.submit(sell())
     assert manager.get(order.id).intent.side is Side.SELL_TO_CLOSE
+
+
+def test_report_says_when_open_pnl_is_incomplete(env):
+    manager, broker, _ = env
+    manager.submit(make_intent())
+    broker.set_quote(make_quote(2.51, 2.60))
+    r = manager.report()
+    assert r["open_marks_complete"] is True and r["open_unobservable_marks"] == 0
+    assert r["open_unrealized_pnl_observable"] == round((2.51 - 2.01) * 4 * 100, 2)
+    broker._quotes.clear()
+    r = manager.report()
+    assert r["open_marks_complete"] is False and r["open_unobservable_marks"] == 1
+    assert r["open_unrealized_pnl_observable"] == 0.0
+
+
+def test_a_very_wide_bid_mark_is_tagged_but_still_a_bid_mark(env):
+    manager, broker, _ = env
+    manager.submit(make_intent())
+    broker.set_quote(make_quote(1.50, 2.60))  # about 42% of the ask
+    r = manager.report()
+    row = r["open"][0]
+    assert row["mark"] == 1.50 and row["mark_quality"] == "WIDE_SPREAD_BID"
+    assert r["open_wide_spread_marks"] == 1 and r["open_marks_complete"] is True

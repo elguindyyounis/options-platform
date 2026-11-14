@@ -74,7 +74,7 @@ Since the first review the alerter changed only CI and preflight scripts. Newly 
 * Its council labels unusual volume "cannot establish who bought or sold". The platform goes further and infers side and
   open/close; challenge 7 notes that the second inference can span several sessions.
 * `data_sources.py` read 2026-11-13: free yfinance chains only; every candidate carries `opening_trade_verified` and `trade_aggressor_verified` set to False; limitations text says download time is not market time; net GEX is refused (not shown partial) when the near-dated chain exceeds its row cap or a side is missing; held-contract quotes that cannot be found are reported as missing, never replaced. Underlying bars missing means research only, no entries.
-* Still unread: `server.py`.
+* Still unread: `server.py` (partly read 2026-11-14, see below).
 
 ## Added 2026-11-13 (alerter `1fc88f1`, second run): `storage.py`
 
@@ -87,3 +87,17 @@ orders, positions, events, audit and a `trade_journal` table.
 * Journal rows are written once at entry and updated once at exit (`UPDATE ... WHERE position_id=?` with a changed-row check),
   the same close-only-once pattern as this platform's `lane_close`.
 * Nothing found that the platform lacks in safety terms.
+
+## Added 2026-11-14 (alerter `1fc88f1`, unchanged): `server.py` (autopilot and readiness)
+
+Code only, tests not run. Read `run_autopilot_for_symbol` and `automation_readiness`.
+
+* New entries are refused in a fixed order: auto-paper off, exits automation off, scan schedulers off, **held positions with
+  unreliable marks** (`unreliable_valuation_count`), session closed, kill switch. Existing positions are untouched.
+* `automation_readiness` blocks on stale or failed held quotes, missing or invalid quotes, and held bid/ask spreads over 35%.
+  It always reports `quote_time_verified: False` and says freshness is download time.
+* Candidate screening uses a three-day cooldown after a simulated stop, and an "adjusted score" from its own calibration.
+* The platform's `report()` reported unobservable open marks per row but had no total, so a sum of the open rows could look
+  complete when it was not. Challenge 9 (display only) adds the counts. Whether new entries should pause while held marks are
+  unreliable (as the alerter does) changes what the platform trades, so it is left for the owner.
+* Still unread: the HTTP handlers and `scheduled_scan_loop` in `server.py`, other `agent_skills`.
