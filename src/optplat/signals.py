@@ -129,6 +129,7 @@ def gex(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
     used = skipped = 0
     reasons: dict[str, int] = {}
     gross = 0.0
+    sides_used: set[Right] = set()
     spot = snap.underlying
 
     def skip(why: str) -> None:
@@ -156,6 +157,7 @@ def gex(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
         by_strike[r.contract.strike] = by_strike.get(r.contract.strike, 0.0) + sign * g * unit * spot * spot * 0.01
         gross += g * unit * spot * spot * 0.01
         legs.append((r.contract.strike, dte / 365, r.iv, sign * unit))
+        sides_used.add(r.contract.right)
         used += 1
     cum, flip, prev = 0.0, None, None  # flip: first strike where cumulative exposure changes sign
     for strike in sorted(by_strike):
@@ -190,6 +192,10 @@ def gex(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
         "net_if_dealers_short_calls_long_puts": round(-total),
         "zero_gamma_spot": zero_spot,
         "sign_is_assumption": True,
+        # A net figure built from only calls or only puts is a one-sided sum, not a net. The alerter refuses to
+        # publish net GEX in that case; here the numbers stay (existing consumers) but are flagged as unreliable.
+        "two_sided": sides_used == {Right.CALL, Right.PUT},
+        "sides_used": sorted(r.value for r in sides_used),
         "rows_used": used, "rows_skipped": skipped, "skip_reasons": reasons, "partial_chain": True,
         "assumptions": ["Customers are long calls and short puts, so dealers hold the opposite (contested).",
                         "The two net figures are exact mirrors: the sign comes from the assumption, not from data.",

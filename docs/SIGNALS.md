@@ -15,7 +15,7 @@ figure, volume is a running day total, and quotes are not exchange-timestamp ver
 | `call_put_volume_ratio` | Sum of call volume over sum of put volume in one snapshot | Developer heuristic | UNVALIDATED | Hedging and closing trades look the same as bullish buying |
 | `call_put_oi_ratio` | Same, using open interest | Developer heuristic | UNVALIDATED | Prior-day stock of positions, not new flow |
 | `unusual_count` | Contracts over the volume, open-interest and volume/OI thresholds | Developer thresholds, alerter uses similar ones | UNVALIDATED | Thresholds were chosen, not fitted; the chain is a sample |
-| `gex_total` | Modeled gamma exposure (Black-Scholes gamma, zero rate). `signals.gex` also reports a sign-free gross figure, both dealer-sign conventions (exact mirrors), a zero-gamma spot and skip reasons | Standard model plus a contested assumption | UNVALIDATED | Needs who-holds-what, and the net figure flips sign with the convention; the sampled chain is partial; display only |
+| `gex_total` | Modeled gamma exposure (Black-Scholes gamma, zero rate). `signals.gex` also reports a sign-free gross figure, both dealer-sign conventions (exact mirrors), a zero-gamma spot and skip reasons | Standard model plus a contested assumption | UNVALIDATED | Needs who-holds-what, and the net figure flips sign with the convention; the sampled chain is partial; `two_sided` is false when only calls or only puts could be modelled, and then the net is a one-sided sum (the alerter refuses to publish it); display only |
 
 ## Inferred labels (scanner and journal)
 

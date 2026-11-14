@@ -550,3 +550,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   code and conflicts with integration docs; the owner should decide whether to fold the many unmerged `agent/2026-11-1[34]-*`
   branches, which overlap each other (several redo the same provenance doc).
 * Verified: full test suite, 565 passed. Not verified: that every row's origin text is accurate beyond reading the code.
+
+## 2026-11-14: one-sided GEX flag (challenge 8, scheduled run on agent/2026-11-14-challenger-m)
+
+* Based on `origin/agent/integration` (main lacks the challenge docs). Alerter moved to `48ccf71`; its manual GEX refresh now
+  raises on a calls-only or puts-only chain. The platform's `signals.gex` summed whatever it could model and returned a "net".
+  Added `two_sided` and `sides_used` (display only). `total_usd_per_1pct`, `gex_total` and every existing test are unchanged.
+* Logged challenge 9 (freshness and spot-agreement flags) and an alerter note on its holdout study discipline.
+* Verified: full suite, 566 passed (1 new test). Not verified: alerter tests, real chains, dashboard rendering of the flag.
+  GEX remains UNVALIDATED; nothing here is evidence of an edge. No PR opened (owner reviews branches).

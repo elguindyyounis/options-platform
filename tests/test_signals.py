@@ -222,3 +222,17 @@ def test_api_signals_endpoint_needs_the_token_and_404s_without_data():
         manager.store.record_snapshot("AAA", NOW, NOW, "t", False, True, snapshot_to_dict(s))
         body = c.get("/api/signals/aaa", headers=H).json()
         assert body["status"] == "UNVALIDATED" and body["gex"]["partial_chain"] is True
+
+
+def test_gex_flags_a_one_sided_chain_because_its_net_is_not_a_net():
+    both = gex(snap(cr(160, Right.CALL), cr(150, Right.PUT)), NOW)
+    assert both["two_sided"] is True and both["sides_used"] == ["C", "P"]
+    calls_only = gex(snap(cr(160, Right.CALL), cr(165, Right.CALL)), NOW)
+    assert calls_only["two_sided"] is False and calls_only["sides_used"] == ["C"]
+    # a put row that cannot be modelled does not count as coverage of the put side
+    unusable_puts = gex(snap(cr(160, Right.CALL), cr(150, Right.PUT, iv=None), cr(145, Right.PUT, oi=0)), NOW)
+    assert unusable_puts["two_sided"] is False and unusable_puts["sides_used"] == ["C"]
+    empty = gex(snap(), NOW)
+    assert empty["two_sided"] is False and empty["sides_used"] == []
+    # existing figures are untouched
+    assert calls_only["total_usd_per_1pct"] > 0

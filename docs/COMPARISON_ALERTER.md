@@ -91,3 +91,19 @@ These are challenges raised by reading the alerter. None is proven.
   the same kind of guess and are labelled as inferences.
 * **Refuses biased GEX.** Over the row cap, or with missing call/put sides, the scan declines to publish a partial net exposure.
 * **Still not read:** `server.py`, other skill files, the alerter's tests.
+
+## Addendum 2026-11-14 (later): alerter moved `9210fd8` -> `48ccf71`
+
+* **Manual GEX refresh now refuses one-sided chains (#16).** `gex.py` raises unless both calls and puts have at least one usable
+  positive-OI, finite-IV row per expiry, and refuses over the row cap. The platform's `signals.gex` kept publishing a net figure
+  from a calls-only or puts-only sample. Challenge 8: now flagged with `two_sided` / `sides_used` (display only; figures unchanged).
+* **Holdout discipline in the intraday research (#29).** `intraday_reel_study.study` splits days 70/30 in time, fits only on the
+  earlier days, ranks with a drawdown-penalised score (explicitly "NOT p-values"), and replays the later days for the chosen rule
+  against a frozen raw baseline. Output warns that the Instagram claims are unverified and that train-only choices are never promoted.
+  This is the standard the platform's strategy evaluation should keep (time-ordered split, frozen baseline, minimum trade counts).
+* **GEX confluence policy (`GEX_CONFLUENCE_POLICY.md`).** Walls are "largest modeled concentration", not support or resistance;
+  GEX is used only if the scan is under 90 minutes old, covers the near expiries, has usable call AND put gamma, and agrees with
+  spot within 2%. The platform has no spot-disagreement or freshness gate on its GEX display; logged as challenge 9 (owner decision
+  on thresholds is not needed for a display flag, but not done this run).
+* **Read this run:** the diffs of `gex.py`, `intraday_strategy.py`, `intraday_reel_study.study`, and `GEX_CONFLUENCE_POLICY.md`.
+  Not read in depth: `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, `server.py`, the alerter's tests (not run).
