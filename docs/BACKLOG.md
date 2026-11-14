@@ -109,6 +109,7 @@ Existing items, in order:
 
 ## Done
 
+* Signal provenance doc (challenge 5): `docs/SIGNALS.md` lists each signal, label and post-mortem tag with origin, status and caveat; a test fails if it drifts from `SIGNAL_NAMES`, `VALIDATED_SIGNALS` or `postmortem.CAUSES`.
 * Frozen baseline lane (challenge 3): `frozen-baseline-options`, a literal copy of the first short-term rule, settings pinned by `FROZEN_FINGERPRINT` and a test. Simulated only.
 * Trades, tracker, rotation, research and desk (owner request 2026-11-13): readable contract names, `/api/alltrades` and the unified Trades
   page, `tracker.py` with a Tracker page, the tighten-only `flow` agent, `rotation.py`, `learning.py` and the Research summary, sector

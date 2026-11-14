@@ -539,3 +539,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   The old flip is a weak summary; do not read anything into it.
 * Verified: 555 tests pass (3 new). Ran against the Mac database snapshots (read-only copy). Not verified: any predictive value.
   Only ~3 trading days of snapshots exist. Nothing uses GEX in a decision; `VALIDATED_SIGNALS` is still empty.
+
+## 2026-11-14: signal provenance doc (challenge 5, scheduled run on agent/integration)
+
+* Added `docs/SIGNALS.md` (every signal, inferred label and post-mortem tag, with origin, status, caveat) and
+  `tests/test_signal_provenance.py` (fails if a signal, tag or status drifts from the code; no edge claims).
+  Taken from `origin/agent/2026-11-14-challenger-i` (docs and test files only), then updated the `gex_total` row for the
+  GEX upgrade already on integration, plus one test for it. Docs and tests only; no source change.
+* Deliberately NOT folded in: the rest of that branch (`marks.py`, `orders.py`, `trades.py` changes). It touches order
+  code and conflicts with integration docs; the owner should decide whether to fold the many unmerged `agent/2026-11-1[34]-*`
+  branches, which overlap each other (several redo the same provenance doc).
+* Verified: full test suite, 565 passed. Not verified: that every row's origin text is accurate beyond reading the code.
