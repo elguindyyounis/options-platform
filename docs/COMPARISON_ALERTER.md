@@ -29,6 +29,15 @@ of a trading edge, and nothing here should be read as saying one earns more than
 | Operations | launchd deployment with rollback, reliability audit, CI that runs a stock-proxy replay | CI on tests; run script | Alerter |
 | Remote and always-on | Mac only; says an offline Mac cannot report its own outage | Same limitation | Equal |
 
+## Read on 2026-11-14 (c): `agents.py` and `core.py`
+
+* `agents.py`: an optional Ollama council on localhost only. A model may add a VETO or extra risks but never upgrade a
+  rejection; only an allow-listed set of candidate fields is sent; headlines are marked untrusted. Deterministic rules
+  and the risk engine stay final. The platform has no model in its loop, so this is design reading, not a gap.
+* `core.py` `candidate_score`: labelled "ranked heuristic, not an empirical edge estimate". It caps the score at 34 with
+  no volume or ask, 52 under 5 contracts of volume, 55 under 20 of OI, and 56 above a 20% spread. The platform's scanner
+  score instead adds +15 for low OI. Challenge 8 adds a display tag; the ranking itself is left for the owner.
+
 ## Where the platform may be wrong
 
 These are challenges raised by reading the alerter. None is proven.

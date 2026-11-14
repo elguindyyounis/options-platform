@@ -164,3 +164,4 @@ Existing items, in order:
 * Scanner and trade ledger: `scanner.py` (most-active names, unusual option activity, fixed universe),
   `trades.py` (entries matched to exits with reasoning), `/api/scan`, `/api/trades`.
 * Signal provenance doc `docs/SIGNALS.md` with a drift test (2026-11-14, challenger-i).
+* `ratio_basis` tag on unusual-activity rows (OI_OK / OI_TINY / OI_MISSING): display only (2026-11-14, challenger-j).

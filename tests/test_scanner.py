@@ -381,3 +381,13 @@ def test_a_demo_scan_has_a_heat_map_sentiment_and_low_open_interest_cases():
     assert out["heat_map"]["sectors"] and out["sentiment"]["tone"] in ("BROAD_STRENGTH", "BROAD_WEAKNESS", "MIXED")
     assert any(u["low_oi"] for u in out["unusual"]) and {u["print"] for u in out["unusual"]} & {"AT_ASK", "AT_BID", "MID"}
     assert out["coverage"]["chains_planned"] >= 30 and out["fictional"] is True
+
+
+def test_ratio_basis_says_when_volume_over_oi_rests_on_a_tiny_or_missing_denominator():
+    from optplat.scanner import RATIO_MIN_OI
+    assert flagged(row(150, 5))[0]["ratio_basis"] == "OI_TINY"
+    assert flagged(row(500, 0))[0]["ratio_basis"] == "OI_TINY"
+    assert flagged(row(500, None))[0]["ratio_basis"] == "OI_MISSING"
+    assert flagged(row(150, 40))[0]["ratio_basis"] == "OI_OK"
+    assert flagged(row(RATIO_MIN_OI * 8, RATIO_MIN_OI))[0]["ratio_basis"] == "OI_OK"
+    assert flagged(row(150, RATIO_MIN_OI - 1))[0]["ratio_basis"] == "OI_TINY"

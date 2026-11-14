@@ -42,6 +42,7 @@ SCAN_BUDGET_S = 240.0
 OI_CONFIRM_FRACTION = 0.5        # OI rose (or fell) by at least this share of the earlier day's volume
 MAX_DAYS_APART = 4               # a weekend is fine; a longer gap mixes several sessions into one OI change
 SCAN_MIN_DTE, SCAN_MAX_DTE, SCAN_EXPIRIES = 3, 120, 4   # weeklies included: unusual flow often sits there
+RATIO_MIN_OI = 20                # the alerter caps the score below this OI: a tiny denominator makes volume/OI look huge
 SIDE_AT_QUOTE = 0.2              # a last trade within this share of the spread of a quote counts as "at" it
 
 
@@ -144,7 +145,9 @@ def unusual_contracts(snap: MarketSnapshot, now: datetime) -> list[dict[str, Any
             "symbol": c.underlying, "sector": SECTOR_OF.get(c.underlying), "contract": c.occ_symbol.strip(), "right": c.right.value,
             "strike": c.strike, "expiry": c.expiry.isoformat(), "dte": dte, "volume": int(vol),
             "open_interest": oi, "oi_state": "MISSING" if oi is None else ("REPORTED_ZERO" if oi == 0 else "REPORTED"),
-            "low_oi": low_oi or oi == 0, "volume_oi_ratio": ratio, "bid": r.bid, "ask": r.ask, "last": r.last,
+            "low_oi": low_oi or oi == 0, "volume_oi_ratio": ratio,
+            # display only: says whether volume/OI rests on a denominator big enough to mean something
+            "ratio_basis": "OI_MISSING" if oi is None else ("OI_TINY" if oi < RATIO_MIN_OI else "OI_OK"), "bid": r.bid, "ask": r.ask, "last": r.last,
             "spread_pct": round(spread, 2), "liquidity_tier": tier,
             "print": printed, "likely_side": side,
             "moneyness_pct": round((c.strike / snap.underlying - 1) * 100, 2) if snap.underlying > 0 else None,

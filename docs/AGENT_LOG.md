@@ -5,6 +5,15 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-14: ratio_basis tag (scheduled challenger run j)
+
+* Alerter unchanged since `1fc88f1`. Read `agents.py`, `core.py`. Baseline 509 tests passed before; 510 after.
+* Added display-only `ratio_basis` (OI_OK / OI_TINY under 20 / OI_MISSING) to scanner unusual rows. Score, thresholds,
+  lanes, risk and defaults are untouched. Did not cap the score like the alerter does: the existing +15 low-OI bonus is
+  pinned by a test and is the owner's design call (logged as challenge 8).
+* Branch cut from `agent/2026-11-14-challenger-i` because `main` lacks the challenge docs. Not verified: alerter tests,
+  live data, the dashboard rendering of the new field (API only).
+
 ## 2026-11-14: recorded the owner's standing direction (owner present, docs only)
 
 * Added "Standing direction: research first, broker last" and a broker-readiness checklist to `docs/BACKLOG.md`.
