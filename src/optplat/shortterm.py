@@ -230,7 +230,9 @@ def lane_report(store: Store, lane: str, fictional: bool, now: datetime, *, rule
                     "stressed_realized_pnl": round(sum(t["stressed_pnl"] for t in both), 2) if both else None,
                     "bid_realized_pnl_same_trades": round(sum(t["pnl"] for t in both), 2) if both else None,
                     # Closed P&L split by size against reported volume and open interest (a yardstick, not a gate).
-                    "participation": _participation(done, [t for t in trades if t["status"] == "OPEN"])},
+                    "participation": _participation(done, [t for t in trades if t["status"] == "OPEN"]),
+                    # How much of the realized total is one trade (display only, no lane behaviour depends on it).
+                    "best_trade_dependence": _best_trade_dependence(done)},
         "trades": trades,
     }
 
@@ -264,6 +266,20 @@ def _participation(done: Sequence[dict[str, Any]], open_trades: Sequence[dict[st
             "within_cap_realized_pnl": round(sum(t["pnl"] for t in within), 2) if within else None,
             "outside_cap_realized_pnl": round(sum(t["pnl"] for t in outside), 2) if outside else None,
             "open_not_within_cap": sum(1 for t in open_opts if kind(t) != "within")}
+
+
+def _best_trade_dependence(done: Sequence[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Realized P&L with and without the single best closed trade. A lane whose total is positive only because of one
+    trade (`positive_without_best` False) has shown one lucky outcome, not a pattern. None under 2 closed trades with a
+    finite P&L. Display only: it ranks and gates nothing."""
+    pnls = [t["pnl"] for t in done if isinstance(t["pnl"], (int, float)) and not isinstance(t["pnl"], bool) and math.isfinite(t["pnl"])]
+    if len(pnls) < 2:
+        return None
+    total, best = sum(pnls), max(pnls)
+    rest = total - best
+    return {"closed": len(pnls), "best_trade_pnl": round(best, 2), "realized_pnl_without_best": round(rest, 2),
+            "positive_without_best": rest > 0,
+            "best_share_of_total_pct": round(best / total * 100, 1) if total > 0 and best > 0 else None}
 
 
 def _stressed(pm: Any) -> Optional[float]:

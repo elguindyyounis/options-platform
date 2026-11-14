@@ -545,3 +545,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   needs the owner because it concerns auth).
 * Verified: `python -m pytest -q` 530 passed (1 new). Not verified: alerter tests, live data, whether `api.py` already checks origin.
   Builds on `agent/2026-11-14-challenger-d` (`main` is stale). No PR opened (not requested).
+
+## 2026-11-14 (run 7): best-trade dependence
+
+* Alerter unchanged since `1fc88f1`. Read `adaptive.py` (see COMPARISON_ALERTER.md).
+* Challenge 14: lane summaries gain `best_trade_dependence` (realized P&L with and without the single best closed trade, whether it is
+  still positive, the best trade's share of a positive total) and the options-lane Realized figure says so. Display only; no lane, limit,
+  budget, default or auth changed, nothing is capped or gated.
+* Verified: `python -m pytest -q` 533 passed (3 new); `node --check` on app.js. Not verified: alerter tests, live data, the dashboard in a
+  browser. Builds on `agent/2026-11-14-challenger-e` (`main` is stale). No PR opened (not requested).

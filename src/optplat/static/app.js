@@ -394,6 +394,13 @@
     return bits.join("; ");
   }
 
+  // Realized P&L with the single best closed trade taken out: one lucky trade is not a pattern.
+  function bestTradeNote(sm) {
+    const d = sm.best_trade_dependence;
+    if (!d) return "";
+    return "without its best trade (" + sgn(d.best_trade_pnl) + "): " + sgn(d.realized_pnl_without_best) + (d.positive_without_best ? "" : "; not positive without it");
+  }
+
   function renderTrades() {
     const data = S.trades;
     if (!data) return;
@@ -871,7 +878,7 @@
       fig(String(sm.total), "Simulated trades", sm.open + " open, " + sm.closed + " closed"),
       fig(sm.win_rate_pct === null ? "n/a" : sm.win_rate_pct + "%", "Winners", sm.closed ? sm.wins + " of " + sm.closed + " closed" : "no closed trades"),
       fig(sm.avg_return_pct === null ? "n/a" : arrow(sm.avg_return_pct) + pct(sm.avg_return_pct), "Average per trade", "of the premium paid, after fees", tone(sm.avg_return_pct)),
-      fig(arrow(sm.realized_pnl) + sgn(sm.realized_pnl), "Realized", stressNote(sm) + (participationNote(sm) ? ". " + participationNote(sm) : ""), tone(sm.realized_pnl)),
+      fig(arrow(sm.realized_pnl) + sgn(sm.realized_pnl), "Realized", stressNote(sm) + (participationNote(sm) ? ". " + participationNote(sm) : "") + (bestTradeNote(sm) ? ". " + bestTradeNote(sm) : ""), tone(sm.realized_pnl)),
       fig(arrow(sm.unrealized_pnl) + sgn(sm.unrealized_pnl), "Open now", sm.unobservable_open ? "at the last bid; " + sm.unobservable_open + " open with no usable bid are left out" : "at the last bid", tone(sm.unrealized_pnl)),
     ]);
     const host = $("op-trades");

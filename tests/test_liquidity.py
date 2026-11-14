@@ -174,3 +174,27 @@ def test_the_two_tier_functions_have_pinned_argument_order_and_disjoint_labels()
     assert {"PREFERRED", "WATCH", "THIN"}.isdisjoint({"A", "B", "C"})
     # old names still point at the same functions
     assert signals.liquidity_tier is signals.signal_liquidity_tier
+
+
+def test_best_trade_dependence_shows_a_total_that_is_one_lucky_trade():
+    # qty 2, multiplier 100: pnl = (exit - entry) * 200. Three small losses and one big win.
+    s = _participation_lane([(1.0, 0.9, {}), (1.0, 0.9, {}), (1.0, 0.9, {}), (1.0, 3.0, {})])
+    d = s["best_trade_dependence"]
+    assert s["realized_pnl"] == 400.0 - 60.0
+    assert (d["closed"], d["best_trade_pnl"], d["realized_pnl_without_best"]) == (4, 400.0, -60.0)
+    assert d["positive_without_best"] is False and d["best_share_of_total_pct"] == round(400 / 340 * 100, 1)
+
+
+def test_best_trade_dependence_when_the_edge_is_spread_and_when_too_few_trades():
+    d = _participation_lane([(1.0, 1.5, {}), (1.0, 1.5, {}), (1.0, 2.0, {})])["best_trade_dependence"]
+    assert d["positive_without_best"] is True and d["realized_pnl_without_best"] == 200.0
+    assert _participation_lane([(1.0, 1.5, {})])["best_trade_dependence"] is None
+    assert _participation_lane([])["best_trade_dependence"] is None
+
+
+def test_best_trade_dependence_has_no_share_when_total_is_not_positive_and_dashboard_wires_it():
+    d = _participation_lane([(1.0, 0.5, {}), (1.0, 0.9, {})])["best_trade_dependence"]
+    assert d["best_share_of_total_pct"] is None and d["positive_without_best"] is False
+    import pathlib
+    js = (pathlib.Path(__file__).parents[1] / "src/optplat/static/app.js").read_text()
+    assert "best_trade_dependence" in js and "bestTradeNote" in js and "innerHTML" not in js

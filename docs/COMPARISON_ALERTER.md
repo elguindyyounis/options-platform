@@ -148,3 +148,14 @@ Code only, tests not run. Without a token it serves loopback only and checks the
 same-origin (`Origin` equals `Host`), must not be `Sec-Fetch-Site: cross-site`, and must be `application/json`, token or not. The
 platform has the Host allow-list and token; whether it has the origin and content-type checks is open (challenge 13, owner decision).
 Still unread: `scheduled_scan_loop`, `adaptive.py`, `exit_decisions.py`, `daily_review.py`.
+
+## Added 2026-11-14 (alerter `1fc88f1`, run 7): `adaptive.py`
+
+Code only, tests not run. The alerter's learner is a regularized cohort scorer, not a model. Each closed real-source trade is one
+observation (demo fills never train real-source candidates); a trade's return is capped at +/-100% so one big winner cannot dominate;
+a cohort needs 3+ trades to speak, and its effect shrinks as n/(n+12), i.e. as if 12 neutral samples sat in every cohort; nothing
+changes a ranking under 5 real closed trades; the total shift is capped at 7 score points. Its messages say "descriptive and
+selection-biased; not a forecast". Platform contrast: lane summaries here had no measure of how much a total rests on one trade
+(challenge 14, now shown as `best_trade_dependence`). The platform does not cap per-trade returns anywhere in a result; it shows the
+raw total, so one outlier can carry a lane.
+Still unread: `scheduled_scan_loop`, `exit_decisions.py`, `daily_review.py`.
