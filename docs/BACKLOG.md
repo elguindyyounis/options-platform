@@ -143,3 +143,4 @@ Existing items, in order:
   `trades.py` (entries matched to exits with reasoning), `/api/scan`, `/api/trades`.
 * Lane summaries show realized P&L at the bid and under the stressed exit side by side, over the same trades (challenge 4).
 * Tracker splits flagged contracts by size of open interest (challenge 7), display-only.
+* GEX display upgrade (challenge 2): `signals.gex` now also returns a sign-free gross figure, both dealer-sign conventions as exact mirrors, a zero-gamma spot found by revaluing the chain, and skip reasons (implausible IV, far from spot). Still UNVALIDATED; nothing reads it.
