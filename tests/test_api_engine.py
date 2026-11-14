@@ -98,3 +98,23 @@ def test_selling_without_a_position_is_rejected_not_errored(client):
         **contract, "idempotency_key": "api-sell-0002", "candidate_id": "t", "quantity": 1,
         "limit_price": 1.85, "side": "SELL_TO_CLOSE"})
     assert r.status_code == 200 and r.json()["state"] == "RISK_REJECTED"
+
+
+def test_report_carries_small_sample_warning(client):
+    report = client.get("/api/report", headers=H).json()
+    assert report["sample"]["status"] == "NO_TRADES"
+    assert report["sample"]["min_trades_for_result"] >= 30
+
+
+def test_one_closed_trade_is_flagged_insufficient(client):
+    expiry = (date.today() + timedelta(days=40)).isoformat()
+    contract = {"underlying": "SPY", "expiry": expiry, "right": "C", "strike": 600}
+    client.post("/api/sim/quote", json={**contract, "bid": 1.90, "ask": 2.00}, headers=H)
+    client.post("/api/paper/orders", headers=H, json={
+        **contract, "idempotency_key": "smp-buy-0001", "candidate_id": "t", "quantity": 4, "limit_price": 2.02})
+    client.post("/api/paper/orders", headers=H, json={
+        **contract, "idempotency_key": "smp-sell-0001", "candidate_id": "t", "quantity": 4,
+        "limit_price": 1.85, "side": "SELL_TO_CLOSE"})
+    sample = client.get("/api/report", headers=H).json()["sample"]
+    assert sample["status"] == "INSUFFICIENT"
+    assert "Not a result" in sample["note"]

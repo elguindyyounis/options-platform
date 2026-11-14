@@ -23,3 +23,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: daily challenger, small-sample honesty (agent run)
+
+* Alerter at `1fc88f1`; first challenger run, so `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md` were created.
+* Changed: new `optplat/stats.py` (Wilson 95% interval, minimum-trade status, P&L without best trade);
+  `/api/report` gains a `sample` block. Display only: no trading, risk, policy or auth behaviour changed.
+* Found: the alerter models exit cost by liquidity (spread, size vs volume/OI); the platform's flat
+  slippage is optimistic on thin contracts (C2, not changed: it would alter fills).
+* Verified: `python -m pytest -q`, 152 passed (144 baseline + 8 new). Not verified: dashboard rendering,
+  any real data, the owner's database. The 30-trade minimum is a display threshold, not a statistical guarantee.
