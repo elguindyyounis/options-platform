@@ -158,3 +158,19 @@ def test_participation_does_not_change_the_other_totals_and_the_dashboard_reads_
     assert s["realized_pnl"] == 100.0 and s["participation"]["within_cap"] == 0
     js = (pathlib.Path(__file__).parents[1] / "src/optplat/static/app.js").read_text()
     assert "participationNote" in js and "within_cap_realized_pnl" in js and "innerHTML" not in js
+
+
+def test_the_two_tier_functions_have_pinned_argument_order_and_disjoint_labels():
+    """Both were once called liquidity_tier with all-numeric, differently ordered arguments. A swapped call must not pass quietly."""
+    from optplat import signals
+    from optplat.liquidity import exit_liquidity_tier
+    # exit tier: (volume, open_interest, spread_pct)
+    assert exit_liquidity_tier(500, 2000, 4.0) == "PREFERRED"
+    assert exit_liquidity_tier(4.0, 500, 2000) == "THIN"  # swapped order grades worse, not the same
+    # signal tier: (spread_pct, volume, oi)
+    assert signals.signal_liquidity_tier(4.0, 150, 1500) == "A"
+    assert signals.signal_liquidity_tier(150, 1500, 4.0) == "C"
+    # label sets never overlap, so mixing them up shows in output
+    assert {"PREFERRED", "WATCH", "THIN"}.isdisjoint({"A", "B", "C"})
+    # old names still point at the same functions
+    assert signals.liquidity_tier is signals.signal_liquidity_tier

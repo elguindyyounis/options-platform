@@ -80,6 +80,8 @@ Existing items, in order:
 
 ## Done
 
+* Challenge 12 (2026-11-14): `liquidity_tier` name clash resolved with distinct names and an order-pinning test.
+  New item for the owner: challenge 13 (cross-origin POST checks), see `docs/CHALLENGES.md`.
 * Exit quote age recorded on option-lane closes and tagged `STALE_EXIT_QUOTE` (challenge 8). Follow-ups: show it in the dashboard; do the same for share lanes.
 * Lane summaries report stressed-exit realized P&L beside the bid-exit total over the same trades (API only; dashboard display is a follow-up).
 

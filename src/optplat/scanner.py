@@ -21,7 +21,7 @@ from .diagnostics import describe_exc
 from .market_clock import HOLIDAYS, NY, OPEN, session_status
 from .marketdata import Bar, MarketDataProvider, MarketSnapshot
 from .models import Right, utcnow
-from .signals import liquidity_tier
+from .signals import signal_liquidity_tier
 from .store import Store
 from .universe import SECTOR_OF, SECTORS, UNIVERSE  # noqa: F401  (UNIVERSE is re-exported for the lanes and tests)
 
@@ -137,7 +137,7 @@ def unusual_contracts(snap: MarketSnapshot, now: datetime) -> list[dict[str, Any
         spread = (r.ask - r.bid) / r.ask * 100
         # liquidity grades the OPEN interest too, so a brand-new low-OI contract is tier C by design: the engine's
         # own entry filter would refuse it, and the dashboard says why instead of hiding it.
-        tier = liquidity_tier(spread, vol, oi)
+        tier = signal_liquidity_tier(spread, vol, oi)
         reviewable = tier in ("A", "B") and 7 <= dte <= 730
         printed, side = trade_side(r.last, r.bid, r.ask)
         out.append({

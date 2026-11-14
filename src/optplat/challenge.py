@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from . import shortterm as st_mod
-from .liquidity import exit_concession_pct, liquidity_tier
+from .liquidity import exit_concession_pct, exit_liquidity_tier
 from .marketdata import ChainRow
 from .optionlanes import EXTRA_SHORT, EXIT_TEXT, FEE_PER_CONTRACT, MULTIPLIER, OptionLane, Params
 from .shortterm import lane_report
@@ -202,7 +202,7 @@ class ChallengeLane(OptionLane):
         eq = st["equity"]
         spread = payload["spread_pct"]
         vol, oi = row.volume or 0, row.open_interest or 0
-        tier = liquidity_tier(vol, oi, spread)
+        tier = exit_liquidity_tier(vol, oi, spread)
         # shrink to what the market could plausibly absorb before judging the rest
         cap = min(int(vol * MAX_SIZE_OF_VOLUME_PCT / 100), int(oi * MAX_SIZE_OF_OI_PCT / 100))
         qty2 = min(qty, cap)

@@ -71,7 +71,8 @@ def coverage(snap: MarketSnapshot) -> dict[str, Any]:
     }
 
 
-def liquidity_tier(spread_pct: float, volume: Optional[int], oi: Optional[int]) -> str:
+def signal_liquidity_tier(spread_pct: float, volume: Optional[int], oi: Optional[int]) -> str:
+    """A / B / C. Argument order is (spread_pct, volume, oi); liquidity.exit_liquidity_tier takes (volume, open_interest, spread_pct)."""
     v, o = volume or 0, oi or 0
     if spread_pct <= 5 and v >= 100 and o >= 1000:
         return "A"
@@ -80,11 +81,14 @@ def liquidity_tier(spread_pct: float, volume: Optional[int], oi: Optional[int]) 
     return "C"
 
 
+liquidity_tier = signal_liquidity_tier  # old name kept so existing imports still work
+
+
 def liquidity(snap: MarketSnapshot) -> dict[str, int]:
     tiers = {"A": 0, "B": 0, "C": 0}
     for r in snap.rows:
         if r.ask > 0:
-            tiers[liquidity_tier((r.ask - r.bid) / r.ask * 100, r.volume, r.open_interest)] += 1
+            tiers[signal_liquidity_tier((r.ask - r.bid) / r.ask * 100, r.volume, r.open_interest)] += 1
     return tiers
 
 

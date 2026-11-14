@@ -535,3 +535,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Verified: `python -m pytest -q` 529 passed (4 new), `node --check` on app.js. Not verified: rendering in a browser, share lanes (no volume figure),
   alerter tests, live data. Base: `main` is stale and several 1-commit branches forked from it separately; this builds on
   `agent/2026-11-14-daily-challenger-9`, the tip of the long chain. No PR opened (not requested).
+
+## 2026-11-14 (challenger, sixth run): two `liquidity_tier` functions
+
+* Alerter unchanged since `1fc88f1`. Read the `server.py` HTTP handlers (see COMPARISON_ALERTER.md).
+* Challenge 12: `liquidity.liquidity_tier` and `signals.liquidity_tier` shared a name with differently ordered numeric arguments. Now
+  `exit_liquidity_tier` and `signal_liquidity_tier`, old names kept as aliases, callers moved, one test pins both orders and the disjoint
+  label sets. Tier thresholds untouched; no lane, limit, budget, default or auth changed. Logged challenge 13 (alerter's origin checks;
+  needs the owner because it concerns auth).
+* Verified: `python -m pytest -q` 530 passed (1 new). Not verified: alerter tests, live data, whether `api.py` already checks origin.
+  Builds on `agent/2026-11-14-challenger-d` (`main` is stale). No PR opened (not requested).

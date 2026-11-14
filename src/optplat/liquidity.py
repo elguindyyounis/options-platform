@@ -13,8 +13,8 @@ MAX_CONCESSION_PCT = 40.0
 WIDE_SPREAD_FREE_PCT = 15.0  # spread beyond this starts to cost extra on the way out
 
 
-def liquidity_tier(volume: Optional[int], open_interest: Optional[int], spread_pct: Optional[float]) -> str:
-    """PREFERRED / WATCH / THIN. Anything missing is THIN: unknown depth is treated as no depth."""
+def exit_liquidity_tier(volume: Optional[int], open_interest: Optional[int], spread_pct: Optional[float]) -> str:
+    """PREFERRED / WATCH / THIN. Argument order is (volume, open_interest, spread_pct); signals.signal_liquidity_tier takes (spread_pct, volume, oi). Anything missing is THIN: unknown depth is treated as no depth."""
     if volume is None or open_interest is None or spread_pct is None:
         return "THIN"
     if volume >= 100 and open_interest >= 500 and spread_pct <= 10:
@@ -22,6 +22,9 @@ def liquidity_tier(volume: Optional[int], open_interest: Optional[int], spread_p
     if volume >= 10 and open_interest >= 50 and spread_pct <= 20:
         return "WATCH"
     return "THIN"
+
+
+liquidity_tier = exit_liquidity_tier  # old name kept so existing imports still work
 
 
 def exit_concession_pct(quantity: int, volume: Optional[int], open_interest: Optional[int], spread_pct: Optional[float]) -> float:

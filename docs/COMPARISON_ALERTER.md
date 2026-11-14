@@ -140,3 +140,11 @@ Code only, tests not run.
   journal (challenge 1) should keep.
 * A weakness found on the platform side: two unrelated functions are both called `liquidity_tier` (challenge 12).
 * Still unread: the HTTP handlers and `scheduled_scan_loop` in `server.py`, `adaptive.py`, `exit_decisions.py`, `daily_review.py`.
+
+## Added 2026-11-14 (alerter `1fc88f1`, run 6): `server.py` HTTP handlers
+
+Code only, tests not run. Without a token it serves loopback only and checks the `Host` header (DNS rebinding). With a token it compares
+`X-Admin-Token` using `hmac.compare_digest`; a server bound off loopback refuses to start with a token under 24 characters. POSTs must be
+same-origin (`Origin` equals `Host`), must not be `Sec-Fetch-Site: cross-site`, and must be `application/json`, token or not. The
+platform has the Host allow-list and token; whether it has the origin and content-type checks is open (challenge 13, owner decision).
+Still unread: `scheduled_scan_loop`, `adaptive.py`, `exit_decisions.py`, `daily_review.py`.

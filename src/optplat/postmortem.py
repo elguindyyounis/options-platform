@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from .liquidity import liquidity_tier, stress_exit
+from .liquidity import exit_liquidity_tier, stress_exit
 
 MIN_TRADES_FOR_PATTERN = 5
 MAX_FRESH_EXIT_QUOTE_S = 60  # same bound the risk policy uses for an entry quote
@@ -126,7 +126,7 @@ def post_mortem(trade: dict[str, Any], exit_price: float, reason: str, closed_at
                 f"{reason.replace('_', ' ')}.{moved}")
     shown = [t for t in tags if t in CAUSES][:4]
     return {"tags": tags, "headline": headline, "net_pct": round(net_pct, 1), "stress_net": round(stress_net, 2), "stress_net_pct": round(stress_net_pct, 1), "stress_concession_pct": stress["concession_pct"],
-            "liquidity_tier": liquidity_tier(p.get("volume"), p.get("open_interest"), spread_in), "gross_pct": round(gross_pct, 1),
+            "liquidity_tier": exit_liquidity_tier(p.get("volume"), p.get("open_interest"), spread_in), "gross_pct": round(gross_pct, 1),
             "exit_quote_age_s": close_info.get("exit_quote_age_s"), "exit_quote_verified": close_info.get("exit_quote_verified"),
             "underlying_move_pct": None if move is None else round(move, 2), "held_hours": None if held_h is None else round(held_h, 1),
             "lessons": [CAUSES[t][0] for t in shown], "try_next": [CAUSES[t][1] for t in shown]}
