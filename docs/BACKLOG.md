@@ -37,11 +37,16 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Tag orders and positions with `is_demo` in the store (see docs/CHALLENGES.md #2).
+* Show `fill_realism` tags in the dashboard (textContent only).
+
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-14 (agent branch): `fill_realism` label on entry reports (volume/OI participation, unverified data). Label only; no order or lane behaviour changed.
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.

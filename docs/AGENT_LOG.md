@@ -23,3 +23,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: daily challenger, first run (fill realism label)
+
+* Alerter reviewed at 1fc88f1: read liquidity.py, agents.py, core.py, storage.py. Notes in
+  docs/COMPARISON_ALERTER.md. docs/CHALLENGES.md did not exist; created it with the first set.
+* Added `optplat/liquidity.py` and a `fill_realism` field on each entry in the engine cycle report.
+  It tags orders above 10% of reported volume/OI and missing/invalid volume or OI. Label only: no
+  order, size, risk limit or default changed.
+* Verified: `python -m pytest -q` 154 passed (144 baseline + 10 new). Not verified: the label against
+  real Yahoo data, the owner's database, or the dashboard (not wired there). No PR opened.

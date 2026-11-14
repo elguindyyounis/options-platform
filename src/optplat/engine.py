@@ -18,6 +18,7 @@ from typing import Any, Callable, Optional
 
 from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
+from .liquidity import fill_realism
 from .market_clock import session_status
 from .marketdata import MarketDataProvider, MarketSnapshot
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
@@ -398,6 +399,9 @@ class TradingEngine:
                 "quantity": quantity,
                 "limit_price": proposal.limit_price,
                 "rationale": proposal.rationale,
+                "fill_realism": fill_realism(
+                    quantity, proposal.rationale.get("volume"), proposal.rationale.get("open_interest")
+                ),
             }
             try:
                 order = self.manager.submit(intent)
