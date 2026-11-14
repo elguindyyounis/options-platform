@@ -37,12 +37,15 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Shadow cases for rejected candidates (see `docs/CHALLENGES.md` #1), after the recorder lands.
+* Show equity impact of open positions with unobservable marks.
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
 
+* 2026-11-14: report evidence block (sample status, win-rate interval, tails, concentration) on `/api/report`; branch `agent/2026-11-14-result-evidence`.
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market

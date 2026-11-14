@@ -26,6 +26,7 @@ from .models import (
     Side,
     utcnow,
 )
+from .evidence import trade_evidence
 from .risk import RiskPolicy, evaluate
 from .store import Store
 
@@ -272,6 +273,8 @@ class OrderManager:
             "wins": wins,
             "realized_pnl": round(sum(c["pnl"] for c in closed), 2),
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
+            "evidence": trade_evidence(closed),
+            "open_marks_unobservable": sum(1 for r in open_rows if r["mark"] is None),
             "closed": closed[:50],
             "open": open_rows,
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",

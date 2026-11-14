@@ -100,6 +100,9 @@ def test_round_trip_records_cost_basis_and_realized_pnl(env):
     report = manager.report()
     assert report["closed_trades"] == 1 and report["wins"] == 1
     assert report["realized_pnl"] == round((2.89 - 2.01) * 4 * 100, 2)
+    assert report["evidence"]["sample_status"] == "INSUFFICIENT"  # one trade is never a result
+    assert report["evidence"]["win_rate_ci95_pct"][0] < 50
+    assert report["open_marks_unobservable"] == 0
     assert manager.get(order.id).cost_basis == 2.01  # survives persistence
 
 

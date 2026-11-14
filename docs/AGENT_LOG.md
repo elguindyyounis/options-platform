@@ -23,3 +23,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: daily challenger run (result evidence)
+
+* Read the alerter at `1fc88f1` (first review): `feedback.py`, `adaptive.py`, `agents.py`, part of `core.py`. Created `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md`.
+* Challenge: `/api/report` printed a win rate and realized P&L from any sample size. Added display-only `evidence.py` (95% Wilson interval, INSUFFICIENT below 30 trades, median/worst/best return, largest-win share) plus `open_marks_unobservable`, and dashboard text. Nothing that trades, no limits, defaults or auth changed.
+* Verified: baseline 144 tests passed; after change 148 pass. Wilson values checked against known figures (50/100 -> 40.4-59.6).
+* Not verified: dashboard rendering in a browser; the 30-trade label threshold is my choice and is a label only; alerter database/real results (not visible from here).
+* No PR opened (not requested).
