@@ -198,3 +198,43 @@ def test_best_trade_dependence_has_no_share_when_total_is_not_positive_and_dashb
     import pathlib
     js = (pathlib.Path(__file__).parents[1] / "src/optplat/static/app.js").read_text()
     assert "best_trade_dependence" in js and "bestTradeNote" in js and "innerHTML" not in js
+
+
+def _fresh_lane(rows):
+    """rows: (entry, exit, close-payload extras) for one option lane trade of qty 2."""
+    from optplat.shortterm import lane_report
+    from optplat.store import Store
+    store = Store(":memory:")
+    t0 = datetime(2026, 1, 5, 15, tzinfo=timezone.utc)
+    for entry, exit_, extra in rows:
+        tid = store.lane_open("x-lane", "SPY", t0, entry, 2, True, {"multiplier": 100, "fees_open": 0.0})
+        store.lane_close(tid, t0 + timedelta(hours=1), exit_, "target", {"fees_close": 0.0, **extra})
+    return lane_report(store, "x-lane", True, t0, rules=[], limitations=[], symbols=["SPY"], exit_text={})["summary"]
+
+
+def test_exit_freshness_counts_stale_unverified_and_missing_as_not_fresh():
+    ok = {"exit_quote_age_s": 5.0, "exit_quote_verified": True}
+    s = _fresh_lane([(1.0, 1.5, ok), (1.0, 2.0, {"exit_quote_age_s": 61.0, "exit_quote_verified": True}),
+                     (1.0, 0.5, {"exit_quote_age_s": 5.0, "exit_quote_verified": False}), (1.0, 3.0, {}),
+                     (1.0, 3.0, {"exit_quote_age_s": None, "exit_quote_verified": True}),
+                     (1.0, 3.0, {"exit_quote_age_s": float("nan"), "exit_quote_verified": True}),
+                     (1.0, 1.5, {"exit_quote_age_s": -60.0, "exit_quote_verified": True})])["exit_freshness"]
+    assert (s["closed_checked"], s["fresh"], s["not_fresh"]) == (7, 2, 5)
+    assert s["fresh_realized_pnl"] == 200.0
+    assert s["not_fresh_realized_pnl"] == 200.0 + (-100.0) + 400.0 * 3
+
+
+def test_exit_freshness_is_none_for_share_lanes_and_changes_no_other_total():
+    import pathlib
+    from optplat import postmortem, shortterm
+    from optplat.store import Store
+    assert shortterm.MAX_FRESH_EXIT_QUOTE_S == postmortem.MAX_FRESH_EXIT_QUOTE_S
+    store = Store(":memory:")
+    t0 = datetime(2026, 1, 5, 15, tzinfo=timezone.utc)
+    tid = store.lane_open("share-lane", "SPY", t0, 100.0, 5, True, {})
+    store.lane_close(tid, t0 + timedelta(hours=1), 101.0, "target", {})
+    assert shortterm.lane_report(store, "share-lane", True, t0, rules=[], limitations=[], symbols=["SPY"], exit_text={})["summary"]["exit_freshness"] is None
+    s = _fresh_lane([(1.0, 1.5, {})])
+    assert s["realized_pnl"] == 100.0 and s["exit_freshness"]["fresh"] == 0
+    js = (pathlib.Path(__file__).parents[1] / "src/optplat/static/app.js").read_text()
+    assert "exitFreshnessNote" in js and "not_fresh_realized_pnl" in js and "innerHTML" not in js

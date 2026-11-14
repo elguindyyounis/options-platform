@@ -205,6 +205,8 @@ def lane_report(store: Store, lane: str, fictional: bool, now: datetime, *, rule
             "unrealized_pnl": unreal, "unrealized_pnl_pct": round(unreal / cost * 100, 2) if unreal is not None and cost > 0 else None,
             "postmortem": cp.get("postmortem"),
             "stressed_pnl": _stressed(cp.get("postmortem")) if closed else None,
+            "exit_quote_age_s": cp.get("exit_quote_age_s") if closed else None,
+            "exit_quote_verified": cp.get("exit_quote_verified") if closed else None,
         })
     done = [t for t in trades if t["status"] == "CLOSED"]
     wins = [t for t in done if (t["pnl"] or 0) > 0]
@@ -232,7 +234,9 @@ def lane_report(store: Store, lane: str, fictional: bool, now: datetime, *, rule
                     # Closed P&L split by size against reported volume and open interest (a yardstick, not a gate).
                     "participation": _participation(done, [t for t in trades if t["status"] == "OPEN"]),
                     # How much of the realized total is one trade (display only, no lane behaviour depends on it).
-                    "best_trade_dependence": _best_trade_dependence(done)},
+                    "best_trade_dependence": _best_trade_dependence(done),
+                    # Closed P&L split by how fresh and verified the exit quote was (display only).
+                    "exit_freshness": _exit_freshness(done)},
         "trades": trades,
     }
 
@@ -266,6 +270,27 @@ def _participation(done: Sequence[dict[str, Any]], open_trades: Sequence[dict[st
             "within_cap_realized_pnl": round(sum(t["pnl"] for t in within), 2) if within else None,
             "outside_cap_realized_pnl": round(sum(t["pnl"] for t in outside), 2) if outside else None,
             "open_not_within_cap": sum(1 for t in open_opts if kind(t) != "within")}
+
+
+MAX_FRESH_EXIT_QUOTE_S = 60.0  # same bound as postmortem.MAX_FRESH_EXIT_QUOTE_S (a test keeps them equal)
+
+
+def _exit_freshness(done: Sequence[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Split closed option trades by the exit quote they were priced on. FRESH needs a finite age within the bound AND a
+    verified quote time; anything else (stale, age unknown, time unverified, or closed before the field existed) is
+    counted as NOT fresh, never as fine. Display only. None for share lanes (bar-priced, no exit quote)."""
+    opts = [t for t in done if t["multiplier"] > 1]
+    if not opts:
+        return None
+    def fresh(t: dict[str, Any]) -> bool:
+        a = t["exit_quote_age_s"]
+        return (isinstance(a, (int, float)) and not isinstance(a, bool) and math.isfinite(a)
+                and abs(a) <= MAX_FRESH_EXIT_QUOTE_S and t["exit_quote_verified"] is True)
+    ok = [t for t in opts if fresh(t)]
+    rest = [t for t in opts if not fresh(t)]
+    return {"max_age_s": MAX_FRESH_EXIT_QUOTE_S, "closed_checked": len(opts), "fresh": len(ok), "not_fresh": len(rest),
+            "fresh_realized_pnl": round(sum(t["pnl"] for t in ok), 2) if ok else None,
+            "not_fresh_realized_pnl": round(sum(t["pnl"] for t in rest), 2) if rest else None}
 
 
 def _best_trade_dependence(done: Sequence[dict[str, Any]]) -> Optional[dict[str, Any]]:

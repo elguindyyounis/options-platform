@@ -80,6 +80,7 @@ Existing items, in order:
 
 ## Done
 
+* Challenge 8 follow-up (2026-11-14, run 8): `summary.exit_freshness` and a dashboard note split closed option P&L by fresh and verified exit quote versus not. Still open: share lanes (bar-priced, no exit quote).
 * Challenge 12 (2026-11-14): `liquidity_tier` name clash resolved with distinct names and an order-pinning test.
   New item for the owner: challenge 13 (cross-origin POST checks), see `docs/CHALLENGES.md`.
 * Exit quote age recorded on option-lane closes and tagged `STALE_EXIT_QUOTE` (challenge 8). Follow-ups: show it in the dashboard; do the same for share lanes.

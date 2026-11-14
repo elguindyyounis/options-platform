@@ -159,3 +159,15 @@ selection-biased; not a forecast". Platform contrast: lane summaries here had no
 (challenge 14, now shown as `best_trade_dependence`). The platform does not cap per-trade returns anywhere in a result; it shows the
 raw total, so one outlier can carry a lane.
 Still unread: `scheduled_scan_loop`, `exit_decisions.py`, `daily_review.py`.
+
+## Added 2026-11-14 (alerter `1fc88f1`, run 8): `exit_decisions.py`
+
+Code only, tests not run. A held contract is evaluated only if its exact candidate appears in the latest chain refresh and is a real
+(`yfinance`) quote; otherwise the result is `UNOBSERVABLE`, never HOLD or a fill. The quote must be between 120 s in the future and 1800 s
+old. The paper exit price is the bid minus a modeled concession: base slippage plus a liquidity penalty from spread over 15%, quantity
+against volume and against open interest, total capped at 40%, labelled `BID_MINUS_MODELED_LIQUIDITY_CONCESSION_NOT_EXECUTABLE`. Hard
+stop, target and max-hold rules take precedence; a model or shadow-rule EXIT never sells unless the mode is `model`, `auto_manage_exits`
+is on and the US session is open. A local-model recommendation is only accepted from a loopback endpoint, and invalid output becomes
+`UNAVAILABLE`, not HOLD. Platform contrast: the platform tags a stale exit quote after the fact (60 s bound); it did not show how much of a
+lane's P&L rests on such exits (challenge 8, now `exit_freshness`). Its stress concession is not capped at 40%, a difference left as is.
+Still unread: `scheduled_scan_loop`, `daily_review.py`.

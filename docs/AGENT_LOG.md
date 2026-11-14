@@ -554,3 +554,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   budget, default or auth changed, nothing is capped or gated.
 * Verified: `python -m pytest -q` 533 passed (3 new); `node --check` on app.js. Not verified: alerter tests, live data, the dashboard in a
   browser. Builds on `agent/2026-11-14-challenger-e` (`main` is stale). No PR opened (not requested).
+
+## 2026-11-14 (run 8): exit-quote freshness of realized P&L
+
+* Alerter unchanged since `1fc88f1`. Read `exit_decisions.py` (see COMPARISON_ALERTER.md).
+* Challenge 8 follow-up: lane summaries gain `exit_freshness` (closed option P&L on a fresh, verified exit quote versus everything else,
+  where stale, unverified, unknown and pre-field closes all count as not fresh) and the options-lane Realized figure says so. Display only; no
+  lane, limit, budget, default or auth changed. Closed trades now also expose `exit_quote_age_s` and `exit_quote_verified`.
+* Verified: `python -m pytest -q` 535 passed (2 new), `node --check` on app.js. Not verified: alerter tests, live data, the dashboard in a
+  browser, share lanes. Builds on `agent/2026-11-14-challenger-f` (`main` is stale). No PR opened (not requested).
