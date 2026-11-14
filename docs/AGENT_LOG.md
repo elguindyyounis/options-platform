@@ -469,3 +469,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Branch cut from `agent/integration` (main lacks the challenge docs). Alerter only changed CI since last review.
 * Challenge: platform marked open trades at any valid bid, even hours old or 60% wide. Added `marks.py` (30 min age, 35% spread, as the alerter does); `/api/trades` and the report show `mark_quality` and treat other quotes as unobservable. Display only; tightening only.
 * Verified: `python -m pytest -q` passes (505 tests, 7 new). Not verified: alerter tests, live data, effect on the owner's real DB.
+
+## 2026-11-14: challenger-i, signal provenance doc
+
+* Branch cut from `agent/2026-11-14-challenger-h` (main lacks the challenge docs; sibling challenger branches are unmerged and each starts from `agent/integration`, so work may overlap).
+* Alerter unchanged since `1fc88f1`. Read `research_foundations.py` and `data_sources.py`.
+* Challenge: platform labels (`likely_side`, `position_read`, `flow_lean`, cause tags) had no written statement of status or caveat. Added `docs/SIGNALS.md` and `tests/test_signal_provenance.py` (4 tests) so the doc cannot drift from `SIGNAL_NAMES`, `VALIDATED_SIGNALS` or `postmortem.CAUSES`. Docs and test only; no behaviour, limit or default changed.
+* Verified: full test suite passes. Not verified: alerter tests, live data, whether other unmerged branches already cover related items.

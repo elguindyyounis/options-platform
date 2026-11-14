@@ -20,7 +20,7 @@ The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 | 2 | Display-only modeled net GEX per scanned name, with the assumption stated | Alerter has it; platform lacks any positioning context | Open |
 | 3 | Add a frozen-baseline lane that never changes, to compare the others against | Lanes are only compared with each other | Done 2026-11-13 (`frozen-baseline-options`, pinned by a fingerprint test). Comparing the lanes against it still needs enough trades |
 | 4 | Make lane P&L itself use the stressed exit alongside the bid exit (show both) | Headline results are optimistic for large sizes | Open |
-| 5 | Add a signal provenance doc listing each signal, where it came from and its validation status | Alerter's `research_foundations.py` does this; platform does not | Open |
+| 5 | Add a signal provenance doc listing each signal, where it came from and its validation status | Alerter's `research_foundations.py` does this; platform does not | Done 2026-11-14 ([SIGNALS.md](SIGNALS.md), with a drift test that fails if a signal or cause tag is undocumented or its status disagrees with `VALIDATED_SIGNALS`) |
 | 7 | **Open positions were marked at any valid bid.** The alerter refuses a mark on a quote over 30 min old or a spread over 35%. | A stale or very wide bid made open P&L look like a number it was not | Done 2026-11-14 (`marks.py`, used by the trades table and the report; tightening only, display only) |
 | 6 | Check whether stacking helps: compare stacked and first entries from the digest once there are enough trades | Owner asked for stacking as an experiment; nothing yet says whether it pays | Waiting for trades |
 
@@ -28,5 +28,6 @@ The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 
 | Date | Alerter commit | What was compared | What changed | What was not verified |
 | --- | --- | --- | --- | --- |
+| 2026-11-14 (b) | `1fc88f1` | Alerter unchanged since last review. Read `research_foundations.py` signal table in full and `data_sources.py` (`option_rows`: drops quotes with bid>ask, nulls IV outside 0 to 10, marks `exchange_quote_time_verified: False`, `trade_level_flow: False`, `is_demo` per row) | `docs/SIGNALS.md` provenance doc plus `tests/test_signal_provenance.py` | Alerter tests not run; `agents.py`, `core.py`, `server.py` still unread; live data; sibling `agent/2026-11-14-*` branches are not merged into this one, so overlapping items (lane stress P&L, GEX display, fill tags, sample gates) may already exist elsewhere |
 | 2026-11-14 | `1fc88f1` | Alerter changed CI only. Read `storage.py` (mark and fill rules) | Open-position marks now need a quote under 30 min old and a spread of at most 35% (`marks.py`) | Alerter tests not run; `agents.py`, `core.py` (partly), `server.py`, `data_sources.py` still not fully read; live data; this branch was cut from `agent/integration` because `main` lacks these docs |
 | 2026-11-12 | `9210fd8` | First full comparison | Ported liquidity tiers and exit stress into post-mortems | Alerter tests not run; several alerter modules not read; live Yahoo data |

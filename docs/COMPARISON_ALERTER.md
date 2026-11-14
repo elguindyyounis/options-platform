@@ -65,3 +65,9 @@ These are challenges raised by reading the alerter. None is proven.
 * Alerter fills Yahoo entries at ask plus a configurable slippage (default 0.5%, capped at 3%) and re-validates the fill price at order time. The platform's SimBroker fills at the limit; not changed here, it is a fill-model question for the owner.
 * Alerter pauses new entries if any held option's quote is stale or too wide. Platform does not; noted, not changed (it would alter trading behaviour).
 * Alerter commits since last review (`1fc88f1`) are CI and preflight scripts only.
+
+## Update 2026-11-14 (b): `research_foundations.py` and `data_sources.py`
+
+* Alerter keeps a machine-readable signal list with origin, validation status and caveat, and says its scoring weights are developer hypotheses. The platform now has the same as `SIGNALS.md`, checked against the code by a test. The platform's list is shorter and every entry is UNVALIDATED.
+* `data_sources.option_rows` drops quotes with bid above ask, nulls implied volatility outside 0 to 10 instead of guessing, and tags each row `is_demo`, `exchange_quote_time_verified: False` and `trade_level_flow: False`. The platform's data-quality gate covers similar ground; the per-row `is_demo` flag in stored data is still open (see challenge list on other branches).
+* Alerter commits since `1fc88f1`: none.

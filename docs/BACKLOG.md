@@ -163,3 +163,4 @@ Existing items, in order:
   an FOMC decision tomorrow weigh against; the skeptic now reports which calendar gaps remain.
 * Scanner and trade ledger: `scanner.py` (most-active names, unusual option activity, fixed universe),
   `trades.py` (entries matched to exits with reasoning), `/api/scan`, `/api/trades`.
+* Signal provenance doc `docs/SIGNALS.md` with a drift test (2026-11-14, challenger-i).
