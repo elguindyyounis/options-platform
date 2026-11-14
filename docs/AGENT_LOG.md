@@ -23,3 +23,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: daily challenger, exit-friction stress (agent run)
+
+* Compared alerter `liquidity.py`/`paper_engine.py`/`risk.py` with the platform. Alerter stresses exits by spread and size; platform used flat slippage only.
+* Added `src/optplat/stress.py` and `tests/test_stress.py` (pure, display-only, fail-closed). Nothing trades with it; no limits, defaults or lane sizes changed.
+* Verified: `python -m pytest -q` 149 passed. Created `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md` (they did not exist).
+* Not verified: that the concession constants (copied from the alerter, themselves untrained assumptions) resemble real exits; no real data; owner database not visible. Not wired into API/dashboard yet. No edge claimed.

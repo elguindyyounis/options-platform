@@ -37,12 +37,15 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Show exit stress per open position in the dashboard (display-only).
+* Shadow-exit comparator (see docs/CHALLENGES.md #3).
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
 
+* `optplat/stress.py` exit-friction scenarios (research only, 2026-11-14, branch agent/2026-11-14-exit-stress). Follow-up: surface it on positions in the API/dashboard.
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market
