@@ -581,6 +581,28 @@ class OptionLane:
 
 
 # ------------------------------------------------------------ all five together
+def lane_selection(lanes: Sequence[dict[str, Any]], min_trades: int = 30) -> dict[str, Any]:
+    """Display-only caveat for reading a league table of lanes: the top lane of N is the luckiest of N as much as the best.
+
+    Counts how many lanes have enough closed trades to be read at all, names the current leader by average return only
+    among those, and says plainly when nobody qualifies. It never ranks a lane on fewer than ``min_trades`` closed trades
+    and changes nothing a lane trades. ``lanes`` are lane reports (``lane``, ``summary``).
+    """
+    rows = [(l.get("lane"), l.get("summary") or {}) for l in lanes]
+    n = len(rows)
+    eligible = [(name, sm) for name, sm in rows if (sm.get("closed") or 0) >= min_trades and sm.get("avg_return_pct") is not None]
+    leader = max(eligible, key=lambda r: r[1]["avg_return_pct"])[0] if eligible else None
+    frozen = next((sm for name, sm in rows if name == FROZEN_BASELINE.lane), {})
+    if not eligible:
+        note = (f"{n} lanes are being compared and none has {min_trades} closed trades, so no lane is ranked. Whichever looks best "
+                "right now is mostly luck: the more lanes, the likelier one looks good by chance.")
+    else:
+        note = (f"{len(eligible)} of {n} lanes have {min_trades}+ closed trades. Even the leader is the best of several tries, so its "
+                "lead needs to hold on trades it has not yet seen; none of this shows an edge.")
+    return {"lanes_compared": n, "lanes_with_enough_trades": len(eligible), "min_trades": min_trades, "leader": leader,
+            "frozen_baseline_closed": frozen.get("closed") or 0, "frozen_baseline_ready": (frozen.get("closed") or 0) >= min_trades, "note": note}
+
+
 class OptionLanes:
     def __init__(self, provider: MarketDataProvider, store: Store, *, clock: Callable[[], datetime] = utcnow,
                  calendar: Optional[EventCalendar] = None) -> None:
@@ -610,4 +632,4 @@ class OptionLanes:
                                      "stop_pct": p.stop_pct, "target_pct": p.target_pct, "both_ways": p.both_ways}})
             closed_all += self.store.lane_trades(p.lane, fict, 500)
         closed = [t for t in closed_all if t["closed_at"] is not None]
-        return {"fictional": fict, "as_of": now.isoformat(), "lanes": lanes, "digest": digest(closed)}
+        return {"fictional": fict, "as_of": now.isoformat(), "lanes": lanes, "selection": lane_selection(lanes), "digest": digest(closed)}

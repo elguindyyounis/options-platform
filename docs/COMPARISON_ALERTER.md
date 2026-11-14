@@ -124,4 +124,4 @@ version better). Only the one-line role goal differs. The alerter's `entry-strat
 assumptions; the platform already prices entries at the ask and exits at the bid.
 
 * A weakness found on the platform side: lane summaries summed `unrealized_pnl` with an unmarked open trade counted as 0. Fixed as a count.
-* Still unread: the HTTP handlers and `scheduled_scan_loop` in `server.py`, and the `market-sentiment`, `news-flow` and `portfolio-cio` skill files.
+* Read 2026-11-14 (run 4): `portfolio-cio`, `news-flow`, `market-sentiment` skills are the same template. Still unread: the HTTP handlers and `scheduled_scan_loop` in `server.py`.

@@ -517,3 +517,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Verified: `python -m pytest -q` 521 passed (3 new), `node --check` on app.js. Not verified: rendering in a browser, share lanes,
   alerter tests, live data. Base: `main` is stale (no challenge docs), so this builds on `agent/2026-11-14-challenger-b`; the
   counterfactual-journal branch (challenge 1) is still not in that line. No PR opened (not requested).
+
+## 2026-11-14 (challenger, fourth run): many lanes, one leader
+
+* Alerter unchanged since `1fc88f1`. Read the last three skill files (templates; nothing new beyond the no-override and held-out-comparison rules).
+* Challenge 10: `lane_selection` adds a `selection` block to the options-lane report and a note under the comparison table. It names a leader only among lanes with 30+ closed
+  trades, says when none qualifies, and states that none of it shows an edge. Display only: no lane rule, limit, budget, default or auth changed; frozen fingerprint untouched.
+* Verified: `python -m pytest -q` 525 passed (4 new), `node --check` on app.js. Not verified: rendering in a browser, alerter tests, live data. Builds on
+  `agent/2026-11-14-challenge-c` because `main` is stale. No PR opened (not requested).

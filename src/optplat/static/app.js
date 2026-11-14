@@ -851,6 +851,7 @@
       { label: "Realized", right: true, get: (r) => span(arrow(r.s.realized_pnl) + sgn(r.s.realized_pnl), tone(r.s.realized_pnl)) },
       { label: "Open now", right: true, get: (r) => r.s.unrealized_pnl === undefined ? "n/a" : span(arrow(r.s.unrealized_pnl) + sgn(r.s.unrealized_pnl), tone(r.s.unrealized_pnl)) },
     ], rows, "No lanes");
+    $("op-selection-note").textContent = d.selection ? d.selection.note : "";
     chips($("op-tabs"), lanes.map((l) => ({ id: l.lane, label: l.label })), S.optLane, (id) => { S.optLane = id; renderOptions(); }, "tab");
     const lane = lanes.find((l) => l.lane === S.optLane) || lanes[0], sm = lane.summary;
     $("op-why").textContent = lane.why + " Up to $" + num(lane.params.budget_usd) + " of premium per trade, " + lane.params.dte[0] + " to " + lane.params.dte[1] + " days to expiry, at most " + lane.params.max_open + " open.";

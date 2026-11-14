@@ -167,7 +167,7 @@ def test_research_lane_pages_have_every_element_the_shared_renderer_writes(clien
 def test_options_page_and_market_additions_have_every_element_the_script_writes(client):
     html = client[0].get("/").text
     js = client[0].get("/static/app.js").text
-    for ident in ("op-lede", "op-status", "op-compare", "op-tabs", "op-why", "op-summary", "op-trades", "op-digest", "op-digest-note", "op-rules",
+    for ident in ("op-lede", "op-status", "op-compare", "op-selection-note", "op-tabs", "op-why", "op-summary", "op-trades", "op-digest", "op-digest-note", "op-rules",
                   "op-limits", "btn-op-step", "scan-sentiment", "scan-heat", "scan-heat-panel", "scan-follow", "scan-follow-panel", "cfg-optlanes"):
         assert f'id="{ident}"' in html, ident
     assert "/api/optlanes" in js and "option_lanes_enabled" in js and "postmortem" in js

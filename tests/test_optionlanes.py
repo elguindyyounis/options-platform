@@ -583,3 +583,32 @@ def test_stale_tag_fails_closed_on_unknown_age_and_stays_silent_when_the_field_p
     assert "STALE_EXIT_QUOTE" in post_mortem(t, 6.0, "target", closed, {"exit_quote_age_s": -61.0})["tags"]
     assert "STALE_EXIT_QUOTE" not in post_mortem(t, 6.0, "target", closed, {"exit_quote_age_s": 60.0})["tags"]
     assert "STALE_EXIT_QUOTE" not in post_mortem(t, 6.0, "target", closed, {})["tags"]
+
+
+def _lane(name, closed, avg):
+    return {"lane": name, "summary": {"closed": closed, "avg_return_pct": avg}}
+
+
+def test_lane_selection_ranks_nobody_below_the_minimum_sample():
+    sel = ol.lane_selection([_lane("a", 29, 400.0), _lane("b", 3, 90.0), _lane(ol.FROZEN_BASELINE.lane, 2, -5.0)])
+    assert sel["leader"] is None and sel["lanes_with_enough_trades"] == 0 and sel["lanes_compared"] == 3
+    assert "none has 30 closed trades" in sel["note"] and "luck" in sel["note"]
+    assert sel["frozen_baseline_ready"] is False and sel["frozen_baseline_closed"] == 2
+
+
+def test_lane_selection_names_a_leader_only_among_lanes_with_enough_trades_and_claims_no_edge():
+    sel = ol.lane_selection([_lane("a", 40, 5.0), _lane("b", 31, 12.0), _lane("c", 5, 900.0), _lane(ol.FROZEN_BASELINE.lane, 30, 1.0)])
+    assert sel["leader"] == "b" and sel["lanes_with_enough_trades"] == 3 and sel["frozen_baseline_ready"] is True
+    assert "none of this shows an edge" in sel["note"]
+
+
+def test_lane_selection_tolerates_empty_and_missing_summaries():
+    assert ol.lane_selection([])["leader"] is None
+    assert ol.lane_selection([{"lane": "x"}, {"lane": "y", "summary": {"closed": None, "avg_return_pct": None}}])["leader"] is None
+
+
+def test_the_options_report_carries_the_selection_caveat():
+    store = Store(":memory:")
+    lanes = ol.OptionLanes(OptFeed(lambda: NOW), store, clock=lambda: NOW)
+    rep = lanes.reports(NOW)
+    assert rep["selection"]["lanes_compared"] == len(ol.ALL_PARAMS) and rep["selection"]["leader"] is None
