@@ -539,3 +539,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   The old flip is a weak summary; do not read anything into it.
 * Verified: 555 tests pass (3 new). Ran against the Mac database snapshots (read-only copy). Not verified: any predictive value.
   Only ~3 trading days of snapshots exist. Nothing uses GEX in a decision; `VALIDATED_SIGNALS` is still empty.
+
+## 2026-11-14: signal provenance doc (daily challenger, branch `agent/2026-11-14-challenger-l`)
+
+* Based on `origin/agent/integration` (560 tests passing), because `main` is far behind the accumulated agent branches.
+* Alerter: 9 commits since `9210fd8` (now `48ccf71`): trailing-exit shadow research, GEX confluence policy, sector rotation, goal sprint,
+  trade confluence. Read the two research docs, the signal list in `research_foundations.py` and the head of `goal_sprint.py`; notes in `COMPARISON_ALERTER.md`.
+* Changed: `docs/SIGNALS.md` (origin and validation status of every signal, lane and committee agent; none validated) and `tests/test_signal_docs.py`
+  (fails when code adds a signal, lane or agent without a row, or if `VALIDATED_SIGNALS` becomes non-empty without the doc being revisited).
+* Verified: 564 tests pass. No behaviour, risk limit, lane size or default changed.
+* Not verified: alerter tests; the alerter diffs for `server.py`, `sector_rotation.py`, `trade_confluence.py`, `technical_confluence.py`; per-signal literature references were not added.
+* Note for the owner: the last test deliberately fails when you add to `VALIDATED_SIGNALS`; update `SIGNALS.md` and that test in the same change.

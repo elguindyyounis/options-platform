@@ -91,3 +91,18 @@ These are challenges raised by reading the alerter. None is proven.
   the same kind of guess and are labelled as inferences.
 * **Refuses biased GEX.** Over the row cap, or with missing call/put sides, the scan declines to publish a partial net exposure.
 * **Still not read:** `server.py`, other skill files, the alerter's tests.
+
+## Addendum 2026-11-14: alerter moved to `48ccf71`
+
+* **Trailing exit is shadow-first and states its own limits.** `EXIT_STRATEGY_RESEARCH.md`: default-disabled toggle, arm at +25%,
+  give back 15%, thresholds called "hypotheses, not optimized", the same snapshots compared against 10/15/25% giveback rules, fixed
+  stop/target/hold always win, and peaks between scans are admitted to be unobservable. The platform's lanes also only see
+  quotes at scan times, so any trailing idea here has the same blind spot. Its exit value is bid minus modeled friction, which is
+  the honest direction the platform's stressed exit already points.
+* **GEX policy refuses to infer direction.** A price cross of a modeled gamma concentration is labelled a reference cross, not a
+  signal; entry-time GEX is frozen and never reused retroactively; unvalidated diagnostic thresholds (2%, 1%, 90 minutes) are named as such.
+  The platform's GEX display (2026-11-14) takes the same stance.
+* **Goal sprint** (`goal_sprint.py`) pins a frozen baseline policy beside two shadow policies and caps experimental premium, with
+  `automatic_execution_authorized: False`. Same shape as the platform's frozen baseline lane.
+* **Signal provenance:** `research_foundations.py` lists each signal with origin and validation. The platform now has the same in `docs/SIGNALS.md`.
+* **Still not read:** `server.py`, `sector_rotation.py`, `trade_confluence.py`, `technical_confluence.py`, the alerter's tests.
