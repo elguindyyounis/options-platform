@@ -312,6 +312,46 @@
     ], eq.points.slice().reverse().slice(0, 200), "No equity points yet");
   }
 
+  // Every account and lane on the front page, so results do not hide behind the other pages. Each row is one ledger;
+  // lanes are research with their own sizing and simulated fills, so the total is simulated dollars, not an account balance.
+  function renderAccounts(data) {
+    const host = $("all-accounts"), note = $("all-accounts-note");
+    if (!data) { empty(host, "Could not load the lanes", "Trades from every lane appear here once the page can reach /api/alltrades."); note.textContent = ""; return; }
+    const kind = (x) => (x.source === "main" ? "Options account" : x.source === "challenge-10x" ? "10x challenge" : x.instrument === "options" ? "Options lane" : "Shares lane");
+    const sources = data.sources.slice();
+    // The paper account always has a row, even before it has taken a trade.
+    if (!sources.some((x) => x.source === "main")) sources.push({ source: "main", label: "Options account", instrument: "options", total: 0, open: 0, closed: 0, wins: 0, win_rate_pct: null, realized_pnl: 0, open_pnl: 0 });
+    const rows = sources.sort((a, b) => (a.source === "main" ? -1 : b.source === "main" ? 1 : b.realized_pnl - a.realized_pnl));
+    const all = data.summary.all;
+    const goTo = (src) => { S.source = src; S.kind = "all"; S.filter = "all"; S.shown = 100; location.hash = "#/trades"; };
+    rows.push({ source: "", label: "All together", total: all.total, open: all.open, closed: all.closed, wins: all.wins, win_rate_pct: all.win_rate_pct, realized_pnl: all.realized_pnl, open_pnl: all.open_pnl, instrument: "", total_row: true });
+    if (phone.matches) {
+      // Phones: one compact block per account instead of a table that would scroll sideways.
+      host.replaceChildren();
+      rows.forEach((r) => {
+        const box = el("div", null, "acct"), top = el("div", null, "acct-top");
+        if (r.total_row) top.appendChild(el("b", r.label));
+        else { const b = el("button", r.label, "linkbtn"); b.type = "button"; b.style.marginTop = "0"; b.addEventListener("click", () => goTo(r.source)); top.appendChild(b); top.appendChild(el("span", kind(r), "muted")); }
+        const nums = el("div", null, "acct-nums num");
+        kids(nums, [span("Realized " + arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)), span("Open " + arrow(r.open_pnl) + sgn(r.open_pnl), tone(r.open_pnl))]);
+        kids(box, [top, nums, el("div", r.open + " open, " + r.closed + " closed" + (r.win_rate_pct === null ? "" : ", " + r.win_rate_pct + "% winners"), "muted")]);
+        host.appendChild(box);
+      });
+      note.textContent = "Realized is after fees; open is marked at the bid. Lanes are experiments with their own sizes, so the total adds simulated dollars and is not an account balance." + (data.fictional ? " Fictional demo data." : "");
+      return;
+    }
+    table(host, [
+      { label: "Account or lane", get: (r) => { if (r.total_row) return el("b", r.label); const b = el("button", r.label, "linkbtn"); b.type = "button"; b.style.marginTop = "0";
+        b.addEventListener("click", () => goTo(r.source)); return b; } },
+      { label: "Kind", get: (r) => (r.total_row ? "" : kind(r)) },
+      { label: "Realized", right: true, get: (r) => span(arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)) },
+      { label: "Open now", right: true, get: (r) => span(arrow(r.open_pnl) + sgn(r.open_pnl), tone(r.open_pnl)) },
+      { label: "Trades", right: true, get: (r) => r.open + " open, " + r.closed + " closed" },
+      { label: "Winners", right: true, get: (r) => (r.win_rate_pct === null ? "n/a" : r.win_rate_pct + "%") },
+    ], rows, "No lanes yet");
+    note.textContent = "Realized is after fees on closed trades; open is marked at the bid. The options account is the only one that trades the paper broker. Lanes and the challenge are experiments with their own sizes and simulated fills, so the total adds simulated dollars and is not an account balance." + (data.fictional ? " Fictional demo data." : "") + " Small samples prove nothing.";
+  }
+
   // An OCC symbol (padded or not) -> days to expiry. Anything unparseable is shown as unknown, never guessed.
   function dteOf(contract, now) {
     const p = occParts(contract);
@@ -522,6 +562,7 @@
       sel.replaceChildren();
       const first = el("option", "All accounts and lanes"); first.value = "all"; sel.appendChild(first);
       data.sources.forEach((x) => { const o = el("option", x.label + " (" + x.total + ")"); o.value = x.source; sel.appendChild(o); });
+      if (!data.sources.some((x) => x.source === "main")) { const o = el("option", "Options account (0)"); o.value = "main"; sel.insertBefore(o, sel.children[1]); }
       sel.dataset.ready = "1"; sel.dataset.n = String(data.sources.length);
     }
     sel.value = S.source;
@@ -1258,16 +1299,18 @@
   async function refresh() {
     if (!token) { S.connected = false; showPage(); return; }
     try {
-      const [health, status, portfolio, orders, report, decisions, eq] = await Promise.all([
+      const [health, status, portfolio, orders, report, decisions, eq, allTrades] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         api("/api/engine/status"), api("/api/portfolio"), api("/api/paper/orders"), api("/api/report"),
-        api("/api/journal?limit=15"), api("/api/equity"),
+        api("/api/journal?limit=15"), api("/api/equity"), api("/api/alltrades").catch(() => null),
       ]);
       S.connected = true; S.core = { status, report };
+      if (allTrades) S.trades = allTrades;
       showPage();
       renderStrip(health, status, portfolio);
       renderTrust(status);
       renderDesk(portfolio, report, eq, status);
+      renderAccounts(allTrades);
       renderPositions(report, status.config);
       renderDecisions(decisions);
       renderOrders(orders);

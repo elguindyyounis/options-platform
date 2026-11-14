@@ -97,6 +97,9 @@
 
 
   /* desk */
+  .acct { padding:11px 0; border-bottom:1px solid var(--line-soft); display:grid; gap:3px; } .acct:last-child { border-bottom:none; }
+  .acct-top { display:flex; justify-content:space-between; gap:10px; align-items:baseline; } .acct-nums { display:flex; gap:18px; flex-wrap:wrap; font-weight:600; }
+  #view-desk > * { min-width:0; }
   .hero { padding:22px 24px 16px; display:grid; gap:14px; }
   .hero-top { display:flex; flex-wrap:wrap; gap:18px 44px; align-items:flex-end; justify-content:space-between; }
   .hero-label { color:var(--mut); font-size:13px; }
@@ -289,6 +292,12 @@
             <p id="desk-sub" class="muted" style="margin-top:8px"></p>
             <p id="sample" class="muted"></p>
           </details>
+        </div>
+        <div>
+          <h2 class="sect">All accounts and lanes</h2>
+          <p class="q">The paper account and every research lane side by side. Choose a name to see its trades.</p>
+          <div class="panel" style="padding:6px 16px 10px;min-width:0;overflow:hidden"><div class="scroll" id="all-accounts"></div></div>
+          <p class="muted" id="all-accounts-note" style="margin-top:8px"></p>
         </div>
         <div>
           <h2 class="sect">Open positions</h2>

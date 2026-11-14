@@ -46,7 +46,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   nothing is saved until Save settings. The 20-name cap, risk limits and defaults (SPY, QQQ) are unchanged.
 * `learning.py` and the Research page: older half against newer half of closed trades (no verdict under 20 each), lessons labelled
   pattern, anecdote or lead, agent weights, a timeline. `GET /api/learning`.
+* Owner asked for restart-on-update. `watch.sh` follows the current branch (fast-forward only, refuses with local edits or local commits,
+  never touches main unless you are on it), restarts the platform and keeps one dashboard token in `.venv/.optplat_token` (mode 600) so
+  the open page stays connected. `run.sh` now lets `OPTPLAT_OPEN_BROWSER` be overridden so restarts do not open new tabs. 4 tests use
+  throwaway git repos and a fake run command. Not verified on macOS or with the real `./run.sh`. Trade-off: pushed code runs unreviewed.
 * Desk redesigned: large account value, open positions as cards with a stop-to-target ladder, a decisions feed.
+* Owner follow-up: the Desk now has an "All accounts and lanes" block (options account, every option lane, the 10x challenge, both share lanes,
+  and a total) so lane results are visible on the front page. It reuses `/api/alltrades`; no new backend. The total adds simulated dollars from
+  lanes with different sizes and is labelled as not an account balance. Checked in headless Chromium on demo data at desktop and phone width.
 * 537 tests pass. Checked in headless Chromium on fictional demo data only (dark, phone width, every page, no script errors).
   I updated one existing test, the nav list, because a Tracker page was added; no test was weakened or removed.
 * Not verified: any of this on the owner's Mac or live Yahoo data; the tracker and rotation need several real trading days to
