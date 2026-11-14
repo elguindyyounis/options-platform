@@ -148,3 +148,13 @@ def test_an_exit_with_the_same_timestamp_as_its_entry_is_still_matched():
         from optplat.trades import build_trades
 
         assert build_trades(manager)["trades"][0]["status"] == "CLOSED"
+
+
+def test_a_wide_spread_quote_leaves_the_trade_unobservable_with_a_reason(client):
+    quote(client)
+    order(client, "buy-0009-aa", 2)
+    quote(client, 0.80, 2.00)  # 60% spread: not a bid anyone could sell into
+    body = trades(client)
+    t = body["trades"][0]
+    assert t["mark"] is None and t["pnl"] is None and t["mark_quality"] == "WIDE_SPREAD"
+    assert body["summary"]["unobservable_open"] == 1

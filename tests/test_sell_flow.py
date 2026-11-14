@@ -157,3 +157,15 @@ def test_side_survives_persistence(env):
     manager, _, _ = env
     order = manager.submit(sell())
     assert manager.get(order.id).intent.side is Side.SELL_TO_CLOSE
+
+
+def test_report_does_not_mark_a_stale_or_wide_quote(env):
+    manager, broker, clock = env
+    manager.submit(make_intent())
+    broker.set_quote(make_quote(1.00, 2.60))  # 62% spread
+    row = manager.report()["open"][0]
+    assert row["mark"] is None and row["unrealized_pnl"] is None and row["mark_quality"] == "WIDE_SPREAD"
+    broker.set_quote(make_quote(2.51, 2.60))
+    clock.now = clock.now + timedelta(hours=1)
+    row = manager.report()["open"][0]
+    assert row["mark"] is None and row["mark_quality"] == "STALE"

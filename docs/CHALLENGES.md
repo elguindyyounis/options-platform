@@ -6,7 +6,7 @@ never touches `main`, and never changes risk limits, lane budgets, defaults or a
 
 The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 
-**Last alerter commit reviewed:** `9210fd8`  (update this line each run)
+**Last alerter commit reviewed:** `1fc88f1`  (update this line each run)
 
 ## Open challenges (oldest first; the agent picks one per run)
 
@@ -21,10 +21,12 @@ The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 | 3 | Add a frozen-baseline lane that never changes, to compare the others against | Lanes are only compared with each other | Done 2026-11-13 (`frozen-baseline-options`, pinned by a fingerprint test). Comparing the lanes against it still needs enough trades |
 | 4 | Make lane P&L itself use the stressed exit alongside the bid exit (show both) | Headline results are optimistic for large sizes | Open |
 | 5 | Add a signal provenance doc listing each signal, where it came from and its validation status | Alerter's `research_foundations.py` does this; platform does not | Open |
+| 7 | **Open positions were marked at any valid bid.** The alerter refuses a mark on a quote over 30 min old or a spread over 35%. | A stale or very wide bid made open P&L look like a number it was not | Done 2026-11-14 (`marks.py`, used by the trades table and the report; tightening only, display only) |
 | 6 | Check whether stacking helps: compare stacked and first entries from the digest once there are enough trades | Owner asked for stacking as an experiment; nothing yet says whether it pays | Waiting for trades |
 
 ## Run log (newest first)
 
 | Date | Alerter commit | What was compared | What changed | What was not verified |
 | --- | --- | --- | --- | --- |
+| 2026-11-14 | `1fc88f1` | Alerter changed CI only. Read `storage.py` (mark and fill rules) | Open-position marks now need a quote under 30 min old and a spread of at most 35% (`marks.py`) | Alerter tests not run; `agents.py`, `core.py` (partly), `server.py`, `data_sources.py` still not fully read; live data; this branch was cut from `agent/integration` because `main` lacks these docs |
 | 2026-11-12 | `9210fd8` | First full comparison | Ported liquidity tiers and exit stress into post-mortems | Alerter tests not run; several alerter modules not read; live Yahoo data |

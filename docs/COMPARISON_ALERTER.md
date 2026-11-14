@@ -58,3 +58,10 @@ These are challenges raised by reading the alerter. None is proven.
 * **Strict entry gates.** Applying them would shrink the experiments the owner asked for. The post-mortem tags show what
   they would have caught.
 * **Anything about the alerter's council, sizing or goal tracker.** Not read closely enough to judge.
+
+## Update 2026-11-14: `storage.py` mark and fill rules
+
+* Alerter marks an open position only on a bid from a quote at most 30 min old (2 min future tolerance) whose spread is at most 35% of the ask. Wide-spread, stale, invalid and failed-refresh quotes give no mark and the position counts as unknown premium. The platform used to accept any valid bid; it now follows the same limits (`marks.py`).
+* Alerter fills Yahoo entries at ask plus a configurable slippage (default 0.5%, capped at 3%) and re-validates the fill price at order time. The platform's SimBroker fills at the limit; not changed here, it is a fill-model question for the owner.
+* Alerter pauses new entries if any held option's quote is stale or too wide. Platform does not; noted, not changed (it would alter trading behaviour).
+* Alerter commits since last review (`1fc88f1`) are CI and preflight scripts only.

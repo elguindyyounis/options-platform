@@ -257,12 +257,14 @@ class OrderManager:
                 "mark_quality": "UNOBSERVABLE",
             }
             try:
-                q = self.broker.get_quote(p.contract)
-                if q.is_valid() and q.bid > 0:
+                from .marks import mark_from_quote
+
+                mark, quality = mark_from_quote(self.broker.get_quote(p.contract), self.clock())
+                row["mark_quality"] = quality
+                if mark is not None:
                     row.update(
-                        mark=q.bid,
-                        unrealized_pnl=round((q.bid - p.avg_cost) * p.quantity * p.contract.multiplier, 2),
-                        mark_quality="BID",
+                        mark=mark,
+                        unrealized_pnl=round((mark - p.avg_cost) * p.quantity * p.contract.multiplier, 2),
                     )
             except Exception:  # noqa: BLE001 - an unobservable mark is reported, never guessed
                 pass

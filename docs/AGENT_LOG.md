@@ -463,3 +463,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: challenger-h, stricter open-position marks
+
+* Branch cut from `agent/integration` (main lacks the challenge docs). Alerter only changed CI since last review.
+* Challenge: platform marked open trades at any valid bid, even hours old or 60% wide. Added `marks.py` (30 min age, 35% spread, as the alerter does); `/api/trades` and the report show `mark_quality` and treat other quotes as unobservable. Display only; tightening only.
+* Verified: `python -m pytest -q` passes (506 tests, 8 new). Not verified: alerter tests, live data, effect on the owner's real DB.

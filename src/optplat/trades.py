@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from .models import Order, OrderState, Side
+from .marks import mark_from_quote
 from .orders import OrderManager
 
 FILLED_STATES = (OrderState.FILLED, OrderState.PARTIALLY_FILLED)
@@ -73,14 +74,12 @@ def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
         qty, done, mult, entry = t["quantity"], t["exited_qty"], t["multiplier"], t["entry_price"]
         rem = qty - done
         realized = round(t["exit_value"] * mult - entry * done * mult, 2)
-        mark = None
+        mark, mark_quality = None, None
         if rem > 0:
             try:
-                q = manager.broker.get_quote(contract)
-                if q.is_valid() and q.bid > 0:
-                    mark = q.bid
+                mark, mark_quality = mark_from_quote(manager.broker.get_quote(contract), manager.clock())
             except Exception:  # noqa: BLE001 - unobservable is reported, not guessed
-                mark = None
+                mark, mark_quality = None, "UNOBSERVABLE"
         unrealized = round((mark - entry) * rem * mult, 2) if mark is not None else None
         cost = entry * qty * mult
         total = None if (rem > 0 and unrealized is None) else round(realized + (unrealized or 0.0), 2)
@@ -91,7 +90,7 @@ def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
         committee = _committee_for(committee_index, t["contract"], entry_order.updated_at)
         held_to = datetime.fromisoformat(last_exit["time"]) if (last_exit and rem == 0) else None
         t.update({
-            "status": status, "remaining": rem, "mark": mark, "realized_pnl": realized, "unrealized_pnl": unrealized,
+            "status": status, "remaining": rem, "mark": mark, "mark_quality": mark_quality, "realized_pnl": realized, "unrealized_pnl": unrealized,
             "pnl": total, "pnl_pct": None if total is None or cost <= 0 else round(total / cost * 100, 2),
             "exit_price": round(t["exit_value"] / done, 4) if done else None,
             "exit_time": last_exit["time"] if last_exit else None,
