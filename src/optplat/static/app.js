@@ -69,7 +69,10 @@
       const a = portfolio.account;
       $("account").textContent = "Equity " + money(a.equity) + "  |  Cash " + money(a.cash) + "  |  Open premium " + money(a.open_premium);
       $("report").textContent = report.closed_trades + " closed trades, realized " + money(report.realized_pnl) +
-        (report.win_rate_pct === null ? "" : ", win rate " + report.win_rate_pct + "%") + ". " + report.caveat;
+        (report.win_rate_pct === null ? "" : ", win rate " + report.win_rate_pct + "%" +
+          (report.evidence && report.evidence.win_rate_95ci_pct ? " (95% range " + report.evidence.win_rate_95ci_pct[0] + "-" + report.evidence.win_rate_95ci_pct[1] + "%)" : "")) +
+        (report.evidence && report.evidence.status === "SAMPLE_TOO_SMALL" ? " [sample too small: under " + report.evidence.min_trades + " trades, anecdote only]" : "") +
+        (report.evidence && report.evidence.open_unmarked ? " [" + report.evidence.open_unmarked + " open position(s) cannot be marked]" : "") + ". " + report.caveat;
 
       table($("positions"), [
         { label: "Contract", get: (r) => r.contract }, { label: "Qty", get: (r) => r.quantity },

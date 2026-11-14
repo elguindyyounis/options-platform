@@ -99,6 +99,7 @@ def test_round_trip_records_cost_basis_and_realized_pnl(env):
     assert broker.get_positions() == []
     report = manager.report()
     assert report["closed_trades"] == 1 and report["wins"] == 1
+    assert report["evidence"]["status"] == "SAMPLE_TOO_SMALL"  # one trade is anecdote
     assert report["realized_pnl"] == round((2.89 - 2.01) * 4 * 100, 2)
     assert manager.get(order.id).cost_basis == 2.01  # survives persistence
 
@@ -157,3 +158,28 @@ def test_side_survives_persistence(env):
     manager, _, _ = env
     order = manager.submit(sell())
     assert manager.get(order.id).intent.side is Side.SELL_TO_CLOSE
+
+
+def test_wilson_interval_and_sample_labels():
+    from optplat.orders import MIN_TRADES_FOR_RESULT, sample_evidence, wilson_interval
+
+    assert wilson_interval(0, 0) is None
+    lo, hi = wilson_interval(1, 1)  # one win must not read as a 100% rate
+    assert lo < 50 and hi == 100.0
+    lo, hi = wilson_interval(15, 30)
+    assert 33 < lo < 35 and 65 < hi < 67
+    ev = sample_evidence(1, 1, [])
+    assert ev["status"] == "SAMPLE_TOO_SMALL" and ev["min_trades"] == MIN_TRADES_FOR_RESULT
+    assert sample_evidence(MIN_TRADES_FOR_RESULT, 10, [])["status"] == "SAMPLE_MINIMUM_MET"
+
+
+def test_evidence_counts_unmarked_open_positions():
+    from optplat.orders import sample_evidence
+
+    rows = [
+        {"unrealized_pnl": -40.0, "mark_quality": "BID"},
+        {"unrealized_pnl": None, "mark_quality": "UNOBSERVABLE"},
+    ]
+    ev = sample_evidence(0, 0, rows)
+    assert ev["open_positions"] == 2 and ev["open_unmarked"] == 1
+    assert ev["unrealized_pnl_bid_marked"] == -40.0 and ev["win_rate_95ci_pct"] is None

@@ -27,6 +27,9 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 9. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
    they find without changing behaviour.
 
+10. **Challenges from the alerter comparison.** See `docs/CHALLENGES.md` (per-lane evidence table,
+    quote-provenance tag, order-history truncation at 1000).
+
 ## Blocked on a human
 
 * **Real broker adapter (IBKR paper).** Owner is implementing `broker/ibkr.py`. Do not start it.
@@ -45,5 +48,7 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
+* 2026-11-14: report sample-size evidence (Wilson interval, small-sample label, unmarked open
+  positions). Branch `agent/2026-11-14-lane-sample-honesty`.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market
   clock, trading engine + runner, same-underlying concentration limit, re-entry cooldown, dashboard.

@@ -66,6 +66,39 @@ class InvalidTransition(RuntimeError):
     pass
 
 
+MIN_TRADES_FOR_RESULT = 30  # below this a win rate is anecdote, not a result (display label only)
+
+
+def wilson_interval(wins: int, n: int, z: float = 1.96) -> Optional[tuple[float, float]]:
+    """95% Wilson score interval for a win rate, in percent. None when there are no trades."""
+    if n <= 0:
+        return None
+    p = wins / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / denom
+    return round(max(0.0, centre - half) * 100, 1), round(min(1.0, centre + half) * 100, 1)
+
+
+def sample_evidence(n_closed: int, wins: int, open_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Honesty labels for a paper report. Display only: it never feeds a trading decision."""
+    ci = wilson_interval(wins, n_closed)
+    marked = [r["unrealized_pnl"] for r in open_rows if r.get("unrealized_pnl") is not None]
+    return {
+        "status": "SAMPLE_TOO_SMALL" if n_closed < MIN_TRADES_FOR_RESULT else "SAMPLE_MINIMUM_MET",
+        "min_trades": MIN_TRADES_FOR_RESULT,
+        "win_rate_95ci_pct": list(ci) if ci else None,
+        "open_positions": len(open_rows),
+        "open_unmarked": len(open_rows) - len(marked),
+        "unrealized_pnl_bid_marked": round(sum(marked), 2),
+        "note": (
+            "Realized P&L counts closed trades only; open positions and unmarkable ones are "
+            "reported separately and can hide losses. Meeting the minimum count is necessary, "
+            "not sufficient: it says nothing about an edge."
+        ),
+    }
+
+
 class OrderManager:
     def __init__(
         self,
@@ -267,11 +300,14 @@ class OrderManager:
             except Exception:  # noqa: BLE001 - an unobservable mark is reported, never guessed
                 pass
             open_rows.append(row)
+        evidence = sample_evidence(len(closed), wins, open_rows)
         return {
             "closed_trades": len(closed),
             "wins": wins,
+            "evidence": evidence,
             "realized_pnl": round(sum(c["pnl"] for c in closed), 2),
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
+            "closed_listed": min(len(closed), 50),
             "closed": closed[:50],
             "open": open_rows,
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",

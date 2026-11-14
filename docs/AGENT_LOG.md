@@ -23,3 +23,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: daily challenger, sample-size honesty (agent run)
+
+* First challenger run; `docs/CHALLENGES.md` and `docs/COMPARISON_ALERTER.md` did not exist and were
+  created. Alerter reviewed at `48ccf71` (22 commits, partial read; see the comparison doc).
+* Challenged: the report printed a win rate (one winning trade reads "100%") with no sample label,
+  and reported realized P&L without surfacing unmarkable open positions.
+* Changed: `OrderManager.report()` gains an `evidence` block (Wilson 95% interval, `SAMPLE_TOO_SMALL`
+  under 30 closed trades, open/unmarked counts, bid-marked unrealized total) and the dashboard
+  shows it. Display only; no risk, sizing, exit, lane or fill behaviour changed.
+* Verified: `python -m pytest -q` passes (146 + new assertions). Baseline was 144 passing.
+* Not verified: the dashboard text in a browser (JS only edited, not run); the 30-trade threshold
+  is a labelling convention, not a statistical guarantee. No owner data was seen.
