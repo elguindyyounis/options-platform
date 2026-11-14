@@ -494,3 +494,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: GEX display upgrade (owner approved after research)
+
+* `signals.gex` kept its original `total_usd_per_1pct` and `flip_strike`, and added: `gross_usd_per_1pct` (no sign assumption),
+  both dealer-sign conventions (exact mirrors, so the sign is shown to be an assumption), `zero_gamma_spot` (chain revalued
+  at 85-115% of spot, a model estimate), and `skip_reasons`. Quotes with IV above 300% or strikes beyond ~30% from spot are skipped and counted.
+* Why: published evidence (Baltussen, Da, Lammers, Martens, JFE) concerns index/futures momentum into the close, not
+  single names or multi-day direction. Public GEX infers dealer inventory from open interest plus an assumed sign.
+  On the 2026-11-14 SPY/QQQ snapshots the net figure is near zero and flips sign with the convention.
+* Observed on that data: the old `flip_strike` (cumulative strikes) gave 570 for SPY while `zero_gamma_spot` gave 756.59 with spot 757.12.
+  The old flip is a weak summary; do not read anything into it.
+* Verified: 555 tests pass (3 new). Ran against the Mac database snapshots (read-only copy). Not verified: any predictive value.
+  Only ~3 trading days of snapshots exist. Nothing uses GEX in a decision; `VALIDATED_SIGNALS` is still empty.
