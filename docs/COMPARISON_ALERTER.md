@@ -7,7 +7,7 @@ of a trading edge, and nothing here should be read as saying one earns more than
 **What was read:** the alerter's README, `PRODUCT_DECISION_ARCHITECTURE.md`, `CHANGELOG.md`, `RELIABILITY_AUDIT.md`,
 `gex.py`, `unusual_activity.py`, `entry_quality.py`, `liquidity.py`, `risk.py`, `sizing.py`, `strategy_lanes.py`,
 `intraday_strategy.py`, `exit_decisions.py`, `feedback.py`, `adaptive.py`, `agent_lab.py`, `research_foundations.py`,
-`daily_review.py`, two agent skill files and the CI workflow. **Not read:** `agents.py`, `core.py`, `storage.py`,
+`daily_review.py`, two agent skill files and the CI workflow. **Not read at the first pass (`agents.py` and `core.py` read 2026-11-13, see the end of this file):** `storage.py`,
 `server.py`, `data_sources.py`, the other skill files, and its tests (none were run). Claims about those are not made.
 
 ## Side by side
@@ -58,3 +58,36 @@ These are challenges raised by reading the alerter. None is proven.
 * **Strict entry gates.** Applying them would shrink the experiments the owner asked for. The post-mortem tags show what
   they would have caught.
 * **Anything about the alerter's council, sizing or goal tracker.** Not read closely enough to judge.
+
+## Addendum 2026-11-13: `agents.py` and `core.py` (alerter still at `9210fd8`; nothing new to review)
+
+* **Optional local model can only be stricter.** `agents.py` lets a local Ollama model add risks and raise a VETO in the Skeptic
+  role, but never pass or upgrade a deterministic rejection; if the Skeptic vetoes, the CIO verdict is forced to REJECT. It also
+  refuses any non-localhost endpoint so trading data is not sent out. The platform's committee has no model in it, so there is
+  nothing to port, but the "may only tighten" rule is the same shape as the platform's flow agent.
+* **Hard veto list is tighter than the platform's lanes by design.** `core.research_case` vetoes: under 7 days to expiry, missing or
+  crossed quote, spread over 35%, zero volume, unknown data source. The platform's aggressive lanes deliberately trade closer to
+  expiry and thinner contracts (owner's choice); the post-mortem tags show what these gates would have caught. No change made.
+* **Scores are labelled as rankings.** `core.py` states agent scores "rank research opportunities, not calibrated likelihoods", and
+  the sizing agent is told never to turn an evidence index into a win probability. The platform's Research page does the same with
+  its "too few" labels; worth keeping that wording in any future scoring.
+* **Thin contracts are capped, not just penalised.** `candidate_score` caps the score at 52 below 5 volume, 55 below 20 open
+  interest and 56 above 20% spread, so a tiny denominator cannot rank high on volume/OI ratio. The platform's tracker groups flagged
+  contracts by what was known at the flag, but does not yet show whether the ratio is dominated by tiny open interest.
+  Logged as challenge 7.
+* **Still not read:** `storage.py`, `server.py`, `data_sources.py`, other skill files, the alerter's tests.
+
+## Addendum 2026-11-13 (later): `storage.py` and `data_sources.py` (alerter still at `9210fd8`)
+
+* **Paper buys re-check everything inside one transaction.** `paper_buy_atomic` re-reads the candidate, rejects a changed quote,
+  a stale real-source quote (older than 30 min or more than 2 min in the future), a duplicate idempotency key, an open position
+  on the same contract, the kill switch, and re-runs entry quality, so a competing scan cannot slip an order past a limit.
+* **Limits use the more conservative equity.** For real-source quotes the drawdown and exposure checks use cash plus the lower of
+  cost and the bid mark of open holdings, and entries pause if any held contract has a stale, crossed or over-35% spread quote.
+  The platform's lanes mark open positions for display; whether any limit uses a pessimistic mark was not checked here.
+* **Fills are ask plus slippage** (default 0.5%, capped 3%), validated against the saved quote.
+* **Data honesty.** `data_sources.py` states that download time is not market time and tags activity rows
+  `opening_trade_verified: False` and `trade_aggressor_verified: False`. The platform's inferred side and open/close labels are
+  the same kind of guess and are labelled as inferences.
+* **Refuses biased GEX.** Over the row cap, or with missing call/put sides, the scan declines to publish a partial net exposure.
+* **Still not read:** `server.py`, other skill files, the alerter's tests.

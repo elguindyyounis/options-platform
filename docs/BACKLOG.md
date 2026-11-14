@@ -48,6 +48,10 @@ Own data the owner provides stays out of commits and logs, and results are label
 
 ## Next up
 
+00. **Follow-ups from the tracker (owner decisions marked).** Once the tracker has 20 or more marks in a group, check whether any feature
+   beats the average; only then consider letting the `flow` agent support a trade (owner decision, since it adds conviction). Add 30 day
+   marks and a "chains read" count to the tracker page. Single-stock watchlists need a first real run to see spreads and earnings handling.
+
 0. **Challenger agent's list.** The open challenges (counterfactual journal, display-only GEX, stressed lane P&L,
    signal provenance doc) live in `docs/CHALLENGES.md`; the daily agent takes one per run.
 
@@ -106,6 +110,9 @@ Existing items, in order:
 ## Done
 
 * Frozen baseline lane (challenge 3): `frozen-baseline-options`, a literal copy of the first short-term rule, settings pinned by `FROZEN_FINGERPRINT` and a test. Simulated only.
+* Trades, tracker, rotation, research and desk (owner request 2026-11-13): readable contract names, `/api/alltrades` and the unified Trades
+  page, `tracker.py` with a Tracker page, the tighten-only `flow` agent, `rotation.py`, `learning.py` and the Research summary, sector
+  presets for the watchlist, and a redesigned Desk.
 * 10x challenge account (owner request 2026-11-13): `challenge.py`, restartable, critic on every trade, attempt history, dashboard panel.
 * Alerter comparison (owner request 2026-11-12): `docs/COMPARISON_ALERTER.md`, liquidity tiers and exit stress in post-mortems
   (`liquidity.py`), and `docs/CHALLENGES.md` as the log for the daily challenger agent. Open challenges are listed there.
@@ -162,3 +169,6 @@ Existing items, in order:
   an FOMC decision tomorrow weigh against; the skeptic now reports which calendar gaps remain.
 * Scanner and trade ledger: `scanner.py` (most-active names, unusual option activity, fixed universe),
   `trades.py` (entries matched to exits with reasoning), `/api/scan`, `/api/trades`.
+* Lane summaries show realized P&L at the bid and under the stressed exit side by side, over the same trades (challenge 4).
+* Tracker splits flagged contracts by size of open interest (challenge 7), display-only.
+* GEX display upgrade (challenge 2): `signals.gex` now also returns a sign-free gross figure, both dealer-sign conventions as exact mirrors, a zero-gamma spot found by revaluing the chain, and skip reasons (implausible IV, far from spot). Still UNVALIDATED; nothing reads it.

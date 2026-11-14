@@ -204,10 +204,14 @@ def lane_report(store: Store, lane: str, fictional: bool, now: datetime, *, rule
             "mark_bid": None if mark is None else mark.get("bid"), "mark_at": None if mark is None else mark.get("at"),
             "unrealized_pnl": unreal, "unrealized_pnl_pct": round(unreal / cost * 100, 2) if unreal is not None and cost > 0 else None,
             "postmortem": cp.get("postmortem"),
+            "stress_pnl": (cp.get("postmortem") or {}).get("stress_net") if closed else None,
         })
     done = [t for t in trades if t["status"] == "CLOSED"]
     wins = [t for t in done if (t["pnl"] or 0) > 0]
     rets = [t["pnl_pct"] for t in done if t["pnl_pct"] is not None]
+    # Like for like: only trades whose post-mortem carries a stressed exit (older rows and share lanes do not), so the two
+    # totals cover the same trades. The stressed figure is a pessimistic what-if, never a price anyone could have traded at.
+    covered = [t for t in done if t["stress_pnl"] is not None]
     return {
         "lane": lane, "fictional": fictional, "as_of": now.isoformat(), "rules": list(rules), "limitations": list(limitations),
         "symbols": list(symbols),
@@ -216,6 +220,9 @@ def lane_report(store: Store, lane: str, fictional: bool, now: datetime, *, rule
                     "realized_pnl": round(sum(t["pnl"] for t in done), 2),
                     "avg_return_pct": round(sum(rets) / len(rets), 2) if rets else None,
                     "unrealized_pnl": round(sum(t["unrealized_pnl"] or 0 for t in trades if t["status"] == "OPEN"), 2),
+                    "stress_trades": len(covered),
+                    "stress_bid_pnl": round(sum(t["pnl"] for t in covered), 2) if covered else None,
+                    "stress_pnl": round(sum(t["stress_pnl"] for t in covered), 2) if covered else None,
                     "min_trades_for_evidence": 30},
         "trades": trades,
     }

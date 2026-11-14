@@ -25,7 +25,7 @@ WEIGHT_MIN, WEIGHT_MAX = 0.25, 2.0
 SHRINK_K = 30              # outcomes needed before an agent's record counts for half
 LEARN_WINDOW = 500         # newest decisions only: the market changes, so old lessons fade
 LEARN_HORIZON_H = 4        # short enough to adapt within days
-START_WEIGHT = {"sentiment": 0.25}  # experimental signal: earns influence, does not start with it
+START_WEIGHT = {"sentiment": 0.25, "flow": 0.25}  # experimental signal: earns influence, does not start with it
 TRUST_START, TRUST_MIN = 0.5, 0.2
 COMMITTEE_AGENT = "committee"
 

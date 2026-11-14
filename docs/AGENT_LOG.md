@@ -3,7 +3,54 @@
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
 
+## 2026-11-13: tracker splits flagged contracts by size of open interest (daily challenger)
 
+* Alerter unchanged since `9210fd8`. Read its `storage.py` and `data_sources.py` (notes in `docs/COMPARISON_ALERTER.md`).
+* Challenge 7: the tracker's only open-interest split was "under 10" vs "established", so it could not show whether a volume/OI
+  flag over a small base behaves differently. Added a display-only `oi_size` feature (Zero, 1 to 9, 10 to 19, 20 to 99,
+  100 to 499, 500 or more, Missing), cut where the alerter's score cap (under 20) and entry gate (100) cut. It rides the existing
+  group table and the 20-mark minimum before any group becomes a finding. Marks taken earlier show as "Unknown".
+* No lane, risk limit, default, order path or auth was touched. 552 tests pass (12 new).
+* Not verified: any real result (the tracker has no real marks I can see; the owner's database is on their Mac), the dashboard
+  rendering of the new rows in a browser (the table builds groups generically, no JS changed), the alerter's tests.
+* Branch is based on `agent/2026-11-13-lane-stress-pnl`, the newest branch holding these docs; `main` does not have them yet.
+
+## 2026-11-13: stressed exit beside the bid exit in lane summaries (daily challenger)
+
+* Alerter unchanged since `9210fd8`. Read its `agents.py` and `core.py` (notes added to `docs/COMPARISON_ALERTER.md`); the
+  local model there can only tighten, and thin contracts have score caps. Logged challenge 7 (tiny open interest vs the volume/OI flag).
+* Challenge 4: headline lane P&L assumed the bid at exit, which flatters big sizes. `post_mortem` now also stores `stress_net`
+  (money). `lane_report` adds `stress_pnl` per closed trade and `stress_trades`, `stress_bid_pnl`, `stress_pnl` to the summary, over
+  only the trades that have a stressed figure so both totals cover the same trades. The Options page shows "Realized, harder exit".
+  `realized_pnl`, what lanes trade, risk limits and defaults are untouched; share lanes show n/a.
+* 540 tests pass (3 added, none changed or removed).
+* Not verified: the new tile in a browser; behaviour on the owner's real data (I cannot see their database). The stressed price
+  is a pessimistic model from volume, open interest and spread, not a fill. Older trades without a post-mortem are not counted.
+
+## 2026-11-13: readable contracts, one Trades page, options tracker, sector rotation, Research summary, Desk redesign
+
+* Owner asked (voice) for: single stocks and sector rotation, a better UX, contracts shown as "SPY call 751 · Dec 11", every lane's
+  trades on the Trades page with an options/shares sort, a tracker for what makes an option unusual, an options agent, and a
+  Research page that shows what was learned and whether it is improving. "Spineless decisions" was read as the SPY/QQQ-only decisions.
+* Contract names: `contracts.py` and a client-side OCC parser; also fixed days-to-expiry showing "unknown" for padded OCC symbols.
+* `GET /api/alltrades` merges the options account, five option lanes, the 10x challenge and both share lanes; the page filters by
+  options or shares and by lane and sorts every column. Lane trades open inline, account trades open the order trail.
+* `tracker.py`: every flagged contract is re-read on later scans and marked at 1, 3 and 7 trading days (ask in, bid out, plus the
+  underlying's move in the helpful direction), grouped by what was known at the flag. Groups under 20 marks are labelled too few.
+  `GET /api/tracker`, a Tracker page listing the exact criteria for "unusual". This is challenge 1 in `docs/CHALLENGES.md`, in part.
+* Options agent: the committee already had agents; what was missing was one that reads flagged flow on the candidate's own name.
+  Added `flow`, which can only OPPOSE (low confidence, starts at a quarter of normal weight). When flow agrees it records
+  `would_support` and does nothing, so it cannot add conviction or loosen entries. Letting it support is left to the owner.
+* `rotation.py` and Market, Sector rotation: each sector's share of dollar volume across days from stored scans. Needs scans from
+  two or more trading days. Controls got a sector picker that fills the watchlist box with a sector's four most traded names;
+  nothing is saved until Save settings. The 20-name cap, risk limits and defaults (SPY, QQQ) are unchanged.
+* `learning.py` and the Research page: older half against newer half of closed trades (no verdict under 20 each), lessons labelled
+  pattern, anecdote or lead, agent weights, a timeline. `GET /api/learning`.
+* Desk redesigned: large account value, open positions as cards with a stop-to-target ladder, a decisions feed.
+* 537 tests pass. Checked in headless Chromium on fictional demo data only (dark, phone width, every page, no script errors).
+  I updated one existing test, the nav list, because a Tracker page was added; no test was weakened or removed.
+* Not verified: any of this on the owner's Mac or live Yahoo data; the tracker and rotation need several real trading days to
+  show anything; single stocks have not been run through the engine (earnings handling is the events agent's existing behaviour).
 
 ## 2026-11-14: recorded the owner's standing direction (owner present, docs only)
 
@@ -463,3 +510,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-14: GEX display upgrade (owner approved after research)
+
+* `signals.gex` kept its original `total_usd_per_1pct` and `flip_strike`, and added: `gross_usd_per_1pct` (no sign assumption),
+  both dealer-sign conventions (exact mirrors, so the sign is shown to be an assumption), `zero_gamma_spot` (chain revalued
+  at 85-115% of spot, a model estimate), and `skip_reasons`. Quotes with IV above 300% or strikes beyond ~30% from spot are skipped and counted.
+* Why: published evidence (Baltussen, Da, Lammers, Martens, JFE) concerns index/futures momentum into the close, not
+  single names or multi-day direction. Public GEX infers dealer inventory from open interest plus an assumed sign.
+  On the 2026-11-14 SPY/QQQ snapshots the net figure is near zero and flips sign with the convention.
+* Observed on that data: the old `flip_strike` (cumulative strikes) gave 570 for SPY while `zero_gamma_spot` gave 756.59 with spot 757.12.
+  The old flip is a weak summary; do not read anything into it.
+* Verified: 555 tests pass (3 new). Ran against the Mac database snapshots (read-only copy). Not verified: any predictive value.
+  Only ~3 trading days of snapshots exist. Nothing uses GEX in a decision; `VALIDATED_SIGNALS` is still empty.

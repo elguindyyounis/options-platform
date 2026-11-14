@@ -102,6 +102,15 @@ CREATE TABLE IF NOT EXISTS unusual_history (
     payload TEXT NOT NULL,
     PRIMARY KEY (day, contract, fictional)
 );
+CREATE TABLE IF NOT EXISTS tracker_marks (
+    contract TEXT NOT NULL,
+    sighted_day TEXT NOT NULL,
+    horizon INTEGER NOT NULL,
+    fictional INTEGER NOT NULL,
+    observed_day TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (contract, sighted_day, horizon, fictional)
+);
 CREATE TABLE IF NOT EXISTS agent_weights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,
@@ -332,6 +341,13 @@ class Store:
                                  (int(fictional),)).fetchone()
         return json.loads(r["payload"]) if r else None
 
+    def scan_history(self, fictional: bool, limit: int = 200) -> list[dict[str, Any]]:
+        """Stored scans, oldest first (the store keeps the newest 200)."""
+        with self._lock:
+            rows = self._db.execute("SELECT payload FROM scan_results WHERE fictional=? ORDER BY id DESC LIMIT ?",
+                                    (int(fictional), max(1, min(limit, 200)))).fetchall()
+        return [json.loads(r["payload"]) for r in reversed(rows)]
+
     # ---- unusual option contracts, remembered by New York trading day so the next day can confirm them ----
     def record_unusual(self, day: str, fictional: bool, rows: list[dict[str, Any]]) -> None:
         """Keep the highest-volume sighting of each contract for the day (volume only grows through the session)."""
@@ -355,6 +371,30 @@ class Store:
         for r in rows:
             out[r["contract"]] = {**json.loads(r["payload"]), "day": r["day"]}
         return out
+
+    def unusual_sightings(self, symbol: Optional[str], since_day: str, before_day: str, fictional: bool) -> list[dict[str, Any]]:
+        """Every unusual sighting from since_day up to (not including) before_day, oldest first, each with its day."""
+        sql = "SELECT day, contract, payload FROM unusual_history WHERE fictional=? AND day>=? AND day<?"
+        args: list[Any] = [int(fictional), since_day, before_day]
+        if symbol is not None:
+            sql += " AND symbol=?"
+            args.append(symbol)
+        with self._lock:
+            rows = self._db.execute(sql + " ORDER BY day", args).fetchall()
+        return [{**json.loads(r["payload"]), "day": r["day"]} for r in rows]
+
+    def record_tracker_mark(self, contract: str, sighted_day: str, horizon: int, fictional: bool, observed_day: str, payload: dict[str, Any]) -> bool:
+        with self._lock:
+            cur = self._db.execute("INSERT OR IGNORE INTO tracker_marks (contract, sighted_day, horizon, fictional, observed_day, payload)"
+                                   " VALUES (?,?,?,?,?,?)", (contract, sighted_day, horizon, int(fictional), observed_day, json.dumps(payload, default=str)))
+            self._db.execute("DELETE FROM tracker_marks WHERE sighted_day < date(?, '-400 day')", (observed_day,))
+            self._db.commit()
+            return cur.rowcount == 1
+
+    def tracker_marks(self, fictional: bool) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT payload FROM tracker_marks WHERE fictional=? ORDER BY sighted_day, horizon", (int(fictional),)).fetchall()
+        return [json.loads(r["payload"]) for r in rows]
 
     def unusual_streak(self, day: str, fictional: bool, contract: str) -> int:
         """How many earlier trading days in a row (ending at the newest earlier day) this contract was unusual."""

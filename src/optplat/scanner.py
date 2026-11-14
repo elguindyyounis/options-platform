@@ -23,6 +23,7 @@ from .marketdata import Bar, MarketDataProvider, MarketSnapshot
 from .models import Right, utcnow
 from .signals import liquidity_tier
 from .store import Store
+from . import tracker
 from .universe import SECTOR_OF, SECTORS, UNIVERSE  # noqa: F401  (UNIVERSE is re-exported for the lanes and tests)
 
 MIN_UNUSUAL_VOLUME = 150
@@ -154,6 +155,26 @@ def unusual_contracts(snap: MarketSnapshot, now: datetime) -> list[dict[str, Any
             "why_observe_only": None if reviewable else ("wide or thin market" if tier == "C" else "expiry outside 7-730 days"),
         })
     return out
+
+
+def unusual_criteria() -> list[dict[str, Any]]:
+    """What makes a contract 'unusual' here, as the dashboard shows it. Built from the same constants the scanner uses."""
+    return [
+        {"name": "Volume", "rule": f"At least {MIN_UNUSUAL_VOLUME} contracts traded today ({MIN_LOW_OI_VOLUME} when open interest is 1 to {LOW_OI - 1}).",
+         "why": "Below this, a high ratio is just a few trades."},
+        {"name": "Volume against open interest", "rule": f"Volume at least {MIN_VOLUME_OI_RATIO:g} times the open interest reported this morning.",
+         "why": "Open interest is the number of contracts already open. Volume well above it means much of today's trading is new or unusual for that contract."},
+        {"name": "No open interest", "rule": f"If open interest is zero or missing there is no ratio, and at least {MIN_ZERO_OI_VOLUME} contracts must have traded.",
+         "why": "A ratio against zero is meaningless, so the bar is a plain volume bar instead."},
+        {"name": "Fresh contract", "rule": f"Open interest under {LOW_OI} is marked fresh and scores 15 extra points.",
+         "why": "A few hundred contracts in a contract nobody held is a new position, not churn."},
+        {"name": "Usable quote", "rule": "Bid and ask must both exist and the bid must not be above the ask.", "why": "Without a quote nothing can be priced or marked."},
+        {"name": "Score", "rule": "10 x ln(1 + volume), plus 4 points per unit of volume to open interest ratio (at most 35), plus 15 if fresh; capped at 100.",
+         "why": "A ranking aid for reading the list. It has not been tested against outcomes; the tracker below is how it gets tested."},
+        {"name": "Which side", "rule": f"A last trade within {round(SIDE_AT_QUOTE * 100)}% of the spread of the ask looks like buying; near the bid, selling; else unclear.",
+         "why": "One last price is a weak clue about who initiated a trade, so the label is a lean, not a fact."},
+        {"name": "Reviewable", "rule": "Liquidity grade A or B and 7 to 730 days to expiry. Everything else is shown but observe-only.", "why": "The platform's own entry rules would refuse a thin or very short-dated contract."},
+    ]
 
 
 # ------------------------------------------------------------ does it stick the next day, and was it an open or a close
@@ -374,7 +395,7 @@ class Scanner:
         pick += [r["symbol"] for r in ranked[:CHAINS_BY_DOLLAR_VOLUME] if r["symbol"] not in pick]
         surging = sorted((r for r in ranked if r["surge"] and r["symbol"] not in pick), key=lambda r: -(r["relative_volume"] or 0))
         pick += [r["symbol"] for r in surging[:CHAINS_BY_RELATIVE_VOLUME]]
-        scanned = failed = 0
+        scanned = failed = marks_added = 0
         for sym in pick:
             if time.monotonic() - t0 > self.budget_s:
                 out["errors"].append(f"time budget reached after {scanned} chains")
@@ -392,11 +413,16 @@ class Scanner:
             rows = unusual_contracts(checked.snapshot, now)
             out["unusual"].extend(rows)
             out["follow_ups"].extend(follow_ups(checked.snapshot, prior, now, day))
+            try:
+                marks_added += tracker.observe(self.store, checked.snapshot, day, fict, compare_with_prior)
+            except Exception as exc:  # noqa: BLE001 - the tracker is research; it must never break a scan
+                out["errors"].append(f"{sym}: tracker ({describe_exc(exc)})")
             out["option_names"].append({**option_totals(checked.snapshot, len(rows)), "sector": SECTOR_OF.get(sym)})
             scanned += 1
         annotate_with_history(out["unusual"], prior, self.store, day, fict)
         self.store.record_unusual(day.isoformat(), fict, out["unusual"][:400])
         out["unusual"].sort(key=lambda r: (r["decision"] != "REVIEWABLE", -r["score"], -r["volume"]))
+        out["tracker_marks_added"] = marks_added
         out["unusual_total"] = len(out["unusual"])
         out["sentiment"] = sentiment(ranked, out["option_names"], out["unusual"])
         out["unusual"] = out["unusual"][:MAX_UNUSUAL_ROWS]

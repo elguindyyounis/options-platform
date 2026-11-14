@@ -218,6 +218,20 @@ def create_app(
             return {"status": engine.scanner.status(), "result": engine.scanner.latest(),
                     "interval_s": engine.config().scan_interval_s}
 
+        @app.get("/api/tracker", dependencies=[Depends(auth)])
+        def tracker_report() -> dict[str, Any]:
+            from . import tracker
+            from .scanner import session_day, unusual_criteria
+
+            now = engine.clock()
+            return tracker.report(engine.store, engine.provider.fictional, now, session_day(now), unusual_criteria())
+
+        @app.get("/api/rotation", dependencies=[Depends(auth)])
+        def sector_rotation() -> dict[str, Any]:
+            from . import rotation
+
+            return rotation.build(engine.store.scan_history(engine.provider.fictional), engine.provider.fictional)
+
         @app.post("/api/scan/run", dependencies=[Depends(auth)])
         def scan_run() -> dict[str, Any]:
             started = engine.scanner.start()
@@ -275,6 +289,12 @@ def create_app(
 
             return {**build_trades(manager, limit), "fictional": engine.provider.fictional}
 
+        @app.get("/api/alltrades", dependencies=[Depends(auth)])
+        def all_trades() -> dict[str, Any]:
+            from .alltrades import build_all
+
+            return build_all(manager, engine.store, engine.provider.fictional, engine.clock(), engine.option_lanes)
+
         @app.get("/api/trades/{trade_id}", dependencies=[Depends(auth)])
         def trades_one(trade_id: str) -> dict[str, Any]:
             from .trades import trade_detail
@@ -291,6 +311,21 @@ def create_app(
             fictional = engine.provider.fictional
             return {"mode": engine.config().committee_mode, "fictional": fictional,
                     **committee.scorecard(engine.store, engine.clock(), fictional)}
+
+        @app.get("/api/learning", dependencies=[Depends(auth)])
+        def learning_report() -> dict[str, Any]:
+            from . import committee, learning, tracker
+            from .alltrades import build_all
+            from .scanner import session_day, unusual_criteria
+
+            now, fictional = engine.clock(), engine.provider.fictional
+            rows = build_all(manager, engine.store, fictional, now, engine.option_lanes)["trades"]
+            digest = engine.option_lanes.reports(now).get("digest", {})
+            hyps = [{"id": h["id"], "statement": h["payload"]["statement"],
+                     "status": (engine.store.hypothesis_results(h["id"]) or [{"status": "NOT_EVALUATED"}])[-1]["status"]} for h in engine.store.list_hypotheses()]
+            return learning.build(
+                rows, engine.store.list_agent_weights(fictional, limit=60), committee.scorecard(engine.store, now, fictional), digest,
+                tracker.report(engine.store, fictional, now, session_day(now), unusual_criteria()), engine.option_lanes.challenge.report(now), hyps, fictional, now.isoformat())
 
         @app.get("/api/research/hypotheses", dependencies=[Depends(auth)])
         def hypotheses() -> list[dict[str, Any]]:

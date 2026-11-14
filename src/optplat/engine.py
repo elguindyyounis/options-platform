@@ -30,6 +30,7 @@ from .orders import OrderManager
 from .pricing import sell_limit_for
 from .risk import RiskPolicy
 from .scanner import Scanner
+from .universe import SECTORS
 from .shortterm import ShortTermLane
 from .swing import SwingLane
 from .optionlanes import OptionLanes
@@ -184,6 +185,7 @@ class TradingEngine:
             "kill_switch": self.manager.kill_switch_active(),
             "last_cycle": self.last_cycle(),
             "clock": clock_status((self.last_cycle() or {}).get("clock_ahead_s"), MAX_FUTURE_SKEW_S),
+            "sectors": list(SECTORS),
             "recorder": self.store.snapshot_stats(),
             "data_quality": {
                 "window_hours": 24,
@@ -372,6 +374,19 @@ class TradingEngine:
         except Exception as exc:  # noqa: BLE001
             report["errors"].append(f"record {snap.symbol}: {type(exc).__name__}: {str(exc)[:100]}")
 
+    def _flow_view(self, symbol: str, now: datetime) -> Optional[dict[str, Any]]:
+        """The scanner's unusual contracts on one name, from the newest stored scan. None when there is no scan."""
+        try:
+            scan = self.store.latest_scan(self.provider.fictional)
+            if not scan:
+                return None
+            age_h = (now - datetime.fromisoformat(scan["as_of"])).total_seconds() / 3600
+            rows = [{k: u.get(k) for k in ("contract", "right", "likely_side", "quoted_turnover_usd", "volume_oi_ratio")}
+                    for u in scan.get("unusual", []) if u.get("symbol") == symbol]
+            return {"as_of": scan["as_of"], "age_h": round(age_h, 1), "rows": rows}
+        except Exception:  # noqa: BLE001 - flow is advisory; no view means the agent abstains
+            return None
+
     def _committee_votes(self, cfg: EngineConfig, symbol: str, snap: MarketSnapshot, proposals: list[Any],
                          positions: list[Position], account: Account, now: datetime) -> dict[Any, cmt.CommitteeDecision]:
         """Ask the committee about the top candidates and journal every verdict. In shadow mode that is all it does."""
@@ -389,7 +404,7 @@ class TradingEngine:
             try:
                 view = self.calendar.view(symbol, now.date(), p.contract.expiry)
                 ctx = Context(snap, p, now, account, self.manager.policy, tuple(positions), cap,
-                              cfg.min_dte_to_hold, cfg.stop_loss_pct, view)
+                              cfg.min_dte_to_hold, cfg.stop_loss_pct, view, self._flow_view(symbol, now))
                 d = cmt.decide(ctx, weights, trust)
             except Exception:  # noqa: BLE001 - no decision: shadow ignores it, active mode refuses the candidate
                 continue

@@ -35,6 +35,7 @@ class Context:
     min_dte_to_hold: int = 5
     stop_loss_pct: float = 30.0
     events: Optional[EventView] = None  # None: no calendar was consulted at all
+    flow: Optional[dict[str, Any]] = None  # unusual option flow on this name from the latest scan; None: no scan to read
 
     @property
     def row(self) -> Optional[ChainRow]:
@@ -152,6 +153,45 @@ def sentiment(ctx: Context) -> Verdict:
     return Verdict("sentiment", ANALYST, ABSTAIN, reasons=("option volume is balanced",), evidence=ev, experimental=True)
 
 
+FLOW_MAX_AGE_H = 20.0
+FLOW_MIN_USD = 100_000    # quoted turnover (ask x volume) of the side-labelled unusual contracts before the flow counts
+FLOW_AGAINST = -0.5       # share of that turnover leaning the other way, as a net fraction from -1 to 1
+
+
+def flow(ctx: Context) -> Verdict:
+    """Unusual option activity on the candidate's own name, read from the scanner. It can only argue AGAINST a trade.
+
+    Contracts the scanner flagged on this name, whose last print looked like a buy or a sell, are turned into a net
+    lean (a bought call or a sold put is bullish). If a good share of that money leans against the candidate, the
+    agent opposes it at low confidence. If the flow agrees it only records that in the evidence: letting it add
+    conviction is held back until the options tracker shows flagged flow has actually been worth following."""
+    f = ctx.flow
+    ev: dict[str, Any] = {"supports_enabled": False}
+    if not f or not f.get("rows"):
+        return Verdict("flow", ANALYST, ABSTAIN, reasons=("no recent unusual option flow on this name",), evidence=ev, experimental=True)
+    if f.get("age_h") is not None and f["age_h"] > FLOW_MAX_AGE_H:
+        return Verdict("flow", ANALYST, ABSTAIN, reasons=(f"the latest scan is {f['age_h']:.0f} hours old",), evidence=ev, experimental=True)
+    net = known = 0.0
+    for r in f["rows"]:
+        side, usd = r.get("likely_side"), r.get("quoted_turnover_usd") or 0
+        if side not in ("BUY", "SELL") or usd <= 0:
+            continue
+        bullish = (side == "BUY") == (r.get("right") == "C")
+        net += usd if bullish else -usd
+        known += usd
+    ev.update({"flagged_contracts": len(f["rows"]), "side_labelled_usd": round(known), "net_lean": None if known <= 0 else round(net / known, 2)})
+    if known < FLOW_MIN_USD:
+        return Verdict("flow", ANALYST, ABSTAIN, reasons=("flagged flow is too small or its side is unclear",), evidence=ev, experimental=True)
+    aligned = net / known * ctx.direction
+    ev["aligned_with_candidate"] = round(aligned, 2)
+    if aligned <= FLOW_AGAINST:
+        return Verdict("flow", ANALYST, OPPOSE, _clamp(-aligned) * 0.6, (f"flagged option flow on this name leans against it (net {aligned:+.2f})",), ev, experimental=True)
+    if aligned >= -FLOW_AGAINST:
+        ev["would_support"] = True
+        return Verdict("flow", ANALYST, ABSTAIN, reasons=(f"flagged flow agrees (net {aligned:+.2f}); recorded only, support is not enabled",), evidence=ev, experimental=True)
+    return Verdict("flow", ANALYST, ABSTAIN, reasons=("flagged flow is mixed",), evidence=ev, experimental=True)
+
+
 # ------------------------------------------------------------------ gates and the skeptic
 def execution(ctx: Context) -> Verdict:
     row = ctx.row
@@ -259,7 +299,7 @@ def skeptic(ctx: Context) -> Verdict:
     return Verdict("skeptic", SKEPTIC, stance, conf, tuple(t for _, t in objections[:3]), ev, veto=bool(blocking))
 
 
-ANALYSTS = (technical, volatility, sentiment)
+ANALYSTS = (technical, volatility, sentiment, flow)
 CHECKERS = (execution, exposure, events, skeptic)
 
 

@@ -2,7 +2,7 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
   const phone = window.matchMedia("(max-width:860px)");
-  const PAGES = ["desk", "trades", "options", "swing", "shortterm", "market", "agents", "research", "system"];
+  const PAGES = ["desk", "trades", "options", "swing", "shortterm", "market", "tracker", "agents", "research", "system"];
   let token = "";
   try { token = sessionStorage.getItem("optplat_token") || ""; } catch (e) { /* storage unavailable */ }
   // The launcher opens /#token=... . A URL fragment is never sent to the server. Read it once, keep it for this
@@ -15,7 +15,7 @@
   }
   const S = {
     killState: false, lastPoints: [], core: null, connected: false,
-    trades: null, filter: "all", query: "", sort: { key: "entry_time", dir: -1 }, openTrade: null, opener: null,
+    trades: null, filter: "all", kind: "all", source: "all", query: "", sort: { key: "opened_at", dir: -1 }, shown: 100, tkH: "3", openTrade: null, opener: null,
     scan: null, marketTab: "heat", unusualFilter: "all", opt: null, optLane: "shortterm-options-base",
   };
 
@@ -104,7 +104,7 @@
     document.querySelectorAll("a.nav").forEach((a) => {
       if (a.getAttribute("data-page") === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
-    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
+    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", tracker: "Tracker", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
   }
 
   // ---------------------------------------------------------------- equity chart (unchanged behaviour)
@@ -131,7 +131,7 @@
   function drawEquity(host, points) {
     host.replaceChildren();
     if (points.length < 2) { empty(host, "Not enough history to draw a curve yet", "It needs at least two completed cycles with trading allowed."); return; }
-    const W = Math.max(300, Math.round(host.clientWidth || 720)), H = W < 520 ? 220 : 260;
+    const W = Math.max(300, Math.round(host.clientWidth || 720)), H = W < 520 ? 170 : 190;
     const m = { l: W < 520 ? 58 : 64, r: 70, t: 12, b: 26 };
     const xs = points.map((p) => new Date(p.ts).getTime()), ys = points.map((p) => Number(p.equity));
     const ticks = niceTicks(Math.min.apply(null, ys), Math.max.apply(null, ys), 4);
@@ -194,12 +194,30 @@
   }
 
   // ---------------------------------------------------------------- shared formatting for contracts
+  // Contract names read like a person would say them: "SPY call 751 · Dec 11". An OCC symbol such as
+  // "SPY   261211P00751000" is split into those parts; if it cannot be read, the raw text is shown, never a guess.
+  function occParts(occ) {
+    const m = /^\s*([A-Z.\-]{1,6}?)\s*(\d{2})(\d{2})(\d{2})([CP])(\d{8})\s*$/.exec(occ || "");
+    if (!m) return null;
+    return { symbol: m[1], expiry: "20" + m[2] + "-" + m[3] + "-" + m[4], right: m[5], strike: Number(m[6]) / 1000 };
+  }
+  const expiryText = (iso) => {
+    const d = new Date(iso + "T12:00:00");
+    if (isNaN(d)) return String(iso);
+    return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+  };
+  const contractText = (t) => t.symbol + " " + (t.right === "C" ? "call " : "put ") + Number(t.strike) + " · " + expiryText(t.expiry);
   function ticket(t) {
     const w = el("span", null, "ticket");
+    w.setAttribute("title", contractText(t));
     w.appendChild(el("span", t.symbol, "sym"));
-    w.appendChild(el("span", (t.right === "C" ? "Call " : "Put ") + t.strike, "leg " + (t.right === "C" ? "call" : "put")));
-    w.appendChild(el("span", fmtDay(t.expiry), "muted"));
+    w.appendChild(el("span", (t.right === "C" ? "call " : "put ") + Number(t.strike), "leg " + (t.right === "C" ? "call" : "put")));
+    w.appendChild(el("span", expiryText(t.expiry), "muted"));
     return w;
+  }
+  function ticketOcc(occ) {
+    const p = occParts(occ);
+    return p ? ticket(p) : el("span", occ || "", "mono");
   }
   const EXIT_TEXT = {
     take_profit: "Take profit", stop_loss: "Stop loss", expiry_window: "Too close to expiry", max_days_held: "Held too long",
@@ -265,22 +283,26 @@
 
   function renderDesk(portfolio, report, eq, status) {
     const a = portfolio.account, sm = eq.summary;
-    const fict = eq.fictional ? " on fictional data" : "";
-    let head = "The paper account is worth " + money(a.equity) + fict;
-    if (sm.change_pct !== null && sm.change_pct !== 0) head += ", " + (sm.change_pct > 0 ? "up " : "down ") + Math.abs(sm.change_pct).toFixed(2) + "% since the first recorded point";
-    head += ". It holds " + report.open.length + " open position" + (report.open.length === 1 ? "" : "s") + " and has closed " + report.closed_trades + " trade" + (report.closed_trades === 1 ? "" : "s") + ".";
-    $("desk-headline").textContent = head;
+    $("desk-value").textContent = money(a.equity);
+    const ch = $("desk-change");
+    ch.replaceChildren();
+    if (sm.change_pct === null || sm.change_pct === undefined) ch.appendChild(el("span", "No change history yet", "muted"));
+    else {
+      const d = a.equity - a.equity / (1 + sm.change_pct / 100);
+      kids(ch, [span(arrow(sm.change_pct) + sgn(d) + " (" + pct(sm.change_pct) + ")", tone(sm.change_pct)), span(" since the first recorded point", "muted")]);
+    }
+    const fict = eq.fictional ? " Fictional demo data." : "";
+    $("desk-headline").textContent = "Holds " + report.open.length + " open position" + (report.open.length === 1 ? "" : "s") + " and has closed " + report.closed_trades + " trade" + (report.closed_trades === 1 ? "" : "s") + "." + fict;
     const need = Math.max(0, MIN_TRADES - report.closed_trades);
-    $("desk-sub").textContent = "Everything on this page is the long-term book: options bought with at least a week to expiry and held until an exit rule fires. " +
+    $("desk-sub").textContent = "This is the long-term book: options bought with at least a week to expiry and held until an exit rule fires. " +
       (need ? "With " + report.closed_trades + " closed trades, none of these numbers is evidence yet; " + MIN_TRADES + " is the minimum." : "The sample is past the minimum, which still does not show an edge on its own.");
     const t = $("tiles");
     t.replaceChildren();
     kids(t, [
-      fig(money(a.equity), "Equity", "cash " + money(a.cash)),
-      fig(pct(sm.change_pct), "Since first point", sm.points + " points", tone(sm.change_pct)),
-      fig(sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "%", "Drawdown now", "worst -" + (sm.max_drawdown_pct || 0) + "%"),
+      fig(money(a.cash), "Cash"),
+      fig(money(a.open_premium), "In open options", report.open.length + " position" + (report.open.length === 1 ? "" : "s")),
       fig(sgn(report.realized_pnl), "Realized profit", report.closed_trades + " closed" + (report.win_rate_pct === null ? "" : ", " + report.win_rate_pct + "% winners"), tone(report.realized_pnl)),
-      fig(money(a.open_premium), "Open premium", report.open.length + " position(s)"),
+      fig(sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "%", "Below its peak", "worst -" + (sm.max_drawdown_pct || 0) + "%"),
     ]);
     $("sample").textContent = report.caveat;
     S.lastPoints = eq.points;
@@ -290,25 +312,49 @@
     ], eq.points.slice().reverse().slice(0, 200), "No equity points yet");
   }
 
-  // "SPY261218C00600000" -> days to expiry. Anything unparseable is shown as unknown, never guessed.
+  // An OCC symbol (padded or not) -> days to expiry. Anything unparseable is shown as unknown, never guessed.
   function dteOf(contract, now) {
-    const m = /^[A-Z.\-]{1,10}(\d{2})(\d{2})(\d{2})[CP]\d{8}$/.exec(contract || "");
-    if (!m) return null;
-    const exp = Date.UTC(2000 + Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const p = occParts(contract);
+    if (!p) return null;
+    const exp = Date.parse(p.expiry + "T00:00:00Z");
     return Math.round((exp - Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) / 86400000);
   }
 
+  // One card per open position: the contract in words, how it is doing, and a ladder from the stop to the target
+  // with a tick at what was paid and a marker at the current bid, so "how close is this to exiting" reads at a glance.
   function renderPositions(report, cfg) {
-    const now = new Date();
-    table($("positions"), [
-      { label: "Contract", get: (r) => el("span", r.contract, "mono") }, { label: "Qty", right: true, get: (r) => r.quantity },
-      { label: "Avg cost", right: true, get: (r) => r.avg_cost },
-      { label: "Bid mark", right: true, get: (r) => r.mark === null ? "unobservable" : r.mark },
-      { label: "Unrealized", right: true, get: (r) => r.unrealized_pnl === null ? "n/a" : span(sgn(r.unrealized_pnl), tone(r.unrealized_pnl)) },
-      { label: "Take profit at bid", right: true, get: (r) => cfg.auto_exits ? (r.avg_cost * (1 + cfg.take_profit_pct / 100)).toFixed(2) : "auto exits off" },
-      { label: "Stop at bid", right: true, get: (r) => cfg.auto_exits ? (r.avg_cost * (1 - cfg.stop_loss_pct / 100)).toFixed(2) : "auto exits off" },
-      { label: "Days to expiry", right: true, get: (r) => { const d = dteOf(r.contract, now); return d === null ? "unknown" : d + (d <= cfg.min_dte_to_hold ? " (forced exit zone)" : ""); } },
-    ], report.open, "No open positions", "When an entry fills it appears here with the prices that would close it.");
+    const host = $("positions"), now = new Date();
+    if (!report.open.length) { host.replaceChildren(); const box = el("div", null, "panel"); host.appendChild(box); empty(box, "No open positions", "When an entry fills it appears here with the prices that would close it."); return; }
+    host.replaceChildren();
+    const grid = el("div", null, "pos-grid");
+    report.open.forEach((r) => {
+      const card = el("div", null, "pos"), top = el("div", null, "pos-top");
+      const d = dteOf(r.contract, now);
+      kids(top, [ticketOcc(r.contract), el("span", d === null ? "expiry unknown" : d + " days left" + (d <= cfg.min_dte_to_hold ? ", in the forced-exit zone" : ""), "tag " + (d !== null && d <= cfg.min_dte_to_hold ? "warn" : ""))]);
+      const pnl = el("div", null, "pos-pnl");
+      if (r.unrealized_pnl === null) pnl.appendChild(el("span", "No quote to mark it", "muted"));
+      else {
+        const p = r.avg_cost > 0 && r.mark !== null ? (r.mark / r.avg_cost - 1) * 100 : null;
+        kids(pnl, [span(arrow(r.unrealized_pnl) + sgn(r.unrealized_pnl), "big " + tone(r.unrealized_pnl)), p === null ? span("") : span(pct(p), "num " + tone(p))]);
+      }
+      const facts = el("div", r.quantity + " contract" + (r.quantity === 1 ? "" : "s") + " at " + r.avg_cost + (r.mark === null ? "" : ", bid now " + r.mark), "muted");
+      kids(card, [top, pnl, facts]);
+      if (cfg.auto_exits) {
+        const stop = r.avg_cost * (1 - cfg.stop_loss_pct / 100), goal = r.avg_cost * (1 + cfg.take_profit_pct / 100), span_ = goal - stop;
+        const at = (v) => Math.max(0, Math.min(100, ((v - stop) / span_) * 100));
+        const lad = el("div", null, "ladder"), track = el("div", null, "track"), cost = el("div", null, "cost");
+        cost.style.left = at(r.avg_cost) + "%";
+        lad.appendChild(track); lad.appendChild(cost);
+        if (r.mark !== null) { const m = el("div", null, "now"); m.style.left = at(r.mark) + "%"; lad.appendChild(m); }
+        lad.setAttribute("role", "img");
+        lad.setAttribute("aria-label", "Stop " + stop.toFixed(2) + ", paid " + r.avg_cost + ", take profit " + goal.toFixed(2) + (r.mark === null ? ", no current quote" : ", bid now " + r.mark));
+        const keys = el("div", null, "ladder-keys");
+        [["stop", stop.toFixed(2)], ["paid", String(r.avg_cost)], ["target", goal.toFixed(2)]].forEach((k) => { const s2 = el("span"); s2.appendChild(document.createTextNode(k[0] + " ")); s2.appendChild(el("b", k[1])); keys.appendChild(s2); });
+        kids(card, [lad, keys]);
+      } else card.appendChild(el("div", "Automatic exits are off, so nothing will close this on its own.", "muted"));
+      grid.appendChild(card);
+    });
+    host.appendChild(grid);
   }
 
   function whyOf(d) {
@@ -317,17 +363,28 @@
     return p.why || p.reason || (p.reasons && p.reasons.join("; ")) || (p.score !== undefined ? "score " + Number(p.score).toFixed(2) : "");
   }
   function renderDecisions(list) {
-    table($("decisions"), [
-      { label: "Time", get: (d) => fmtTime(d.ts) }, { label: "Type", get: (d) => words(d.kind) },
-      { label: "Contract", get: (d) => el("span", d.contract || "", "mono") }, { label: "Outcome", get: (d) => words(d.disposition) },
-      { label: "Why", get: whyOf },
-    ], list, "No decisions recorded yet", "Run one cycle from Controls to see what it considers.");
+    const host = $("decisions");
+    if (!list.length) { empty(host, "No decisions recorded yet", "Run one cycle from Controls to see what it considers."); return; }
+    host.replaceChildren();
+    const feed = el("div", null, "feed");
+    list.forEach((d) => {
+      const item = el("div", null, "feed-item");
+      const who = el("div", null, "ticket");
+      who.appendChild(el("span", words(d.kind), "muted"));
+      if (d.contract) who.appendChild(ticketOcc(d.contract)); else if (d.symbol) who.appendChild(el("b", d.symbol));
+      const out = words(d.disposition);
+      kids(item, [el("span", fmtTime(d.ts), "feed-time"), who, el("span", out, "tag " + (/ENTER|ENTRY|SUBMIT|FILL|EXIT|CLOSE/.test(d.disposition || "") && !/REJECT/.test(d.disposition || "") ? "info" : ""))]);
+      const why = whyOf(d);
+      if (why) item.appendChild(el("div", why, "feed-why"));
+      feed.appendChild(item);
+    });
+    host.appendChild(feed);
   }
 
   function renderOrders(orders) {
     table($("orders"), [
       { label: "Time", get: (o) => fmtTime(o.created_at) }, { label: "Side", get: (o) => o.intent.side },
-      { label: "Contract", get: (o) => o.intent.contract.underlying + " " + o.intent.contract.expiry + " " + o.intent.contract.right + o.intent.contract.strike },
+      { label: "Contract", get: (o) => ticket({ symbol: o.intent.contract.underlying, right: o.intent.contract.right, strike: o.intent.contract.strike, expiry: o.intent.contract.expiry }) },
       { label: "Qty", right: true, get: (o) => o.filled_qty + "/" + o.intent.quantity }, { label: "Limit", right: true, get: (o) => o.intent.limit_price },
       { label: "Fill", right: true, get: (o) => o.avg_fill_price === null ? "" : o.avg_fill_price },
       { label: "State", get: (o) => o.state }, { label: "Why", get: (o) => o.risk_failures.join("; ") },
@@ -342,7 +399,12 @@
     $("cfg-optlanes").checked = !!cfg.option_lanes_enabled;
     $("cfg-hours").checked = status.market.hours_enforced;
     $("cfg-hours").disabled = status.market.hours_enforced && !status.data_source.fictional; // real data: always on
-    if (document.activeElement !== $("cfg-watch")) $("cfg-watch").value = status.config.watchlist.join(", ");
+    if (document.activeElement !== $("cfg-watch") && !S.watchDirty) $("cfg-watch").value = status.config.watchlist.join(", ");
+    const secSel = $("cfg-sector");
+    if (secSel.options.length !== (status.sectors || []).length + 1) {
+      secSel.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "Add names from a sector" }));
+      (status.sectors || []).forEach((n) => secSel.appendChild(Object.assign(document.createElement("option"), { value: n, textContent: n })));
+    }
     const sel = $("cfg-scan"), v = String(cfg.scan_interval_s === undefined ? 0 : cfg.scan_interval_s);
     if (document.activeElement !== sel) {
       if (!Array.prototype.some.call(sel.options, (o) => o.value === v)) sel.appendChild(Object.assign(document.createElement("option"), { value: v, textContent: "every " + Math.round(Number(v) / 60) + " minutes" }));
@@ -352,64 +414,138 @@
   }
 
   // ---------------------------------------------------------------- Trades
+  // One list for every simulated trade: the long-term options account, the options lanes, the 10x challenge and the
+  // two share lanes. Each row says which of those took it and whether it was options or shares.
   const FILTERS = [
     { id: "all", label: "All", test: () => true }, { id: "open", label: "Open", test: (t) => t.status !== "CLOSED" },
     { id: "closed", label: "Closed", test: (t) => t.status === "CLOSED" },
     { id: "winners", label: "Winners", test: (t) => t.status === "CLOSED" && t.pnl > 0 },
     { id: "losers", label: "Losers", test: (t) => t.status === "CLOSED" && t.pnl <= 0 },
   ];
+  const KINDS = [{ id: "all", label: "Options and shares" }, { id: "options", label: "Options" }, { id: "shares", label: "Shares" }];
   const SORTS = {
-    entry_time: (t) => t.entry_time, symbol: (t) => t.symbol, pnl: (t) => (t.pnl === null ? -Infinity : t.pnl),
+    opened_at: (t) => t.opened_at || "", symbol: (t) => t.symbol, pnl: (t) => (t.pnl === null ? -Infinity : t.pnl),
     pnl_pct: (t) => (t.pnl_pct === null ? -Infinity : t.pnl_pct), held: (t) => (t.held_seconds === null ? Infinity : t.held_seconds),
+    kind: (t) => t.instrument + " " + (t.opened_at || ""), source: (t) => t.source_label,
   };
+  const instrumentTag = (t) => el("span", t.instrument === "options" ? "Options" : "Shares", "tag " + (t.instrument === "options" ? "info" : ""));
+  const tradeName = (t) => (t.instrument === "options" && t.right ? ticket(t) : el("b", t.symbol, "sym"));
 
   function pnlCell(t) {
     const w = el("span", null, "num");
-    if (t.pnl === null) { w.textContent = "unobservable"; w.className = "muted"; return w; }
-    w.appendChild(span(sgn(t.pnl), tone(t.pnl)));
+    if (t.pnl === null) { w.textContent = t.status === "CLOSED" ? "n/a" : "no quote yet"; w.className = "muted"; return w; }
+    w.appendChild(span(sgn(t.pnl) + (t.pnl_pct === null ? "" : " (" + pct(t.pnl_pct) + ")"), tone(t.pnl)));
     const bar = el("span", null, "bar"), i = el("i", null, t.pnl >= 0 ? "up" : "down");
     i.style.width = Math.min(50, Math.abs(t.pnl_pct || 0) / 2) + "%";
     bar.appendChild(i);
     w.appendChild(bar);
     return w;
   }
+  function laneExitLabel(t) {
+    const code = t.exit_reason;
+    return t.status === "OPEN" ? "Open" : t.status === "PARTIAL" ? "Partly closed" : (EXIT_TEXT[code] || OP_EXIT[code] || ST_EXIT[code] || SW_EXIT[code] || (code ? words(code) : "Closed"));
+  }
   function statusTag(t) {
-    if (t.status !== "CLOSED") return el("span", exitLabel(t), "tag info");
-    return el("span", exitLabel(t), "tag " + (t.pnl > 0 ? "gain" : "loss"));
+    const label = laneExitLabel(t);
+    if (t.status !== "CLOSED") return el("span", label, "tag info");
+    return el("span", label, "tag " + (t.pnl > 0 ? "gain" : "loss"));
+  }
+  const openedText = (t) => fmtTime(t.opened_at);
+  const exitText = (t) => (t.exit_price !== null ? Number(t.exit_price).toFixed(2) : (t.mark !== null && t.mark !== undefined ? Number(t.mark).toFixed(2) + " (mark)" : "no quote"));
+  const heldText = (t) => duration(t.held_seconds !== null ? t.held_seconds : Math.floor((Date.now() - new Date(t.opened_at).getTime()) / 1000));
+
+  // What opens when a row is chosen: the order-trail drawer for the options account, an inline file for lane trades.
+  function laneDetail(t) {
+    const d = t.detail;
+    if (t.instrument === "options") return tradeItem(Object.assign({}, d, { symbol: t.symbol }), Object.assign({}, OP_EXIT));
+    const box = el("div", null, "pm-body"), facts = el("dl", null, "facts");
+    const row = (k, v) => { facts.appendChild(el("dt", k)); facts.appendChild(el("dd", v)); };
+    const lane = t.source === "swing-pullback" ? LANES.sw : LANES.st;
+    row("Opened", fmtTime(t.opened_at));
+    row("Bought", t.quantity + " shares at " + Number(t.entry_price).toFixed(2));
+    if (t.exit_price !== null) row("Sold", Number(t.exit_price).toFixed(2) + " on " + fmtTime(t.closed_at));
+    row("Why it entered", lane.why(d.why_entered || {}));
+    if (t.status === "CLOSED") row("How it ended", d.close_text || laneExitLabel(t));
+    box.appendChild(facts);
+    return box;
+  }
+  function attachRow(node, t, onOpen) {
+    node.tabIndex = 0;
+    node.setAttribute("role", "button");
+    node.setAttribute("aria-label", "Open " + (t.instrument === "options" ? contractText(t) : t.symbol + " shares") + " from " + t.source_label);
+    node.addEventListener("click", onOpen);
+    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); onOpen(); } });
+  }
+  function toggleInline(after, t, colspan) {
+    const nxt = after.nextSibling;
+    if (nxt && nxt.classList && nxt.classList.contains("inline-file")) { nxt.remove(); return; }
+    const holder = colspan ? el("tr", null, "inline-file") : el("div", null, "inline-file");
+    let cell = holder;
+    if (colspan) { cell = el("td"); cell.colSpan = colspan; holder.appendChild(cell); }
+    cell.appendChild(laneDetail(t));
+    const det = cell.querySelector("details");
+    if (det) det.open = true;
+    after.after(holder);
+  }
+  function openRow(t, node, colspan) {
+    if (t.has_file) openTrade(t.id, node); else toggleInline(node, t, colspan);
   }
 
   function renderTrades() {
     const data = S.trades;
     if (!data) return;
-    const sm = data.summary, f = $("trade-summary");
-    $("trade-lede").textContent = sm.total
-      ? sm.total + " trade" + (sm.total === 1 ? "" : "s") + " so far, each one a filled buy matched to the sells that closed it. Select a row to see why it was entered, what the agents said, and how it ended. " + sm.caveat
-      : "Nothing has traded yet. Entries need automatic entries switched on in Controls and a candidate that passes the risk gate, the agents and the data-quality check.";
+    const all = data.trades;
+    const kindOk = (t) => S.kind === "all" || t.instrument === S.kind;
+    const srcOk = (t) => S.source === "all" || t.source === S.source;
+    const scoped = all.filter(kindOk).filter(srcOk);
+    const sm = { total: scoped.length, open: scoped.filter((t) => t.status !== "CLOSED").length };
+    const done = scoped.filter((t) => t.status === "CLOSED" && t.pnl !== null), wins = done.filter((t) => t.pnl > 0);
+    const realized = done.reduce((a, t) => a + t.pnl, 0), openPnl = scoped.filter((t) => t.status !== "CLOSED").reduce((a, t) => a + (t.pnl || 0), 0);
+    const best = done.length ? Math.max.apply(null, done.map((t) => t.pnl)) : null, worst = done.length ? Math.min.apply(null, done.map((t) => t.pnl)) : null;
+    const noQuote = scoped.filter((t) => t.status !== "CLOSED" && t.pnl === null).length;
+    $("trade-lede").textContent = all.length
+      ? all.length + " simulated trade" + (all.length === 1 ? "" : "s") + " from every account and lane. The long-term options account is the only one that trades the paper broker; the lanes and the 10x challenge are research experiments with their own simulated fills. Choose Options or Shares, pick a lane, or sort any column. " + data.caveat
+      : "Nothing has traded yet. The options account needs automatic entries switched on in Controls; the lanes and the challenge need the options lanes switched on.";
+    const f = $("trade-summary");
     f.replaceChildren();
     kids(f, [
-      fig(String(sm.total), "Trades", sm.open + " open, " + sm.closed + " closed"),
-      fig(sm.win_rate_pct === null ? "n/a" : sm.win_rate_pct + "%", "Winners", sm.closed ? sm.wins + " of " + sm.closed + " closed" : "no closed trades"),
-      fig(sgn(sm.realized_pnl), "Realized", "from closed and partly closed", tone(sm.realized_pnl)),
-      fig(sgn(sm.unrealized_pnl), "Unrealized", sm.unobservable_open ? sm.unobservable_open + " open without a usable bid" : "marked at the bid", tone(sm.unrealized_pnl)),
-      fig(sm.best === null ? "n/a" : sgn(sm.best), "Best closed", sm.worst === null ? "" : "worst " + sgn(sm.worst), tone(sm.best)),
+      fig(String(sm.total), "Trades", sm.open + " open, " + done.length + " closed"),
+      fig(done.length ? Math.round(wins.length / done.length * 1000) / 10 + "%" : "n/a", "Winners", done.length ? wins.length + " of " + done.length + " closed" : "no closed trades"),
+      fig(sgn(realized), "Realized", "closed trades, after fees", tone(realized)),
+      fig(sgn(openPnl), "Open now", noQuote ? noQuote + " open without a usable quote" : "marked at the bid", tone(openPnl)),
+      fig(best === null ? "n/a" : sgn(best), "Best closed", worst === null ? "" : "worst " + sgn(worst), tone(best)),
     ]);
-    chips($("trade-filters"), FILTERS.map((x) => ({ id: x.id, label: x.label + " " + data.trades.filter(x.test).length })), S.filter, (id) => { S.filter = id; renderTrades(); });
+    const count = (test) => all.filter(srcOk).filter(test).length;
+    chips($("trade-kind"), KINDS.map((k) => ({ id: k.id, label: k.label + " " + all.filter(srcOk).filter((t) => k.id === "all" || t.instrument === k.id).length })), S.kind, (id) => { S.kind = id; S.shown = 100; renderTrades(); });
+    const sel = $("trade-source");
+    if (!sel.dataset.ready || Number(sel.dataset.n) !== data.sources.length) {
+      sel.replaceChildren();
+      const first = el("option", "All accounts and lanes"); first.value = "all"; sel.appendChild(first);
+      data.sources.forEach((x) => { const o = el("option", x.label + " (" + x.total + ")"); o.value = x.source; sel.appendChild(o); });
+      sel.dataset.ready = "1"; sel.dataset.n = String(data.sources.length);
+    }
+    sel.value = S.source;
+    const base = all.filter(kindOk).filter(srcOk);
+    chips($("trade-filters"), FILTERS.map((x) => ({ id: x.id, label: x.label + " " + base.filter(x.test).length })), S.filter, (id) => { S.filter = id; S.shown = 100; renderTrades(); });
     const flt = FILTERS.find((x) => x.id === S.filter) || FILTERS[0], q = S.query.trim().toUpperCase();
-    const key = SORTS[S.sort.key], dir = S.sort.dir;
-    const rows = data.trades.filter(flt.test).filter((t) => !q || t.symbol.indexOf(q) >= 0 || t.contract.indexOf(q) >= 0)
+    const key = SORTS[S.sort.key] || SORTS.opened_at, dir = S.sort.dir;
+    const rows = base.filter(flt.test).filter((t) => !q || t.symbol.indexOf(q) >= 0 || t.label.toUpperCase().indexOf(q) >= 0)
       .sort((x, y) => (key(x) < key(y) ? -dir : key(x) > key(y) ? dir : 0));
+    renderSources(data, kindOk);
+    const matching = rows.length;
+    rows.length = Math.min(rows.length, S.shown);
     const host = $("trade-table");
     if (!rows.length) {
-      empty(host, data.trades.length ? "No trades match this filter" : "No trades yet",
-        data.trades.length ? "Clear the search box or pick All." : "Run a cycle from Controls, or let the loop run during market hours.");
+      empty(host, all.length ? "No trades match these filters" : "No trades yet",
+        all.length ? "Clear the search box, or pick All and Options and shares." : "Run a cycle from Controls, or let the loop run during market hours.");
       return;
     }
     host.replaceChildren();
-    if (window.matchMedia("(max-width:860px)").matches) {
+    if (phone.matches) {
       // Phones: one card per trade instead of a table that would scroll sideways.
       const sorter = el("select");
       sorter.setAttribute("aria-label", "Sort trades");
-      [["entry_time", -1, "Newest first"], ["entry_time", 1, "Oldest first"], ["pnl", -1, "Best profit first"], ["pnl", 1, "Worst result first"]].forEach((o) => {
+      [["opened_at", -1, "Newest first"], ["opened_at", 1, "Oldest first"], ["pnl", -1, "Best profit first"], ["pnl", 1, "Worst result first"], ["kind", 1, "Options first"], ["kind", -1, "Shares first"]].forEach((o) => {
         const opt = el("option", o[2]); opt.value = o[0] + ":" + o[1]; sorter.appendChild(opt);
       });
       sorter.value = S.sort.key + ":" + S.sort.dir;
@@ -417,60 +553,71 @@
       host.appendChild(sorter);
       rows.forEach((x) => {
         const card = el("div", null, "tcard");
-        card.tabIndex = 0; card.setAttribute("role", "button");
-        card.setAttribute("aria-label", "Open trade file for " + x.symbol + " " + (x.right === "C" ? "call " : "put ") + x.strike);
         const top = el("div", null, "tc-top");
-        top.appendChild(ticket(x)); top.appendChild(statusTag(x));
+        kids(top, [tradeName(x), statusTag(x)]);
         const mid = el("div", null, "tc-mid");
-        mid.appendChild(el("span", x.pnl === null ? "Unobservable" : sgn(x.pnl), "tc-pnl num " + tone(x.pnl)));
+        mid.appendChild(el("span", x.pnl === null ? "No quote" : sgn(x.pnl), "tc-pnl num " + tone(x.pnl)));
         if (x.pnl_pct !== null) mid.appendChild(el("span", pct(x.pnl_pct), "num " + tone(x.pnl_pct)));
-        const low = el("div", x.quantity + " at " + Number(x.entry_price).toFixed(2) + (x.exit_price !== null ? ", sold at " + Number(x.exit_price).toFixed(2) : (x.mark !== null ? ", bid " + Number(x.mark).toFixed(2) : ", no usable bid")) +
-          ". Opened " + fmtTime(x.entry_time) + ".", "muted");
+        const low = el("div", x.source_label + ". " + x.quantity + (x.instrument === "options" ? " contract" + (x.quantity === 1 ? "" : "s") : " share" + (x.quantity === 1 ? "" : "s")) + " at " + Number(x.entry_price).toFixed(2) +
+          (x.exit_price !== null ? ", sold at " + Number(x.exit_price).toFixed(2) : (x.mark !== null && x.mark !== undefined ? ", bid " + Number(x.mark).toFixed(2) : ", no usable quote")) + ". Opened " + openedText(x) + ".", "muted");
         kids(card, [top, mid, low]);
-        const open = () => openTrade(x.id, card);
-        card.addEventListener("click", open);
-        card.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+        attachRow(card, x, () => openRow(x, card, 0));
         host.appendChild(card);
       });
+      moreButton(host, rows.length, matching);
       return;
     }
     const t = el("table"), head = el("tr");
     const col = (label, sortKey, right) => {
       const th = el("th", null, right ? "r" : "");
       if (sortKey) {
-        const b = el("button", label + (S.sort.key === sortKey ? (sortKey === "entry_time" ? (S.sort.dir > 0 ? " (oldest first)" : " (newest first)") : (S.sort.dir > 0 ? " (low to high)" : " (high to low)")) : ""));
+        const on = S.sort.key === sortKey;
+        const b = el("button", label + (on ? (sortKey === "opened_at" ? (S.sort.dir > 0 ? " (oldest first)" : " (newest first)") : (S.sort.dir > 0 ? " (low to high)" : " (high to low)")) : ""));
         b.type = "button";
-        th.setAttribute("aria-sort", S.sort.key === sortKey ? (S.sort.dir > 0 ? "ascending" : "descending") : "none");
-        b.addEventListener("click", () => { S.sort = { key: sortKey, dir: S.sort.key === sortKey ? -S.sort.dir : -1 }; renderTrades(); });
+        th.setAttribute("aria-sort", on ? (S.sort.dir > 0 ? "ascending" : "descending") : "none");
+        b.addEventListener("click", () => { S.sort = { key: sortKey, dir: on ? -S.sort.dir : (sortKey === "kind" || sortKey === "source" || sortKey === "symbol" ? 1 : -1) }; renderTrades(); });
         th.appendChild(b);
       } else th.textContent = label;
       head.appendChild(th);
     };
-    col("Opened", "entry_time"); col("Contract", "symbol"); col("Qty", null, true); col("Entry", null, true); col("Exit or mark", null, true);
-    col("Profit or loss", "pnl", true); col("Return", "pnl_pct", true); col("Held", "held", true); col("Status", null);
+    col("Opened", "opened_at"); col("Trade", "symbol"); col("Type", "kind"); col("Account or lane", "source"); col("Qty", null, true); col("Entry", null, true);
+    col("Exit or mark", null, true); col("Profit or loss", "pnl", true); col("Held", "held", true); col("Status", null);
     t.appendChild(head);
-    const now = Date.now();
+    const ncols = head.children.length;
     rows.forEach((x) => {
       const tr = el("tr", null, "click");
-      tr.tabIndex = 0;
-      tr.setAttribute("aria-label", "Open trade file for " + x.symbol + " " + (x.right === "C" ? "call " : "put ") + x.strike);
       const cell = (content, right) => { const td = el("td", null, right ? "r num" : ""); if (content instanceof Node) td.appendChild(content); else td.textContent = content; tr.appendChild(td); };
-      cell(fmtTime(x.entry_time)); cell(ticket(x)); cell(String(x.quantity), true); cell(Number(x.entry_price).toFixed(2), true);
-      cell(x.exit_price !== null ? Number(x.exit_price).toFixed(2) : (x.mark !== null ? Number(x.mark).toFixed(2) + " (mark)" : "unobservable"), true);
-      cell(pnlCell(x), true);
-      cell(x.pnl_pct === null ? "n/a" : span(pct(x.pnl_pct), tone(x.pnl_pct)), true);
-      cell(duration(x.held_seconds !== null ? x.held_seconds : Math.floor((now - new Date(x.entry_time).getTime()) / 1000)), true);
-      cell(statusTag(x));
-      const open = () => openTrade(x.id, tr);
-      tr.addEventListener("click", open);
-      tr.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } });
+      cell(openedText(x)); cell(tradeName(x)); cell(instrumentTag(x)); cell(x.source_label); cell(String(x.quantity), true); cell(Number(x.entry_price).toFixed(2), true);
+      cell(exitText(x), true); cell(pnlCell(x), true);
+      cell(heldText(x), true); cell(statusTag(x));
+      attachRow(tr, x, () => openRow(x, tr, ncols));
       t.appendChild(tr);
     });
     host.appendChild(t);
+    moreButton(host, rows.length, matching);
+  }
+  function moreButton(host, shown, total) {
+    if (total <= shown) return;
+    const b = el("button", "Show 100 more (" + shown + " of " + total + " shown)", "btn");
+    b.type = "button";
+    b.addEventListener("click", () => { S.shown += 100; renderTrades(); });
+    host.appendChild(b);
+  }
+
+  function renderSources(data, kindOk) {
+    const rows = data.sources.filter((x) => S.kind === "all" || x.instrument === S.kind);
+    table($("trade-sources"), [
+      { label: "Account or lane", get: (r) => { const b = el("button", r.label, "linkbtn"); b.type = "button"; b.addEventListener("click", () => { S.source = r.source; renderTrades(); }); return b; } },
+      { label: "Type", get: (r) => (r.instrument === "options" ? "Options" : "Shares") },
+      { label: "Trades", right: true, get: (r) => r.open + " open, " + r.closed + " closed" },
+      { label: "Winners", right: true, get: (r) => (r.win_rate_pct === null ? "n/a" : r.win_rate_pct + "%") },
+      { label: "Realized", right: true, get: (r) => span(arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)) },
+      { label: "Open now", right: true, get: (r) => span(arrow(r.open_pnl) + sgn(r.open_pnl), tone(r.open_pnl)) },
+    ], rows, "No lanes have traded yet");
   }
 
   async function loadTrades() {
-    S.trades = await api("/api/trades?limit=500");
+    S.trades = await api("/api/alltrades");
     renderTrades();
   }
 
@@ -494,8 +641,8 @@
     return s;
   }
   function renderTradeFile(t) {
-    $("drawer-title").textContent = t.symbol + " " + (t.right === "C" ? "call " : "put ") + t.strike + ", " + fmtDay(t.expiry);
-    $("drawer-sub").textContent = t.contract + " | " + exitLabel(t);
+    $("drawer-title").textContent = contractText(t);
+    $("drawer-sub").textContent = exitLabel(t);
     const body = $("drawer-body");
     body.replaceChildren();
     const res = el("div");
@@ -551,16 +698,17 @@
   }
 
   async function openTrade(id, opener) {
-    const t = S.trades && S.trades.trades.find((x) => x.id === id);
-    if (!t) return;
     S.openTrade = id; S.opener = opener || document.activeElement;
-    const trail = renderTradeFile(t);
     $("scrim").hidden = false; $("drawer").hidden = false;
     document.body.style.overflow = "hidden";
+    $("drawer-title").textContent = "Loading the trade file";
+    $("drawer-sub").textContent = "";
+    $("drawer-body").replaceChildren();
     $("btn-drawer-close").focus();
     try {
       const d = await api("/api/trades/" + encodeURIComponent(id));
       if (S.openTrade !== id) return;
+      const trail = renderTradeFile(d);
       trail.replaceChildren();
       const ol = el("ol", null, "timeline");
       (d.audit || []).forEach((e) => {
@@ -574,7 +722,7 @@
       });
       if (ol.children.length) trail.appendChild(ol); else trail.appendChild(el("p", "No audit events recorded.", "muted"));
     } catch (e) {
-      if (S.openTrade === id) { trail.replaceChildren(); trail.appendChild(el("p", "Could not load the order trail: " + e.message, "loss")); }
+      if (S.openTrade === id) { $("drawer-title").textContent = "Could not load the trade file"; $("drawer-body").appendChild(el("p", e.message, "loss")); }
     }
   }
   function closeTrade() {
@@ -655,9 +803,75 @@
   async function loadShortterm() { renderLane("st", await api("/api/shortterm")); }
   async function loadSwing() { renderLane("sw", await api("/api/swing")); }
 
+  // ---------------------------------------------------------------- Options tracker
+  const TK_H = { 1: "1 trading day", 3: "3 trading days", 7: "7 trading days" };
+  const retText = (v) => (v === null || v === undefined ? "n/a" : (v > 0 ? "+" : "") + v.toFixed(1) + "%");
+  function tkMarks(m) {
+    const w = el("span", null, "marks");
+    ["1", "3", "7"].forEach((h) => {
+      const mk = m[h];
+      w.appendChild(el("span", h + "d " + (mk ? retText(mk.ret_pct) : "waiting"), "mark " + (mk ? tone(mk.ret_pct) : "muted")));
+    });
+    return w;
+  }
+  function renderTracker() {
+    const r = S.tracker;
+    if (!r) return;
+    const h3 = r.horizons["3"];
+    $("tk-lede").textContent = "The scanner flags option contracts that traded far above their open interest. The tracker keeps every flag, reads the contract again 1, 3 and 7 trading days later, and records what happened, so the rules for 'unusual' can be tested instead of trusted. " +
+      (r.fictional ? "This is fictional demo data." : "");
+    const f = $("tk-figures");
+    f.replaceChildren();
+    const waiting = r.watching.filter((w) => !w.marks["1"]).length;
+    kids(f, [
+      fig(String(r.watching.length), "Flags being watched", waiting + " not yet marked once"),
+      fig(String(r.total_marks), "Marks taken", "needs " + r.min_n + " in a group before it counts"),
+      fig(h3.n ? retText(h3.avg_ret_pct) : "n/a", "Average after 3 days", h3.n ? "median " + retText(h3.median_ret_pct) + ", " + h3.n + " marks" : "no 3 day marks yet", tone(h3.avg_ret_pct)),
+      fig(h3.n ? h3.win_rate_pct + "%" : "n/a", "Positive after 3 days", "after paying the spread"),
+    ]);
+    const fl = $("tk-findings");
+    fl.replaceChildren();
+    if (r.findings.length) r.findings.forEach((x) => fl.appendChild(el("li", x)));
+    else fl.appendChild(el("li", r.total_marks ? "No group of at least " + r.min_n + " marks differs from the average by a meaningful margin yet." : "Nothing yet. Marks start 1 trading day after the first flags, and findings need " + r.min_n + " marks in a group.", "muted"));
+    table($("tk-horizons"), [
+      { label: "After", get: (x) => TK_H[x.h] }, { label: "Marks", right: true, get: (x) => x.s.n },
+      { label: "Positive", right: true, get: (x) => (x.s.n ? x.s.win_rate_pct + "%" : "n/a") },
+      { label: "Average return", right: true, get: (x) => span(retText(x.s.avg_ret_pct), tone(x.s.avg_ret_pct)) },
+      { label: "Median return", right: true, get: (x) => retText(x.s.median_ret_pct) },
+      { label: "Underlying moved the right way by", right: true, get: (x) => retText(x.s.avg_helpful_move_pct) },
+      { label: "Enough to read", get: (x) => el("span", x.s.enough ? "Yes" : "Too few", "tag " + (x.s.enough ? "info" : "")) },
+    ], ["1", "3", "7"].map((h) => ({ h, s: r.horizons[h] })), "No marks yet");
+    chips($("tk-horizon-tabs"), ["1", "3", "7"].map((h) => ({ id: h, label: TK_H[h] + " after" })), S.tkH, (id) => { S.tkH = id; renderTracker(); });
+    const groups = r.groups.filter((g) => String(g.horizon) === S.tkH).sort((a, b) => (a.feature === b.feature ? (b.vs_all_pct || 0) - (a.vs_all_pct || 0) : a.feature < b.feature ? -1 : 1));
+    table($("tk-groups"), [
+      { label: "Feature", get: (g) => g.feature_label }, { label: "Group", get: (g) => el("b", g.bucket) },
+      { label: "Marks", right: true, get: (g) => g.n },
+      { label: "Positive", right: true, get: (g) => g.win_rate_pct + "%" },
+      { label: "Average return", right: true, get: (g) => span(retText(g.avg_ret_pct), tone(g.avg_ret_pct)) },
+      { label: "Against all flagged", right: true, get: (g) => (g.vs_all_pct === null ? "n/a" : span(arrow(g.vs_all_pct) + (g.vs_all_pct > 0 ? "+" : "") + g.vs_all_pct.toFixed(1) + " pts", tone(g.vs_all_pct))) },
+      { label: "Enough to read", get: (g) => el("span", g.enough ? "Yes" : "Too few", "tag " + (g.enough ? "info" : "")) },
+    ], groups, "No marks at this horizon yet", "Groups appear once a flagged contract has been read again that many trading days later.");
+    table($("tk-watching"), [
+      { label: "Flagged", get: (w) => shortDay(w.day) }, { label: "Contract", get: (w) => ticket(w) },
+      { label: "Volume / OI", right: true, get: (w) => (w.ratio === null ? "no ratio" : w.ratio + "x") },
+      { label: "Side", get: (w) => ({ BUY: "Looks like buying", SELL: "Looks like selling" }[w.side] || "Unclear") },
+      { label: "Score", right: true, get: (w) => w.score },
+      { label: "Entry (ask)", right: true, get: (w) => (w.entry_ask === null || w.entry_ask === undefined ? "n/a" : Number(w.entry_ask).toFixed(2)) },
+      { label: "Marks", get: (w) => tkMarks(w.marks) },
+    ], r.watching, "Nothing flagged yet", "Run a market scan. Flags from the scanner appear here and are marked on later days.");
+    table($("tk-criteria"), [
+      { label: "Rule", get: (c) => el("b", c.name) }, { label: "What it requires", get: (c) => c.rule }, { label: "Why", get: (c) => el("span", c.why, "muted") },
+    ], r.criteria, "No criteria");
+    $("tk-agent").textContent = "Two agents read unusual activity. The sentiment agent looks at call and put volume across the whole chain. The flow agent looks at the contracts flagged here on the candidate's own name and can only argue against a trade whose direction the flagged money opposes. If flow agrees it just writes that down. Their votes are scored against what happened next on the Agents page, and the flow agent starts with a quarter of the normal weight. Letting flow add conviction waits until the findings above show flagged flow is worth following.";
+    const n = $("tk-notes");
+    n.replaceChildren();
+    r.limitations.forEach((x) => n.appendChild(el("li", x)));
+  }
+  async function loadTracker() { S.tracker = await api("/api/tracker"); renderTracker(); }
+
   // ---------------------------------------------------------------- Market scan
   const TABS = [{ id: "heat", label: "Heat map" }, { id: "unusual", label: "Unusual options" }, { id: "follow", label: "Did it stick?" },
-    { id: "active", label: "Most active names" }, { id: "options", label: "Option volume by name" }];
+    { id: "rotation", label: "Sector rotation" }, { id: "active", label: "Most active names" }, { id: "options", label: "Option volume by name" }];
   const TONE = { BROAD_STRENGTH: "▲ Broad strength", BROAD_WEAKNESS: "▼ Broad weakness", MIXED: "◆ Mixed", UNKNOWN: "? Unknown" };
   const FLOW = { BULLISH_LEAN: "▲ Bullish lean", BEARISH_LEAN: "▼ Bearish lean", BALANCED: "◆ Balanced", UNCLEAR: "? Unclear" };
   const POSITION = { BUY_TO_OPEN: "likely bought to open", SELL_TO_OPEN: "likely sold to open", BUY_TO_CLOSE: "likely bought to close", SELL_TO_CLOSE: "likely sold to close", UNCLEAR: "open or close unclear" };
@@ -714,7 +928,7 @@
     $("scan-status").textContent = !st ? "" : st.running ? "Scanning now" : st.last_scan_at ? "Last scan " + fmtTime(st.last_scan_at) + (d.interval_s ? ", repeats every " + Math.round(d.interval_s / 60) + " minutes" : ", automatic scanning is off") : "No scan has run yet";
     $("btn-scan").disabled = !!(st && st.running);
     chips($("market-tabs"), TABS, S.marketTab, (id) => { S.marketTab = id; renderMarket(); }, "tab");
-    ["heat", "unusual", "follow", "active", "options"].forEach((id) => { $("scan-" + id + "-panel").hidden = S.marketTab !== id; });
+    ["heat", "rotation", "unusual", "follow", "active", "options"].forEach((id) => { $("scan-" + id + "-panel").hidden = S.marketTab !== id; });
     renderSentiment(res);
     const notes = $("scan-notes");
     notes.replaceChildren();
@@ -739,8 +953,7 @@
     const un = res.unusual.filter((r) => S.unusualFilter === "all" || (S.unusualFilter === "low" ? r.low_oi : r.decision === "REVIEWABLE"));
     const th = res.thresholds;
     table($("scan-unusual"), [
-      { label: "Name", get: (r) => el("b", r.symbol) },
-      { label: "Contract", get: (r) => el("span", (r.right === "C" ? "Call " : "Put ") + r.strike + ", " + fmtDay(r.expiry) + " (" + r.dte + "d)", "") },
+      { label: "Contract", get: (r) => ticket(r) }, { label: "Days left", right: true, get: (r) => r.dte },
       { label: "Volume", right: true, get: (r) => num(r.volume) },
       { label: "Open interest", right: true, get: (r) => { const t = r.open_interest === null ? "missing" : (r.oi_state === "REPORTED_ZERO" ? "zero" : num(r.open_interest)); return r.low_oi ? kids(el("span"), [span(t + " "), span("Low", "tag warn")]) : t; } },
       { label: "Volume / OI", right: true, get: (r) => r.volume_oi_ratio === null ? "no ratio" : r.volume_oi_ratio + "x" },
@@ -752,8 +965,7 @@
     ], un, "Nothing unusual by these thresholds", "Thresholds: at least " + th.min_volume + " contracts at " + th.min_volume_oi_ratio + "x open interest or more" + (th.low_oi_below ? ", or at least " + th.min_volume_when_oi_low + " contracts when open interest is under " + th.low_oi_below : "") + ".");
 
     table($("scan-follow"), [
-      { label: "Name", get: (f) => el("b", f.symbol) },
-      { label: "Contract", get: (f) => (f.right === "C" ? "Call " : "Put ") + f.strike + ", " + fmtDay(f.expiry) + " (" + f.dte + "d)" },
+      { label: "Contract", get: (f) => ticket(f) },
       { label: "Unusual on", get: (f) => shortDay(f.prior_day) },
       { label: "Volume then", right: true, get: (f) => num(f.prior_volume) },
       { label: "Open interest", right: true, get: (f) => f.oi_change === null ? "n/a" : num(f.prior_oi) + " to " + num(f.oi_now) + " (" + (f.oi_change >= 0 ? "+" : "") + num(f.oi_change) + ")" },
@@ -769,7 +981,34 @@
       { label: "Unusual contracts", right: true, get: (r) => r.unusual_count }, { label: "Contracts read", right: true, get: (r) => r.contracts },
     ], res.option_names, "No option chains were read", (res.errors || [])[0] || "");
   }
-  async function loadMarket() { S.scan = await api("/api/scan"); renderMarket(); }
+  async function loadMarket() { const [scan, rot] = await Promise.all([api("/api/scan"), api("/api/rotation")]); S.scan = scan; S.rotation = rot; renderMarket(); renderRotation(rot); }
+
+  // Where trading is concentrating between sectors, from the daily scans the platform has stored.
+  const TREND = { GAINING: "▲ Gaining share", LOSING: "▼ Losing share", STEADY: "◆ Steady" };
+  function renderRotation(r) {
+    const host = $("scan-rotation");
+    const notes = $("scan-rotation-notes");
+    notes.replaceChildren();
+    (r.summary || []).forEach((x) => notes.appendChild(el("li", x)));
+    notes.appendChild(el("li", r.caveat, "muted"));
+    if (!r.sectors.length) { empty(host, "No sector history yet", "Run a scan. Rotation needs scans from at least two different trading days."); return; }
+    const top = Math.max.apply(null, r.sectors.map((x) => Math.abs(x.share_change_pts)).concat([1]));
+    table(host, [
+      { label: "Sector", get: (x) => el("b", x.sector) },
+      { label: "Share of trading now", right: true, get: (x) => x.share_pct.toFixed(1) + "%" },
+      { label: "Change in share since " + shortDay(r.days[0]), right: true, get: (x) => {
+        const w = el("span", null, "num"), bar = el("span", null, "bar"), i = el("i", null, x.share_change_pts >= 0 ? "up" : "down");
+        i.style.width = Math.min(50, Math.abs(x.share_change_pts) / top * 50) + "%";
+        bar.appendChild(i);
+        kids(w, [span(arrow(x.share_change_pts) + (x.share_change_pts > 0 ? "+" : "") + x.share_change_pts.toFixed(1) + " pts", tone(x.share_change_pts)), bar]);
+        return w; } },
+      { label: "Trend", get: (x) => el("span", TREND[x.trend], "tag " + (x.trend === "GAINING" ? "info" : "")) },
+      { label: "Price move over the days shown", right: true, get: (x) => span(signed(x.cumulative_change_pct), tone(x.cumulative_change_pct)) },
+      { label: "Today", right: true, get: (x) => span(signed(x.avg_change_pct), tone(x.avg_change_pct)) },
+      { label: "Calls per put", right: true, get: (x) => (x.call_put_ratio === null ? "n/a" : x.call_put_ratio) },
+      { label: "Days seen", right: true, get: (x) => x.days_seen },
+    ], r.sectors, "No sector history yet");
+  }
 
   // ---------------------------------------------------------------- Options lanes
   const OP_EXIT = { stop: "Stop", target: "Target", vwap_lost: "Lost VWAP", flat_by_close: "Closed for the day", carried_over: "Left over", trend_break: "Trend broke", time: "Time stop", expiry_near: "Near expiry", expired_unmarked: "Expired", challenge_end: "Attempt ended" };
@@ -786,8 +1025,8 @@
     const d = el("details", null, "pm");
     const sum = el("summary");
     const label = open ? "Open" : (exits[t.close_reason] || words(t.close_reason));
-    kids(sum, [span(o.right === "C" ? "Call" : "Put", "tag " + (o.right === "C" ? "gain" : "loss")), el("b", t.symbol),
-      span(o.strike + " expiring " + shortDay(o.expiry) + " (" + o.dte + "d at entry)", "muted"),
+    kids(sum, [o.right ? ticket({ symbol: t.symbol, right: o.right, strike: o.strike, expiry: o.expiry }) : el("b", t.symbol),
+      span(o.dte !== undefined ? o.dte + " days to expiry at entry" : "", "muted"),
       span(t.quantity + " at " + Number(t.entry_price).toFixed(2) + (t.exit_price === null ? "" : " to " + Number(t.exit_price).toFixed(2)), "num"),
       span(label, "tag " + (open ? "info" : t.pnl > 0 ? "gain" : "loss"))]);
     const money_ = open ? (t.unrealized_pnl === null ? "no mark yet" : arrow(t.unrealized_pnl) + sgn(t.unrealized_pnl)) : arrow(t.pnl) + sgn(t.pnl) + " (" + pct(t.pnl_pct) + ")";
@@ -856,6 +1095,7 @@
       fig(sm.avg_return_pct === null ? "n/a" : arrow(sm.avg_return_pct) + pct(sm.avg_return_pct), "Average per trade", "of the premium paid, after fees", tone(sm.avg_return_pct)),
       fig(arrow(sm.realized_pnl) + sgn(sm.realized_pnl), "Realized", "simulated", tone(sm.realized_pnl)),
       fig(arrow(sm.unrealized_pnl) + sgn(sm.unrealized_pnl), "Open now", "at the last bid", tone(sm.unrealized_pnl)),
+      fig(sm.stress_pnl === null ? "n/a" : arrow(sm.stress_pnl) + sgn(sm.stress_pnl), "Realized, harder exit", sm.stress_pnl === null ? "needs closed trades with a post-mortem" : "same " + sm.stress_trades + " trades, at the bid they made " + sgn(sm.stress_bid_pnl) + "; a what-if, not a price", tone(sm.stress_pnl)),
     ]);
     const host = $("op-trades");
     if (!lane.trades.length) empty(host, "No simulated trades yet", d.enabled ? "A trade needs this lane's signal while the market is open." : "Switch the options lanes on under Controls.");
@@ -965,7 +1205,42 @@
       { label: "Evaluations", right: true, get: (h) => h.evaluations },
     ], list, "No experiments registered", "Register one with: python -m optplat.research register. The baseline stays frozen.");
   }
-  async function loadResearch() { renderResearch(await api("/api/research/hypotheses")); }
+  async function loadResearch() {
+    const [hyp, learn] = await Promise.all([api("/api/research/hypotheses"), api("/api/learning")]);
+    renderResearch(hyp); renderLearning(learn);
+  }
+  const VERDICT = { IMPROVING: ["▲ Improving", "gain"], WORSENING: ["▼ Getting worse", "loss"], NO_CLEAR_CHANGE: ["◆ No clear change", ""], TOO_EARLY: ["◇ Too early to say", ""] };
+  function renderLearning(l) {
+    const imp = l.improvement, c = l.counts;
+    $("rs-lede").textContent = (l.fictional ? "Fictional demo data: none of this is evidence. " : "") + "Everything the platform has recorded about its own mistakes and results, and whether the later trades are better than the earlier ones. Each claim carries its sample size.";
+    const f = $("rs-figures");
+    f.replaceChildren();
+    kids(f, [fig(String(c.closed), "Closed trades", c.trades + " in all, across every lane"), fig(String(c.lessons), "Lessons on record", "patterns and anecdotes"),
+      fig(String(c.weight_changes), "Agent weight changes", "from how votes turned out"), fig(String(c.tracker_marks), "Option flow marks", "from the tracker")]);
+    const v = VERDICT[imp.verdict] || [imp.verdict, ""], vp = $("rs-verdict");
+    vp.replaceChildren();
+    kids(vp, [el("span", v[0], "tag " + v[1]), span("  " + imp.text)]);
+    l.summary.slice(1).forEach((x) => vp.appendChild(el("div", x, "muted")));
+    table($("rs-halves"), [
+      { label: "Period", get: (h) => h.label }, { label: "Closed trades", right: true, get: (h) => h.s.n },
+      { label: "Winners", right: true, get: (h) => h.s.win_rate_pct + "%" },
+      { label: "Average return", right: true, get: (h) => span(retText(h.s.avg_return_pct), tone(h.s.avg_return_pct)) },
+      { label: "From", get: (h) => fmtTime(h.s.from) }, { label: "To", get: (h) => fmtTime(h.s.to) },
+    ], imp.older ? [{ label: "Older half", s: imp.older }, { label: "Newer half", s: imp.newer }] : [], "No comparison yet", "At least " + (2 * imp.min_half) + " closed trades are needed, " + imp.min_half + " in each half.");
+    table($("rs-lessons"), [
+      { label: "From", get: (x) => x.source }, { label: "What it found", get: (x) => x.text },
+      { label: "How much evidence", get: (x) => el("span", x.strength, "tag " + (x.strength === "Pattern" ? "info" : "")) },
+    ], l.lessons, "Nothing learned yet", "Lessons appear once trades close, agents vote and the tracker marks flagged contracts.");
+    table($("rs-agents"), [
+      { label: "Agent", get: (a) => el("b", a.agent) }, { label: "Weight", right: true, get: (a) => (a.weight === null || a.weight === undefined ? "n/a" : Number(a.weight).toFixed(2)) },
+      { label: "Outcomes seen", right: true, get: (a) => a.outcomes + (a.descriptive_only ? " (too few to judge)" : "") },
+    ], l.agents, "No agent has voted on an outcome yet");
+    const tl = $("rs-timeline");
+    tl.replaceChildren();
+    if (!l.timeline.length) tl.appendChild(el("li", "Nothing yet. The first closed trade will appear here.", "muted"));
+    l.timeline.forEach((e) => { const li = el("li"); li.appendChild(el("time", fmtTime(e.ts))); li.appendChild(el("span", e.text)); tl.appendChild(li); });
+    $("rs-caveat").textContent = l.caveat;
+  }
 
   // ---------------------------------------------------------------- refresh loop
   async function loadPage() {
@@ -975,6 +1250,7 @@
     else if (page === "swing") await loadSwing();
     else if (page === "shortterm") await loadShortterm();
     else if (page === "market") await loadMarket();
+    else if (page === "tracker") await loadTracker();
     else if (page === "agents") await loadAgents();
     else if (page === "research") await loadResearch();
   }
@@ -1023,7 +1299,7 @@
   $("btn-stop").addEventListener("click", () => act(() => api("/api/engine/stop", { method: "POST" })));
   $("btn-kill").addEventListener("click", () => act(() =>
     api("/api/risk/kill-switch", { method: "POST", body: JSON.stringify({ active: !S.killState, reason: "dashboard" }) })));
-  $("btn-save").addEventListener("click", () => act(() => api("/api/engine/config", {
+  $("btn-save").addEventListener("click", () => act(async () => { S.watchDirty = false; return api("/api/engine/config", {
     method: "PUT",
     body: JSON.stringify({
       auto_entries: $("cfg-entries").checked, auto_exits: $("cfg-exits").checked,
@@ -1031,7 +1307,20 @@
       scan_interval_s: Number($("cfg-scan").value), shortterm_enabled: $("cfg-shortterm").checked, swing_enabled: $("cfg-swing").checked, option_lanes_enabled: $("cfg-optlanes").checked,
       watchlist: $("cfg-watch").value.split(/[,\s]+/).filter(Boolean),
     }),
-  })));
+  }); }));
+  $("cfg-watch").addEventListener("input", () => { S.watchDirty = true; });
+  $("btn-sector").addEventListener("click", async () => { try {
+    const sector = $("cfg-sector").value;
+    if (!sector) return;
+    const scan = await api("/api/scan"), hm = scan.result && scan.result.heat_map;
+    const names = hm ? hm.names.filter((n) => n.sector === sector).sort((a, b) => b.dollar_volume - a.dollar_volume).map((n) => n.symbol) : [];
+    const have = $("cfg-watch").value.split(/[,\s]+/).filter(Boolean);
+    const add = names.filter((n) => have.indexOf(n) < 0).slice(0, 4);
+    if (!add.length) { $("updated").textContent = hm ? "Nothing new to add from " + sector : "Run a market scan first so the names can be ranked"; return; }
+    $("cfg-watch").value = have.concat(add).slice(0, 20).join(", ");
+    S.watchDirty = true;
+    $("updated").textContent = "Added " + add.join(", ") + ". Choose Save settings to use them.";
+  } catch (e) { $("updated").textContent = "Error: " + e.message; } });
   $("btn-ch-restart").addEventListener("click", () => act(async () => { await api("/api/challenge/restart", { method: "POST" }); }));
   $("btn-op-step").addEventListener("click", () => act(async () => { await api("/api/optlanes/step", { method: "POST" }); }));
   $("btn-sw-step").addEventListener("click", () => act(async () => { await api("/api/swing/step", { method: "POST" }); }));
@@ -1047,6 +1336,7 @@
     };
     setTimeout(poll, 2000);
   }));
+  $("trade-source").addEventListener("change", (ev) => { S.source = ev.target.value; renderTrades(); });
   $("trade-search").addEventListener("input", (ev) => { S.query = ev.target.value; renderTrades(); });
   $("btn-drawer-close").addEventListener("click", closeTrade);
   $("scrim").addEventListener("click", closeTrade);

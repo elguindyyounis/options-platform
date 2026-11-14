@@ -251,6 +251,34 @@ def test_share_lane_numbers_are_unchanged_by_the_option_fields():
     assert t["pnl"] == 10.0 and t["pnl_pct"] == 1.0 and t["unrealized_pnl"] is None and t["multiplier"] == 1
 
 
+def test_post_mortem_carries_the_stressed_money_figure_and_it_is_never_better_than_the_bid_exit():
+    pm = post_mortem(trade(spread=14.0, oi=10), 6.0, "target", closed_at(3), {"underlying": 105.0, "fees_close": 1.3, "spread_pct": 30.0})
+    bid_net = (6.0 - 5.0) * 2 * 100 - 2.6
+    assert pm["stress_net"] < bid_net and pm["stress_net_pct"] == pytest.approx(pm["stress_net"] / 1000 * 100, abs=0.06)
+
+
+def test_lane_summary_shows_bid_and_stressed_totals_over_the_same_trades_only():
+    from optplat.shortterm import lane_report
+    store = Store(":memory:")
+    # one trade with a post-mortem (stressed figure stored), one without (older row): the older row must not be counted in either total
+    a = store.lane_open("x", "AAA", NOW, 5.0, 2, True, {"multiplier": 100, "fees_open": 1.3})
+    store.lane_close(a, NOW, 6.0, "target", {"fees_close": 1.3, "postmortem": {"tags": [], "net_pct": 19.7, "stress_net": -40.0}})
+    b = store.lane_open("x", "BBB", NOW, 5.0, 2, True, {"multiplier": 100, "fees_open": 1.3})
+    store.lane_close(b, NOW, 7.0, "target", {"fees_close": 1.3})
+    sm = lane_report(store, "x", True, NOW, rules=[], limitations=[], symbols=[], exit_text={})["summary"]
+    assert sm["stress_trades"] == 1 and sm["stress_pnl"] == -40.0 and sm["stress_bid_pnl"] == pytest.approx(197.4)
+    assert sm["realized_pnl"] == pytest.approx(197.4 + 397.4)
+
+
+def test_share_lanes_have_no_stressed_figure_rather_than_a_made_up_one():
+    from optplat.shortterm import lane_report
+    store = Store(":memory:")
+    tid = store.lane_open("s", "AAA", NOW, 100.0, 10, True, {})
+    store.lane_close(tid, NOW, 101.0, "target", {})
+    rep = lane_report(store, "s", True, NOW, rules=[], limitations=[], symbols=[], exit_text={})
+    assert rep["summary"]["stress_pnl"] is None and rep["summary"]["stress_trades"] == 0 and rep["trades"][0]["stress_pnl"] is None
+
+
 # ------------------------------------------------------------ swing lanes
 def uptrend():
     bars = mk(pullback_rets())
