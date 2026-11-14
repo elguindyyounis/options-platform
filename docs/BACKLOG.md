@@ -68,6 +68,7 @@ Existing items, in order:
 
 ## Ideas (unscheduled)
 
+* Write the stressed-exit scenario as its own audit event at close time (the alerter does), so a result can be re-checked later.
 * Recorder storage: snapshots are about 20 KB of JSON each. At the default 5-minute interval and two
   symbols that is roughly 3 MB a day (about 90 MB for the 30-day default). Compress, or store only
   rows near the money, before running a short interval or a long watchlist.
@@ -140,3 +141,4 @@ Existing items, in order:
   `trades.py` (entries matched to exits with reasoning), `/api/scan`, `/api/trades`.
 * Open-P&L completeness (2026-11-14): `report()` counts unobservable and wide-spread open marks and says when open P&L is incomplete. Open: show it on the dashboard; owner to decide on pausing entries while held marks are unreliable.
 * Open-interest window honesty (2026-11-13): follow-ups and flow-lane trades carry `oi_sessions` and `oi_window_clean`. Open: owner to decide whether the flow lane should require a clean one-session window.
+* Signal provenance page with a test that keeps it in step with `SIGNAL_NAMES`, `VALIDATED_SIGNALS` and the lane list (2026-11-14, branch `agent/2026-11-14-challenger-b`).

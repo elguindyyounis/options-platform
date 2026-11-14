@@ -497,3 +497,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   only: no lane rule, risk limit or budget changed.
 * Verified: `python -m pytest -q` 512 passed (3 new tests). Not verified: live Yahoo quotes (their age is download time), dashboard
   rendering, share-lane exits, alerter tests. Baseline note: local `main` is behind; this branch builds on `agent/2026-11-13-daily-challenger-7`.
+
+## 2026-11-14 (challenger, second run of the day): signal provenance
+
+* Alerter unchanged since `1fc88f1`. Read `paper_engine.py` and two skill files (see COMPARISON_ALERTER.md).
+* Challenge 5: added `docs/SIGNAL_PROVENANCE.md` (every research signal, inferred label and lane, with origin, status and caveat) and
+  `tests/test_signal_provenance.py`, which fails when a signal or lane is missing from the page, a signal's status disagrees with
+  `VALIDATED_SIGNALS`, a lane is marked validated, or the page says "proven" or "profitable". Documentation and tests only: no code
+  under `src/`, no lane, limit, default or auth changed.
+* Verified: `python -m pytest -q` all passing (518). Not verified: alerter tests, live data, the cited papers (copied from the
+  alerter). Branch builds on `agent/2026-11-14-daily-challenger`; no PR opened (not requested in docs or CLAUDE.md).

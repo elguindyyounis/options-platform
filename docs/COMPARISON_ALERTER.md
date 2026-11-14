@@ -101,3 +101,17 @@ Code only, tests not run. Read `run_autopilot_for_symbol` and `automation_readin
   complete when it was not. Challenge 9 (display only) adds the counts. Whether new entries should pause while held marks are
   unreliable (as the alerter does) changes what the platform trades, so it is left for the owner.
 * Still unread: the HTTP handlers and `scheduled_scan_loop` in `server.py`, other `agent_skills`.
+
+## Added 2026-11-14 (alerter `1fc88f1`, second run): `paper_engine.py` and two skill files
+
+Code only, tests not run. The alerter's exit manager is 72 lines.
+
+* A failed quote fetch for a held contract is recorded as `UNAVAILABLE`/`UNOBSERVABLE` monitoring failure, never as a HOLD thesis.
+  The platform reports unobservable marks per row and (since challenge 9) in a count; it does not stop trading because of them.
+* Every automatic close audits an exit-liquidity-stress scenario beside the paper close. The platform computes the stressed exit in
+  post-mortems and lane summaries but does not write it as a separate audit event at close time.
+* Fixed exits are described as a frozen comparator; model exits are shadow-only unless opted in. The platform's frozen baseline lane
+  (challenge 3) plays the same role for entries.
+* `position-sizing` and `skeptic-red-team` skill texts require a forward held-out comparison against the unchanged prior version
+  before saying anything is better. The platform's provenance page (`SIGNAL_PROVENANCE.md`) adopts that standard.
+* Still unread: the HTTP handlers and `scheduled_scan_loop` in `server.py`, and the other five skill files.
