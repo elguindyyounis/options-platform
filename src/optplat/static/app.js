@@ -384,6 +384,16 @@
     return "simulated, at the bid. Stressed exit on the same " + sm.stressed_trades + " trade" + (sm.stressed_trades === 1 ? "" : "s") + ": " + sgn(sm.stressed_realized_pnl) + " (bid " + sgn(sm.bid_realized_pnl_same_trades) + ")";
   }
 
+  // Closed P&L split by whether the size stayed within 10% of reported volume and open interest. Unknown counts as outside.
+  function participationNote(sm) {
+    const p = sm.participation;
+    if (!p || !p.closed_checked) return "";
+    const bits = [p.within_cap + " of " + p.closed_checked + " closed within " + p.cap_volume_pct + "% of volume and " + p.cap_oi_pct + "% of open interest"];
+    if (p.within_cap_realized_pnl !== null) bits.push("P&L of those " + sgn(p.within_cap_realized_pnl));
+    if (p.unknown) bits.push(p.unknown + " with unknown size share counted as outside");
+    return bits.join("; ");
+  }
+
   function renderTrades() {
     const data = S.trades;
     if (!data) return;
@@ -861,7 +871,7 @@
       fig(String(sm.total), "Simulated trades", sm.open + " open, " + sm.closed + " closed"),
       fig(sm.win_rate_pct === null ? "n/a" : sm.win_rate_pct + "%", "Winners", sm.closed ? sm.wins + " of " + sm.closed + " closed" : "no closed trades"),
       fig(sm.avg_return_pct === null ? "n/a" : arrow(sm.avg_return_pct) + pct(sm.avg_return_pct), "Average per trade", "of the premium paid, after fees", tone(sm.avg_return_pct)),
-      fig(arrow(sm.realized_pnl) + sgn(sm.realized_pnl), "Realized", stressNote(sm), tone(sm.realized_pnl)),
+      fig(arrow(sm.realized_pnl) + sgn(sm.realized_pnl), "Realized", stressNote(sm) + (participationNote(sm) ? ". " + participationNote(sm) : ""), tone(sm.realized_pnl)),
       fig(arrow(sm.unrealized_pnl) + sgn(sm.unrealized_pnl), "Open now", sm.unobservable_open ? "at the last bid; " + sm.unobservable_open + " open with no usable bid are left out" : "at the last bid", tone(sm.unrealized_pnl)),
     ]);
     const host = $("op-trades");

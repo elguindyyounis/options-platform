@@ -125,3 +125,18 @@ assumptions; the platform already prices entries at the ask and exits at the bid
 
 * A weakness found on the platform side: lane summaries summed `unrealized_pnl` with an unmarked open trade counted as 0. Fixed as a count.
 * Read 2026-11-14 (run 4): `portfolio-cio`, `news-flow`, `market-sentiment` skills are the same template. Still unread: the HTTP handlers and `scheduled_scan_loop` in `server.py`.
+
+## Added 2026-11-14 (alerter `1fc88f1`, run 5): `entry_quality.py` and `feedback.py`
+
+Code only, tests not run.
+
+* `entry_quality.py` is a strict gate on real-source entries: spread over 15% of ask, volume under 20, open interest under 100, quantity
+  over 10% of volume or of open interest, DTE outside 7 to 730, strike too far from spot (30/40/60% by horizon), per-symbol and basket caps.
+  "No score or model may waive these gates." The platform's lanes do not refuse oversized entries (owner's choice), so run 5 only
+  *reports* results split by that 10%/10% yardstick (challenge 11).
+* `feedback.py` marks rejected and unselected contracts at 1, 7 and 30 days using ask-plus-slippage in and bid-minus-slippage out, requires
+  the later quote to be at least 12 hours newer, and leaves unmatched cases as `NO_DATA`, never a gain or loss. Its summaries need 5+ cases
+  before saying anything and always add "do not assume the original veto was mistaken". This is the shape the platform's counterfactual
+  journal (challenge 1) should keep.
+* A weakness found on the platform side: two unrelated functions are both called `liquidity_tier` (challenge 12).
+* Still unread: the HTTP handlers and `scheduled_scan_loop` in `server.py`, `adaptive.py`, `exit_decisions.py`, `daily_review.py`.

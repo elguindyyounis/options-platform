@@ -525,3 +525,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   trades, says when none qualifies, and states that none of it shows an edge. Display only: no lane rule, limit, budget, default or auth changed; frozen fingerprint untouched.
 * Verified: `python -m pytest -q` 525 passed (4 new), `node --check` on app.js. Not verified: rendering in a browser, alerter tests, live data. Builds on
   `agent/2026-11-14-challenge-c` because `main` is stale. No PR opened (not requested).
+
+## 2026-11-14 (challenger, fifth run): results split by size against the market
+
+* Alerter unchanged since `1fc88f1`. Read `entry_quality.py` and `feedback.py` (see COMPARISON_ALERTER.md).
+* Challenge 11: lane summaries gain `participation`: closed option-trade P&L split by whether size stayed within 10% of reported volume and 10% of
+  open interest (the alerter's entry caps), with unknown counted as outside, plus the open trades not within it. Shown on the options-lane Realized
+  figure. A yardstick only: no lane rule, size, limit, budget, default or auth changed. Logged challenge 12 (duplicate `liquidity_tier` names).
+* Verified: `python -m pytest -q` 529 passed (4 new), `node --check` on app.js. Not verified: rendering in a browser, share lanes (no volume figure),
+  alerter tests, live data. Base: `main` is stale and several 1-commit branches forked from it separately; this builds on
+  `agent/2026-11-14-daily-challenger-9`, the tip of the long chain. No PR opened (not requested).

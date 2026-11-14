@@ -106,3 +106,55 @@ def test_dashboard_shows_the_stressed_exit_and_the_left_out_open_trades():
     js = (pathlib.Path(__file__).parents[1] / "src/optplat/static/app.js").read_text()
     assert "stressed_realized_pnl" in js and "bid_realized_pnl_same_trades" in js and "unobservable_open" in js
     assert "innerHTML" not in js
+
+
+def _participation_lane(rows, open_rows=()):
+    """rows: (entry, exit, why-entered extras). One contract of qty 2, multiplier 100, no fees."""
+    from optplat.shortterm import lane_report
+    from optplat.store import Store
+    store = Store(":memory:")
+    t0 = datetime(2026, 1, 5, 15, tzinfo=timezone.utc)
+    for entry, exit_, extra in rows:
+        tid = store.lane_open("x-lane", "SPY", t0, entry, 2, True, {"multiplier": 100, "fees_open": 0.0, **extra})
+        store.lane_close(tid, t0 + timedelta(hours=1), exit_, "target", {"fees_close": 0.0})
+    for extra in open_rows:
+        store.lane_open("x-lane", "SPY", t0, 1.0, 2, True, {"multiplier": 100, "fees_open": 0.0, **extra})
+    return lane_report(store, "x-lane", True, t0, rules=[], limitations=[], symbols=["SPY"], exit_text={})["summary"]
+
+
+def test_participation_splits_closed_pnl_by_size_against_volume_and_open_interest_and_unknown_counts_as_outside():
+    ok = {"size_vs_volume_pct": 10.0, "size_vs_oi_pct": 10.0}      # exactly at the yardstick is within
+    big_oi = {"size_vs_volume_pct": 1.0, "size_vs_oi_pct": 10.1}
+    big_vol = {"size_vs_volume_pct": 10.1, "size_vs_oi_pct": 1.0}
+    s = _participation_lane([(1.0, 1.5, ok), (1.0, 2.0, big_oi), (1.0, 0.5, big_vol), (1.0, 3.0, {}), (1.0, 3.0, {"size_vs_volume_pct": None, "size_vs_oi_pct": 1.0})])["participation"]
+    assert (s["closed_checked"], s["within_cap"], s["over_cap"], s["unknown"]) == (5, 1, 2, 2)
+    assert s["within_cap_realized_pnl"] == 100.0
+    assert s["outside_cap_realized_pnl"] == 200.0 + (-100.0) + 400.0 + 400.0  # the lucky oversized and unknown-size wins are kept apart
+    assert (s["cap_volume_pct"], s["cap_oi_pct"]) == (10.0, 10.0)
+
+
+def test_participation_rejects_non_finite_and_boolean_shares_as_unknown():
+    bad = {"size_vs_volume_pct": float("nan"), "size_vs_oi_pct": 1.0}
+    flag = {"size_vs_volume_pct": True, "size_vs_oi_pct": True}
+    s = _participation_lane([(1.0, 1.5, bad), (1.0, 1.5, flag)])["participation"]
+    assert (s["within_cap"], s["unknown"], s["within_cap_realized_pnl"]) == (0, 2, None)
+
+
+def test_participation_counts_open_trades_not_within_the_yardstick_and_is_none_for_share_lanes():
+    s = _participation_lane([], open_rows=[{"size_vs_volume_pct": 1.0, "size_vs_oi_pct": 1.0}, {}, {"size_vs_volume_pct": 50.0, "size_vs_oi_pct": 1.0}])["participation"]
+    assert s["closed_checked"] == 0 and s["open_not_within_cap"] == 2 and s["within_cap_realized_pnl"] is None
+    from optplat.shortterm import lane_report
+    from optplat.store import Store
+    store = Store(":memory:")
+    t0 = datetime(2026, 1, 5, 15, tzinfo=timezone.utc)
+    tid = store.lane_open("share-lane", "SPY", t0, 100.0, 5, True, {})
+    store.lane_close(tid, t0 + timedelta(hours=1), 101.0, "target", {})
+    assert lane_report(store, "share-lane", True, t0, rules=[], limitations=[], symbols=["SPY"], exit_text={})["summary"]["participation"] is None
+
+
+def test_participation_does_not_change_the_other_totals_and_the_dashboard_reads_it():
+    import pathlib
+    s = _participation_lane([(1.0, 1.5, {"size_vs_volume_pct": 50.0, "size_vs_oi_pct": 50.0})])
+    assert s["realized_pnl"] == 100.0 and s["participation"]["within_cap"] == 0
+    js = (pathlib.Path(__file__).parents[1] / "src/optplat/static/app.js").read_text()
+    assert "participationNote" in js and "within_cap_realized_pnl" in js and "innerHTML" not in js

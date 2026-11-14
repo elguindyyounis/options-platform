@@ -68,6 +68,7 @@ Existing items, in order:
 
 ## Ideas (unscheduled)
 
+* Two functions named `liquidity_tier` exist with different signatures: `liquidity.py` takes `(volume, open_interest, spread_pct)` and returns PREFERRED/WATCH/THIN; `signals.py` takes `(spread_pct, volume, oi)` and returns A/B/C. Every call site is correct today, but swapping the import would silently mis-tier everything, since all arguments are numbers. Rename one (display-only, no threshold change) and add a test that pins each order.
 * Write the stressed-exit scenario as its own audit event at close time (the alerter does), so a result can be re-checked later.
 * Recorder storage: snapshots are about 20 KB of JSON each. At the default 5-minute interval and two
   symbols that is roughly 3 MB a day (about 90 MB for the 30-day default). Compress, or store only
@@ -143,3 +144,4 @@ Existing items, in order:
 * Open-interest window honesty (2026-11-13): follow-ups and flow-lane trades carry `oi_sessions` and `oi_window_clean`. Open: owner to decide whether the flow lane should require a clean one-session window.
 * Signal provenance page with a test that keeps it in step with `SIGNAL_NAMES`, `VALIDATED_SIGNALS` and the lane list (2026-11-14, branch `agent/2026-11-14-challenger-b`).
 * Options-lane dashboard shows stressed-exit P&L beside bid-exit P&L and says how many open trades have no usable bid (2026-11-14, challenges 4 and 9). Display only. Still open: share-lane equivalents.
+* Lane participation split (2026-11-14, run 5, challenge 11): lane summaries gain `participation`, closed option-trade P&L split by whether size stayed within 10% of reported volume and 10% of open interest (the alerter's entry caps), unknown counted as outside; shown on the options-lane Realized figure. A yardstick, not a gate: no lane rule or size changed. Open: share lanes have no volume figure, so none.

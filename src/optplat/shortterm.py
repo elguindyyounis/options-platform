@@ -228,9 +228,42 @@ def lane_report(store: Store, lane: str, fictional: bool, now: datetime, *, rule
                     # are comparable. A what-if, not a price anyone could have traded at.
                     "stressed_trades": len(both), "stressed_missing": len(done) - len(both),
                     "stressed_realized_pnl": round(sum(t["stressed_pnl"] for t in both), 2) if both else None,
-                    "bid_realized_pnl_same_trades": round(sum(t["pnl"] for t in both), 2) if both else None},
+                    "bid_realized_pnl_same_trades": round(sum(t["pnl"] for t in both), 2) if both else None,
+                    # Closed P&L split by size against reported volume and open interest (a yardstick, not a gate).
+                    "participation": _participation(done, [t for t in trades if t["status"] == "OPEN"])},
         "trades": trades,
     }
+
+
+# The alerter refuses an entry bigger than 10% of reported daily volume or 10% of open interest (its entry_quality.py).
+# This platform's lanes do not refuse (the owner chose large experimental sizes); the cap here is only a yardstick for
+# splitting results, never a gate. Reported volume and open interest are not order-book depth.
+PARTICIPATION_CAP_VOLUME_PCT = 10.0
+PARTICIPATION_CAP_OI_PCT = 10.0
+
+
+def _participation(done: Sequence[dict[str, Any]], open_trades: Sequence[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Split closed option trades by whether their size stayed within the participation yardstick. Unknown (volume or
+    open interest missing or zero when the trade was sized) counts as OUTSIDE, never as fine. None for share lanes."""
+    def kind(t: dict[str, Any]) -> str:
+        w = t["why_entered"] if isinstance(t["why_entered"], dict) else {}
+        v, o = w.get("size_vs_volume_pct"), w.get("size_vs_oi_pct")
+        if not all(isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) for x in (v, o)):
+            return "unknown"
+        return "within" if v <= PARTICIPATION_CAP_VOLUME_PCT and o <= PARTICIPATION_CAP_OI_PCT else "over"
+    opts = [t for t in done if t["multiplier"] > 1]
+    open_opts = [t for t in open_trades if t["multiplier"] > 1]
+    if not opts and not open_opts:
+        return None
+    k = {id(t): kind(t) for t in opts}
+    within = [t for t in opts if k[id(t)] == "within"]
+    outside = [t for t in opts if k[id(t)] != "within"]
+    return {"cap_volume_pct": PARTICIPATION_CAP_VOLUME_PCT, "cap_oi_pct": PARTICIPATION_CAP_OI_PCT,
+            "closed_checked": len(opts), "within_cap": len(within),
+            "over_cap": sum(1 for t in opts if k[id(t)] == "over"), "unknown": sum(1 for t in opts if k[id(t)] == "unknown"),
+            "within_cap_realized_pnl": round(sum(t["pnl"] for t in within), 2) if within else None,
+            "outside_cap_realized_pnl": round(sum(t["pnl"] for t in outside), 2) if outside else None,
+            "open_not_within_cap": sum(1 for t in open_opts if kind(t) != "within")}
 
 
 def _stressed(pm: Any) -> Optional[float]:
