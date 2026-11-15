@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from .concentration import close_day, closed_trade_drawdown, group_story, liquidity_split, one_trade_story
+from .concentration import close_day, closed_trade_drawdown, group_story, lane_selection, liquidity_split, one_trade_story
 from .contracts import contract_label, parse_occ
 
 MAX_PER_SOURCE = 300
@@ -107,6 +107,7 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
         "summary": {"all": summarise(rows), "options": summarise([r for r in rows if r["instrument"] == "options"]),
                     "shares": summarise([r for r in rows if r["instrument"] == "shares"])},
         "sources": list(sources.values()),
+        "lane_selection": lane_selection(list(sources.values())),
         "caveat": "Simulated fills. Lane and challenge trades are research experiments kept apart from the options account. "
                   "Small samples, and especially fictional data, prove nothing.",
     }

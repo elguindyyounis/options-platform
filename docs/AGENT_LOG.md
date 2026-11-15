@@ -618,3 +618,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Verified: full suite, 591 passed (3 new tests plus assertions in the all-trades test). Not verified: alerter tests, real trades, dashboard
   rendering (API-only), a percentage drawdown (no per-lane starting capital is stored). Nothing here shows an edge. No PR opened.
 
+
+## 2026-11-15: lane-selection check (challenge 14, scheduled run on agent/2026-11-15-challenger-f)
+
+* Based on `origin/agent/2026-11-15-challenger-e` (main lacks the challenge docs; many unmerged agent branches still need an owner decision).
+  Baseline 591 passed. Alerter unchanged at `48ccf71`; read `technical_confluence.py`.
+* Added `concentration.lane_selection` and a `lane_selection` block on `/api/alltrades`: lanes seen, lanes with closed trades, positive lanes,
+  how many positive lanes are neither thin nor one-trade stories, the leading lane, and `selection_warning` when the leader (among more than one
+  judged lane) is thin or rests on one trade. Display-only; no lane size, risk limit, default or entry rule touched.
+* Verified: full suite, 594 passed (3 new tests plus a wiring assertion). Not verified: alerter tests, real trades, dashboard rendering (API-only).
+  No multiple-comparison correction is attempted. Nothing here shows an edge. No PR opened (owner reviews branches).

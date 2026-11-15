@@ -100,6 +100,9 @@ def test_summaries_carry_the_one_trade_story_check(parts):
     assert c["closed"] == out["summary"]["all"]["closed"] == 2 and c["too_thin"] is True
     assert c["best_pnl"] == 198.7 and c["realized_ex_best"] == -50.0
     assert all("concentration" in s for s in out["sources"])
+    sel = out["lane_selection"]
+    assert sel["lanes_seen"] == len(out["sources"]) and sel["lanes_with_closed_trades"] >= 1
+    assert sel["best_lane_too_thin"] is True and sel["note"]
 
 
 def test_summaries_split_realized_pnl_by_whether_the_size_was_realistic(parts):

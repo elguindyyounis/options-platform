@@ -117,3 +117,36 @@ def test_closed_trade_drawdown_ties_take_losses_first_and_empty_is_null():
     e = closed_trade_drawdown([])
     assert e["max_drawdown_usd"] is None and e["too_thin"] is True
     assert closed_trade_drawdown([("2026-11-01T10:00:00Z", 5.0)])["max_drawdown_usd"] == 0.0
+
+
+def _lane(label, pnls):
+    from optplat.concentration import one_trade_story
+    return {"label": label, "closed": len(pnls), "realized_pnl": round(sum(pnls), 2) if pnls else 0.0,
+            "concentration": one_trade_story(pnls)}
+
+
+def test_lane_selection_flags_a_thin_leader_among_many_lanes():
+    from optplat.concentration import lane_selection
+    out = lane_selection([_lane("A", [500.0, -10.0]), _lane("B", [5.0, 5.0, 5.0, 5.0, 5.0, 5.0]), _lane("C", [])])
+    assert out["lanes_seen"] == 3 and out["lanes_with_closed_trades"] == 2 and out["lanes_positive"] == 2
+    assert out["best_lane"] == "A" and out["best_lane_too_thin"] is True
+    assert out["selection_warning"] is True
+    assert out["lanes_positive_and_not_thin_or_one_trade"] == 1 and out["lanes_too_thin"] == 1
+
+
+def test_lane_selection_flags_a_one_trade_leader_even_when_not_thin():
+    from optplat.concentration import lane_selection
+    out = lane_selection([_lane("A", [300.0, -5.0, -5.0, -5.0, -5.0, -5.0]), _lane("B", [1.0] * 6)])
+    assert out["best_lane"] == "A" and out["best_lane_too_thin"] is False
+    assert out["best_lane_one_trade_story"] is True  # total 275 is positive, but without the 300 trade it is -25
+    assert out["selection_warning"] is True
+    assert out["lanes_positive_and_not_thin_or_one_trade"] == 1  # only lane B survives both checks
+
+
+def test_lane_selection_no_closed_trades_and_single_lane_never_warn():
+    from optplat.concentration import lane_selection
+    empty = lane_selection([_lane("A", []), _lane("B", [])])
+    assert empty["best_lane"] is None and empty["selection_warning"] is False
+    assert lane_selection([])["lanes_seen"] == 0
+    one = lane_selection([_lane("A", [10.0])])
+    assert one["best_lane_too_thin"] is True and one["selection_warning"] is False  # nothing was selected from

@@ -165,3 +165,12 @@ These are challenges raised by reading the alerter. None is proven.
 * Keeps a frozen `baseline-fixed` policy next to shadow-only variants; matches the platform's frozen-baseline lane (challenge 3).
 * Session counts are marked `calendar_verified: False` and an upper bound. Still not read: `sector_rotation.py`, `technical_confluence.py`, its tests.
 
+
+## Read 2026-11-15 (challenger-f): `technical_confluence.py`
+
+* States up front that price, RSI, EMA, FVG and volume are correlated evidence from one source, reports `independent_data_sources: 1`, and
+  labels its confluence count "NOT a probability or entry gate" (`order_authorized: False`).
+* Excludes the current New York date's daily bar (it may still be forming), skips repeated dates rather than guessing which revision is final,
+  and returns `STALE_CHART_HISTORY` past 8 calendar days. Fewer than 25 usable bars gives `INSUFFICIENT_CLOSED_OHLCV`, not a guess.
+* The platform's analogue is the committee and agent votes; those already carry "overlapping candidates are not independent". The same
+  honesty applies one level up, to picking the best of many lanes (challenge 14). Still not read: `sector_rotation.py`, the alerter's tests.

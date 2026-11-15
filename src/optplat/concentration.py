@@ -152,3 +152,32 @@ def closed_trade_drawdown(pairs: Sequence[tuple]) -> dict:
         "max_drawdown_usd": round(worst, 2) if placed else None,
         "too_thin": len(placed) < MIN_TRADES,
     }
+
+
+def lane_selection(lanes: Sequence[dict]) -> dict:
+    """Selection-bias check across lanes (display-only). `lanes` are per-source summaries that carry `label`,
+    `closed`, `realized_pnl` and `concentration`. With many lanes, the best one looks good more often than a
+    single lane would by luck alone, so a headline "best lane" needs its sample size and its one-trade check
+    beside it. Lanes with no closed trades are counted but never ranked. Nothing here says any lane has an edge."""
+    seen = len(lanes)
+    judged = [l for l in lanes if (l.get("closed") or 0) > 0 and l.get("realized_pnl") is not None]
+    positive = [l for l in judged if l["realized_pnl"] > 0]
+    solid = [l for l in positive if (l["concentration"] or {}).get("one_trade_story") is False
+             and not (l["concentration"] or {}).get("too_thin", True)]
+    out = {"lanes_seen": seen, "lanes_with_closed_trades": len(judged), "lanes_positive": len(positive),
+           "lanes_positive_and_not_thin_or_one_trade": len(solid),
+           "lanes_too_thin": sum(1 for l in judged if (l["concentration"] or {}).get("too_thin", True)),
+           "best_lane": None, "best_lane_pnl": None, "best_lane_closed": None, "best_lane_too_thin": None,
+           "best_lane_one_trade_story": None}
+    if judged:
+        best = max(judged, key=lambda l: (l["realized_pnl"], l.get("label") or ""))
+        c = best["concentration"] or {}
+        out.update(best_lane=best.get("label"), best_lane_pnl=best["realized_pnl"], best_lane_closed=best["closed"],
+                   best_lane_too_thin=bool(c.get("too_thin", True)), best_lane_one_trade_story=c.get("one_trade_story"))
+    # Choosing the best of several lanes after the fact is selection: with more than one lane judged, a leader
+    # that is thin or rests on one trade is not evidence of anything.
+    out["selection_warning"] = bool(len(judged) > 1 and out["best_lane"] is not None
+                                    and (out["best_lane_too_thin"] or out["best_lane_one_trade_story"]))
+    out["note"] = ("Picking the best of several lanes after the fact flatters it. A leader that is thin (under "
+                   f"{MIN_TRADES} closed trades) or rests on one trade is luck until shown otherwise.")
+    return out
