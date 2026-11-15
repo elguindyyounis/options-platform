@@ -183,3 +183,10 @@ These are challenges raised by reading the alerter. None is proven.
 * Every outcome is labelled hypothetical and "NOT actual fills": ask plus slippage in, bid less slippage out, a mark needs a quote more than 12 hours later, and a case with no
   comparable quote becomes `NO_DATA` after a grace period rather than a guess. Horizons are 1, 7 and 30 days.
 * Rejected setups get "missed gain" or "avoided loss" labels, and the driver notes say "observed associations, NOT proven causal explanations".
+
+## Read 2026-11-15 (challenger-h): `exit_decisions.py`
+
+* Exit evaluation requires a real-source quote (not demo), fetched within -120 s to +1800 s, with a valid two-sided bid and ask; otherwise the position is UNOBSERVABLE and nothing is marked or filled.
+* Exit price is the bid less a modeled liquidity concession (slippage plus spread, volume and OI terms, capped at 40%), labelled `NOT_EXECUTABLE`. The platform's stressed exit is the same idea.
+* Hard stop, target and max-hold rules take precedence; model advice (local Ollama only, or a deterministic shadow rule) is research-only and cannot authorize a sale in shadow mode.
+* Simulated exits happen only inside a US options session, otherwise the result stays `WOULD_EXIT`. The platform should be checked for the same rule on lane exits (not verified).

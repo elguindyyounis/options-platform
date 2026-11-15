@@ -638,3 +638,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   lane, risk limit or default changed.
 * Verified: full suite, 597 passed (3 new tests). Not verified: alerter tests, real marks, dashboard rendering (API-only). The margin treats marks as independent
   and they are not, so it understates noise. The alerter's lowest-scored control sample is not ported (needs a store table); logged as a backlog idea. Nothing here shows an edge. No PR opened.
+
+## 2026-11-15: win-rate interval (challenge 16, scheduled run on agent/2026-11-15-challenger-h)
+
+* Based on `origin/agent/2026-11-15-challenger-g` (main lacks the challenge docs). Baseline 597 passed. Alerter unchanged at `48ccf71`; read `exit_decisions.py`
+  (exit price is bid minus a modeled liquidity concession and labelled not executable; absent or stale quotes are UNOBSERVABLE, never a fill).
+* Added `concentration.win_rate_interval` (Wilson 95%) and a `win_rate_interval` block on every summary in `/api/trades/all`. Display-only; no lane size, risk limit,
+  default or entry rule touched.
+* Verified: full suite, 599 passed (2 new tests plus a wiring assertion). Not verified: alerter tests, real trades, dashboard rendering (API-only). The interval assumes
+  independent trades and they are not, so it is a floor on the doubt. Lane report, evaluation and weekly text still print bare win rates. Nothing here shows an edge. No PR opened.

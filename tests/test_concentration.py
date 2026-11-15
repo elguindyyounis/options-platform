@@ -150,3 +150,25 @@ def test_lane_selection_no_closed_trades_and_single_lane_never_warn():
     assert lane_selection([])["lanes_seen"] == 0
     one = lane_selection([_lane("A", [10.0])])
     assert one["best_lane_too_thin"] is True and one["selection_warning"] is False  # nothing was selected from
+
+
+def test_win_rate_interval_is_wide_on_few_trades_and_narrows_with_more():
+    from optplat.concentration import win_rate_interval
+    small = win_rate_interval(3, 4)  # 75% on four trades
+    assert small["too_thin"] is True and small["excludes_half"] is False
+    assert small["low_pct"] < 35 and small["high_pct"] > 95
+    five = win_rate_interval(3, 5)  # 60% on five trades still spans 23% to 88%
+    assert five["too_thin"] is False and five["low_pct"] < 25 and five["high_pct"] > 85
+    big = win_rate_interval(300, 500)
+    assert big["too_thin"] is False and big["excludes_half"] is True
+    assert big["high_pct"] - big["low_pct"] < 10
+
+
+def test_win_rate_interval_handles_extremes_and_bad_input_without_inventing_numbers():
+    from optplat.concentration import win_rate_interval
+    assert win_rate_interval(0, 0)["low_pct"] is None
+    assert win_rate_interval(7, 5)["low_pct"] is None  # impossible count is not repaired
+    zero = win_rate_interval(0, 10)
+    assert zero["low_pct"] == 0.0 and 0 < zero["high_pct"] < 35
+    allw = win_rate_interval(10, 10)
+    assert allw["high_pct"] == 100.0 and allw["low_pct"] < 80

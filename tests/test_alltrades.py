@@ -116,6 +116,9 @@ def test_summaries_split_realized_pnl_by_whether_the_size_was_realistic(parts):
     liq = out["summary"]["all"]["liquidity"]
     assert liq["oversized_trades"] == 1 and liq["within_limits_trades"] == 1 and liq["positive_only_if_oversized"] is True
     assert all("liquidity" in s for s in out["sources"])
+    wi = out["summary"]["all"]["win_rate_interval"]
+    assert wi["n"] == out["summary"]["all"]["closed"]
+    assert all("win_rate_interval" in s for s in out["sources"])
 
 
 def test_summaries_split_realized_pnl_by_underlying_and_close_day(parts):

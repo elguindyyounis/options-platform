@@ -39,6 +39,23 @@ def one_trade_story(pnls: Sequence[Optional[float]]) -> dict:
     }
 
 
+def win_rate_interval(wins: int, n: int) -> dict:
+    """Wilson 95% interval for a win rate. A bare "60% win rate" on 5 trades is compatible with almost anything;
+    this shows how wide the doubt is. Display-only. It assumes trades are independent, which they are not (same
+    day, same underlying), so the real interval is wider. None when there are no closed trades."""
+    if n <= 0 or wins < 0 or wins > n:
+        return {"n": max(n, 0), "low_pct": None, "high_pct": None, "too_thin": True, "excludes_half": None}
+    z = 1.96
+    p = wins / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / denom
+    low, high = max(0.0, centre - half) * 100, min(1.0, centre + half) * 100
+    return {"n": n, "low_pct": round(low, 1), "high_pct": round(high, 1), "too_thin": n < MIN_TRADES,
+            # True only when the whole interval sits on one side of a coin flip.
+            "excludes_half": bool(low > 50.0 or high < 50.0)}
+
+
 def is_oversized(size_vs_volume_pct: Optional[float], size_vs_oi_pct: Optional[float]) -> Optional[bool]:
     """True/False when the size was recorded; None when neither figure is known (never assumed fine)."""
     if size_vs_volume_pct is None and size_vs_oi_pct is None:

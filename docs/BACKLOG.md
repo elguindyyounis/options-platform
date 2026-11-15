@@ -195,3 +195,4 @@ Existing items, in order:
 * Tracker noise margins and multiple-comparison count (display-only; agent/2026-11-15-challenger-g).
 * Lane-selection check (best-of-many-lanes flags) on `/api/alltrades`; display-only (agent/2026-11-15-challenger-f).
 * Closed-trade drawdown (dollars, close-time order) on all-trades summaries; display-only (agent/2026-11-15-challenger-e).
+* Challenge 16 (2026-11-15): Wilson 95% interval beside the win rate on all-trades summaries. Follow-up idea: show it in the dashboard, lane reports, evaluation and weekly text.

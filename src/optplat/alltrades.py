@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from .concentration import close_day, closed_trade_drawdown, group_story, lane_selection, liquidity_split, one_trade_story
+from .concentration import close_day, closed_trade_drawdown, group_story, lane_selection, liquidity_split, one_trade_story, win_rate_interval
 from .contracts import contract_label, parse_occ
 
 MAX_PER_SOURCE = 300
@@ -91,6 +91,7 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
                 "win_rate_pct": round(len(wins) / len(done) * 100, 1) if done else None,
                 "realized_pnl": round(sum(r["pnl"] for r in done), 2),
                 "open_pnl": round(sum(r["pnl"] or 0.0 for r in sel if r["status"] != "CLOSED"), 2),
+                "win_rate_interval": win_rate_interval(len(wins), len(done)),
                 "concentration": one_trade_story([r["pnl"] for r in done]),
                 "by_underlying": group_story([(r["symbol"], r["pnl"]) for r in done]),
                 "by_day": group_story([(close_day(r["closed_at"]), r["pnl"]) for r in done]),
