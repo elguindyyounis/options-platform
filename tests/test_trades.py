@@ -148,3 +148,8 @@ def test_an_exit_with_the_same_timestamp_as_its_entry_is_still_matched():
         from optplat.trades import build_trades
 
         assert build_trades(manager)["trades"][0]["status"] == "CLOSED"
+
+
+def test_trade_summary_has_a_concentration_block_even_when_empty(client):
+    c = client.get("/api/trades", headers=H).json()["summary"]["concentration"]
+    assert c["closed"] == 0 and c["one_trade_story"] is None and c["too_thin"] is True

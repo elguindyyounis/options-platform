@@ -109,6 +109,9 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-15: `concentration.one_trade_story` (realized P&L without the best trade) on trade summaries. Follow-ups: render it on the
+  dashboard; by-underlying and by-day splits; label the equity-chart drawdown as sampled (CHALLENGES 11).
+
 * GEX freshness and spot-agreement display flags (challenge 9, agent/2026-11-14-challenger-n).
 
 * Signal provenance doc (challenge 5): `docs/SIGNALS.md` lists each signal, label and post-mortem tag with origin, status and caveat; a test fails if it drifts from `SIGNAL_NAMES`, `VALIDATED_SIGNALS` or `postmortem.CAUSES`.

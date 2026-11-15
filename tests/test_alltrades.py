@@ -90,3 +90,13 @@ def test_the_endpoint_needs_the_token_and_returns_the_same_list(parts):
         assert c.get("/api/alltrades").status_code == 401
         body = c.get("/api/alltrades", headers=H).json()
     assert body["fictional"] is True and len(body["trades"]) == 4 and body["caveat"]
+
+
+def test_summaries_carry_the_one_trade_story_check(parts):
+    manager, engine = parts
+    seed(engine.store)
+    out = build_all(manager, engine.store, True, T0 + timedelta(days=3), engine.option_lanes)
+    c = out["summary"]["all"]["concentration"]
+    assert c["closed"] == out["summary"]["all"]["closed"] == 2 and c["too_thin"] is True
+    assert c["best_pnl"] == 198.7 and c["realized_ex_best"] == -50.0
+    assert all("concentration" in s for s in out["sources"])

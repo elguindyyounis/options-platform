@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+from .concentration import one_trade_story
 from .contracts import contract_label, parse_occ
 
 MAX_PER_SOURCE = 300
@@ -87,7 +88,8 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
         return {"total": len(sel), "open": sum(1 for r in sel if r["status"] != "CLOSED"), "closed": len(done), "wins": len(wins),
                 "win_rate_pct": round(len(wins) / len(done) * 100, 1) if done else None,
                 "realized_pnl": round(sum(r["pnl"] for r in done), 2),
-                "open_pnl": round(sum(r["pnl"] or 0.0 for r in sel if r["status"] != "CLOSED"), 2)}
+                "open_pnl": round(sum(r["pnl"] or 0.0 for r in sel if r["status"] != "CLOSED"), 2),
+                "concentration": one_trade_story([r["pnl"] for r in done])}
 
     sources: dict[str, dict[str, Any]] = {}
     for r in rows:

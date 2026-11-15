@@ -10,6 +10,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Optional
 
+from .concentration import one_trade_story
 from .models import Order, OrderState, Side
 from .orders import OrderManager
 
@@ -114,6 +115,7 @@ def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
         "unobservable_open": sum(1 for t in out if t["remaining"] > 0 and t["mark"] is None),
         "best": max((t["pnl"] for t in closed if t["pnl"] is not None), default=None),
         "worst": min((t["pnl"] for t in closed if t["pnl"] is not None), default=None),
+        "concentration": one_trade_story([t["pnl"] for t in closed]),
         "caveat": "Paper trades with simulated fills. A small number of trades says nothing about a real edge.",
     }
     return {"summary": summary, "trades": out[: max(1, min(limit, 1000))]}

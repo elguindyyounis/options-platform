@@ -110,3 +110,14 @@ These are challenges raised by reading the alerter. None is proven.
   check and says so. Still not read: `server.py`, `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, its tests.
 * **Read this run:** the diffs of `gex.py`, `intraday_strategy.py`, `intraday_reel_study.study`, and `GEX_CONFLUENCE_POLICY.md`.
   Not read in depth: `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, `server.py`, the alerter's tests (not run).
+
+## Addendum 2026-11-15: `strategy_performance.py` (read)
+
+* Per-lane stats come only from closed positions. Win rate, average and equity are null, never 0, when there is nothing to
+  compute them from; open-option equity is null if any mark is missing or stale (`equity_observable`).
+* Its drawdown is named `closed_trade_only_max_drawdown_pct` with a note that it excludes unrealized declines and is not
+  account drawdown. Every journal row carries `modeled_not_broker_fills`; the report says quote timestamps are unverified.
+* The competitor comparison refuses to name a winner (`winner: None`), requires dated trades, and only pairs unique
+  contract/entry-day matches. Same stance as this platform's no-edge rule; no change needed there.
+* Platform gap found: nothing showed a result without its best trade (challenge 10, done) and the equity-chart drawdown is not
+  labelled as sampled (challenge 11, open). Still not read: `server.py`, `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, tests.

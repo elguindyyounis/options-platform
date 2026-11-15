@@ -568,3 +568,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   Figures, `gex_total` and all gates are unchanged; nothing consumes the flags. Thresholds are the alerter's, unvalidated.
 * Verified: full suite, 569 passed (3 new). Not verified: alerter tests, real chains, dashboard display, that parity gaps behave
   on real Yahoo data (rates, dividends and wide spreads add error). GEX remains UNVALIDATED; no edge is claimed. No PR opened.
+
+## 2026-11-15: one-trade-story check (challenge 10, scheduled run on agent/2026-11-15-challenger)
+
+* Based on `origin/agent/2026-11-14-challenger-n` (main lacks the challenge docs; the many unmerged agent branches still need an owner decision).
+  Alerter unchanged at `48ccf71`. Read `strategy_performance.py`.
+* Added `concentration.one_trade_story` and a `concentration` block on `/api/trades` and on each summary of `/api/trades/all`:
+  realized P&L without the best trade, the best trade's share of a positive total, a flag when the total is positive only because of
+  that trade, and `too_thin` under 5 closed trades. Display-only; no trading, risk or default changed.
+* Verified: full suite, 577 passed (8 new). Not verified: alerter tests, any real trades, dashboard rendering (the block is API-only),
+  that 5 is a sensible thin-sample cut-off (it is a label threshold, not a rule). Nothing here shows an edge. No PR opened.
