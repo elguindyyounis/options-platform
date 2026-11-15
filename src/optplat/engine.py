@@ -174,6 +174,7 @@ class TradingEngine:
                 "exits": [],
                 "entries": [],
                 "entries_note": "",
+                "candidates": [],
                 "errors": [],
             }
             snapshots: dict[str, Optional[MarketSnapshot]] = {}
@@ -413,6 +414,18 @@ class TradingEngine:
                         pass
                 report["entries"].append(item_np)
                 continue
+            for cand in proposals[:3]:  # display only: runner-ups the owner can see, not orders
+                report["candidates"].append(
+                    {
+                        "symbol": symbol,
+                        "contract": cand.contract.occ_symbol.strip(),
+                        "score": cand.score,
+                        "limit_price": cand.limit_price,
+                        "trend": cand.rationale.get("trend"),
+                        "spread_pct": cand.rationale.get("spread_pct"),
+                        "dte": cand.rationale.get("dte"),
+                    }
+                )
             account = self.manager.broker.get_account()
             chosen = None
             for proposal in proposals:  # best first; take the first one that fits the size cap
@@ -452,6 +465,8 @@ class TradingEngine:
             report["entries"].append(item)
             if order.state in (OrderState.SUBMITTED, OrderState.PARTIALLY_FILLED, OrderState.FILLED):
                 submitted += 1
+        report["candidates"].sort(key=lambda c: (-c["score"], c["contract"]))
+        del report["candidates"][10:]
 
 
 class Runner:
