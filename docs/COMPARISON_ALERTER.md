@@ -174,3 +174,12 @@ These are challenges raised by reading the alerter. None is proven.
   and returns `STALE_CHART_HISTORY` past 8 calendar days. Fewer than 25 usable bars gives `INSUFFICIENT_CLOSED_OHLCV`, not a guess.
 * The platform's analogue is the committee and agent votes; those already carry "overlapping candidates are not independent". The same
   honesty applies one level up, to picking the best of many lanes (challenge 14). Still not read: `sector_rotation.py`, the alerter's tests.
+
+
+## Read 2026-11-15 (challenger-g): `feedback.py`
+
+* Captures hypothetical cases for the top-scored contracts plus the single lowest-scored one, so there is at least one unselected control per scan. The platform's tracker
+  marks only flagged contracts and compares them with each other (open challenge 15).
+* Every outcome is labelled hypothetical and "NOT actual fills": ask plus slippage in, bid less slippage out, a mark needs a quote more than 12 hours later, and a case with no
+  comparable quote becomes `NO_DATA` after a grace period rather than a guess. Horizons are 1, 7 and 30 days.
+* Rejected setups get "missed gain" or "avoided loss" labels, and the driver notes say "observed associations, NOT proven causal explanations".

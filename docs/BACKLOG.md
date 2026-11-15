@@ -99,6 +99,8 @@ Existing items, in order:
 
 ## Ideas (unscheduled)
 
+* Unflagged control contract per scan (lowest-scored, as the alerter does) so the tracker can compare flagged contracts with something other than each other. Needs a store table.
+
 * Recorder storage: snapshots are about 20 KB of JSON each. At the default 5-minute interval and two
   symbols that is roughly 3 MB a day (about 90 MB for the 30-day default). Compress, or store only
   rows near the money, before running a short interval or a long watchlist.
@@ -190,5 +192,6 @@ Existing items, in order:
 * Challenge run 2026-11-15 (challenger-c): oversized-fill P&L split on all-trades summaries (`liquidity_split`). Display-only.
 
 * 2026-11-15 (challenger-d): by-underlying and by-day realized P&L splits with a one-group flag (`concentration.group_story`). Open: show the `concentration`, `liquidity`, `by_underlying` and `by_day` blocks on the dashboard.
+* Tracker noise margins and multiple-comparison count (display-only; agent/2026-11-15-challenger-g).
 * Lane-selection check (best-of-many-lanes flags) on `/api/alltrades`; display-only (agent/2026-11-15-challenger-f).
 * Closed-trade drawdown (dollars, close-time order) on all-trades summaries; display-only (agent/2026-11-15-challenger-e).

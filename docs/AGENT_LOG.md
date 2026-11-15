@@ -628,3 +628,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   judged lane) is thin or rests on one trade. Display-only; no lane size, risk limit, default or entry rule touched.
 * Verified: full suite, 594 passed (3 new tests plus a wiring assertion). Not verified: alerter tests, real trades, dashboard rendering (API-only).
   No multiple-comparison correction is attempted. Nothing here shows an edge. No PR opened (owner reviews branches).
+
+
+## 2026-11-15: tracker noise margins (challenge 15, scheduled run on agent/2026-11-15-challenger-g)
+
+* Based on `origin/agent/2026-11-15-challenger-f` (main lacks the challenge docs). Baseline 594 passed. Alerter unchanged at `48ccf71`; read `feedback.py`.
+* Tracker groups now carry `sd_ret_pct`, `noise_margin_pct` (two standard errors of the gap to the all-flagged average) and `beyond_noise`; the summary has a
+  `comparisons` count of groups read and how many would clear the margin by chance. A finding inside its margin still appears, worded "treat as chance". No threshold,
+  lane, risk limit or default changed.
+* Verified: full suite, 597 passed (3 new tests). Not verified: alerter tests, real marks, dashboard rendering (API-only). The margin treats marks as independent
+  and they are not, so it understates noise. The alerter's lowest-scored control sample is not ported (needs a store table); logged as a backlog idea. Nothing here shows an edge. No PR opened.

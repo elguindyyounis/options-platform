@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from statistics import median
+from math import sqrt
 from typing import Any, Optional
 
 from .market_clock import HOLIDAYS
@@ -134,7 +135,24 @@ def _stats(marks: list[dict[str, Any]]) -> dict[str, Any]:
     n = len(rets)
     return {"n": n, "win_rate_pct": round(sum(r > 0 for r in rets) / n * 100, 1) if n else None,
             "avg_ret_pct": round(sum(rets) / n, 2) if n else None, "median_ret_pct": round(median(rets), 2) if n else None,
-            "avg_helpful_move_pct": round(sum(m["helpful_move_pct"] for m in marks) / n, 2) if n else None, "enough": n >= MIN_N}
+            "avg_helpful_move_pct": round(sum(m["helpful_move_pct"] for m in marks) / n, 2) if n else None, "enough": n >= MIN_N,
+            "sd_ret_pct": round(_sd(rets), 2) if n >= 2 else None}
+
+
+def _sd(xs: list[float]) -> float:
+    m = sum(xs) / len(xs)
+    return sqrt(sum((x - m) ** 2 for x in xs) / (len(xs) - 1))
+
+
+def _noise_margin(group: dict[str, Any], base: dict[str, Any]) -> Optional[float]:
+    """Two standard errors of the gap between a group's average and the all-flagged average, in points.
+
+    Rough: treats marks as independent (they are not: same underlying and day move together) and ignores that the group is
+    part of the whole, so it is a floor on the real noise, not a bound. None when either side has under two marks.
+    """
+    if group["sd_ret_pct"] is None or base["sd_ret_pct"] is None:
+        return None
+    return round(2 * sqrt(group["sd_ret_pct"] ** 2 / group["n"] + base["sd_ret_pct"] ** 2 / base["n"]), 2)
 
 
 def summarize(marks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -150,11 +168,17 @@ def summarize(marks: list[dict[str, Any]]) -> dict[str, Any]:
             for name, ms in buckets.items():
                 st = _stats(ms)
                 diff = None if st["avg_ret_pct"] is None or base["avg_ret_pct"] is None else round(st["avg_ret_pct"] - base["avg_ret_pct"], 2)
-                groups.append({"horizon": h, "feature": key, "feature_label": label, "bucket": name, **st, "vs_all_pct": diff})
+                margin = _noise_margin(st, base)
+                groups.append({"horizon": h, "feature": key, "feature_label": label, "bucket": name, **st, "vs_all_pct": diff,
+                               "noise_margin_pct": margin, "beyond_noise": None if margin is None or diff is None else abs(diff) > margin})
     confirmed = [m for m in marks if m["horizon"] == 3 and m["oi_verdict"] == "OI_ROSE"]
     other = [m for m in marks if m["horizon"] == 3 and m["oi_verdict"] != "OI_ROSE"]
+    read = sum(1 for g in groups if g["horizon"] == 3 and g["enough"] and g["vs_all_pct"] is not None)
     return {"horizons": horizons, "groups": groups,
             "findings": findings(groups),
+            "comparisons": {"groups_read_at_3_days": read, "expected_beyond_noise_by_chance": round(read * 0.05, 1),
+                            "note": "Every feature bucket is compared with the average, so some will look unusual by luck alone. "
+                                    "About 1 in 20 groups is expected to clear a two-standard-error margin with no real effect (more, since marks are not independent)."},
             "oi_check": {"oi_rose": _stats(confirmed), "other": _stats(other)}}
 
 
@@ -166,7 +190,8 @@ def findings(groups: list[dict[str, Any]]) -> list[str]:
             continue
         word = "better" if g["vs_all_pct"] > 0 else "worse"
         out.append(f"{g['feature_label']}: {g['bucket']} came out {abs(g['vs_all_pct']):.1f} points {word} than the average flagged contract "
-                   f"after 3 trading days (average {g['avg_ret_pct']:+.1f}%, {g['n']} marks).")
+                   f"after 3 trading days (average {g['avg_ret_pct']:+.1f}%, {g['n']} marks"
+                   + ("; inside the noise margin, treat as chance" if g.get("beyond_noise") is False else "") + ").")
     return out[:6]
 
 
@@ -197,5 +222,6 @@ def report(store: Any, fictional: bool, now: datetime, day: date, criteria: list
                 "Only contracts whose chain was read again on a later scan can be marked; a missed scan, an expired contract or a chain that failed the data-quality gate leaves a gap.",
                 f"A group needs {MIN_N} marks before it is called a finding. Marks on the same underlying and day are not independent, so even that is a low bar.",
                 "Free delayed quotes. Prices are recorded when the scanner ran, not at the close.",
+                "Many feature groups are compared with the average at once; see 'comparisons' for how many would look unusual by chance. A group inside its noise margin is shown but flagged as chance.",
                 "A feature that did better here is a lead to test next, not proof of an edge. Nothing in this table feeds a trade except as noted on the Agents page.",
             ]}

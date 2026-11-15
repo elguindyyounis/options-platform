@@ -136,3 +136,31 @@ def test_a_new_mark_records_the_open_interest_size_and_old_marks_show_as_unknown
     out = tr.summarize(marks(30, 5.0, oi_size="1 to 9") + marks(30, -5.0))   # the second set predates the feature
     names = {g["bucket"] for g in out["groups"] if g["feature"] == "oi_size" and g["horizon"] == 3}
     assert names == {"1 to 9", "Unknown"}
+
+
+def noisy(n, mean, spread, **feat):
+    return [{"horizon": 3, "ret_pct": mean + (spread if i % 2 else -spread), "helpful_move_pct": 1.0, "oi_verdict": "OI_FLAT_OR_MIXED",
+             "features": {"ratio": "25 times or more", **feat}} for i in range(n)]
+
+
+def test_a_gap_smaller_than_its_noise_is_marked_as_chance_not_dropped():
+    out = tr.summarize(noisy(30, 0.0, 60.0) + noisy(25, 4.0, 60.0, ratio="3 to 5 times"))
+    g = next(g for g in out["groups"] if g["bucket"] == "3 to 5 times" and g["horizon"] == 3)
+    assert g["enough"] and g["noise_margin_pct"] > abs(g["vs_all_pct"]) and g["beyond_noise"] is False
+    assert not any("3 to 5 times" in f and "chance" not in f for f in out["findings"])
+
+
+def test_a_gap_far_beyond_its_noise_is_marked_so():
+    out = tr.summarize(noisy(30, 0.0, 2.0) + noisy(30, 30.0, 2.0, ratio="3 to 5 times"))
+    g = next(g for g in out["groups"] if g["bucket"] == "3 to 5 times" and g["horizon"] == 3)
+    assert g["beyond_noise"] is True
+    assert any("3 to 5 times" in f and "chance" not in f for f in out["findings"])
+
+
+def test_one_mark_has_no_noise_margin_and_comparisons_count_what_was_read():
+    lone = tr.summarize(marks(1, 5.0))
+    assert next(g for g in lone["groups"] if g["horizon"] == 3)["noise_margin_pct"] is None
+    out = tr.summarize(noisy(30, 0.0, 5.0) + noisy(30, 9.0, 5.0, ratio="3 to 5 times"))
+    c = out["comparisons"]
+    read = sum(1 for g in out["groups"] if g["horizon"] == 3 and g["enough"] and g["vs_all_pct"] is not None)
+    assert c["groups_read_at_3_days"] == read and c["expected_beyond_noise_by_chance"] == round(read * 0.05, 1)
