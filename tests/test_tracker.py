@@ -136,3 +136,15 @@ def test_a_new_mark_records_the_open_interest_size_and_old_marks_show_as_unknown
     out = tr.summarize(marks(30, 5.0, oi_size="1 to 9") + marks(30, -5.0))   # the second set predates the feature
     names = {g["bucket"] for g in out["groups"] if g["feature"] == "oi_size" and g["horizon"] == 3}
     assert names == {"1 to 9", "Unknown"}
+
+
+def test_sightings_survive_long_enough_for_the_30_day_mark():
+    from optplat.store import Store
+
+    store = Store(":memory:")
+    store.record_unusual("2026-09-25", True, [{**sighting(), "contract": "OLD"}])
+    store.record_unusual("2026-11-12", True, [sighting()])  # 48 days later
+    days = {s["day"] for s in store.unusual_sightings(None, "2026-09-01", "2026-12-01", True)}
+    assert "2026-09-25" in days  # 48 days old: within the 60 day retention
+    store.record_unusual("2026-12-01", True, [sighting()])
+    assert "2026-09-25" not in {s["day"] for s in store.unusual_sightings(None, "2026-09-01", "2027-01-01", True)}  # 67 days: pruned

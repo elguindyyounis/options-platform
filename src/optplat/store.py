@@ -359,7 +359,7 @@ class Store:
                     continue
                 self._db.execute("INSERT OR REPLACE INTO unusual_history (day, contract, fictional, symbol, payload) VALUES (?,?,?,?,?)",
                                  (day, r["contract"], int(fictional), r["symbol"], json.dumps(r, default=str)))
-            self._db.execute("DELETE FROM unusual_history WHERE day < date(?, '-30 day')", (day,))
+            self._db.execute("DELETE FROM unusual_history WHERE day < date(?, '-60 day')", (day,))  # the tracker watches flags for 50 days
             self._db.commit()
 
     def unusual_before(self, day: str, fictional: bool) -> dict[str, dict[str, Any]]:
