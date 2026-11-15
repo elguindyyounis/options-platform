@@ -558,3 +558,4 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Existing flags older than 12 days that were already dropped are not recovered; 30 day marks start filling for flags seen from now on (and any still within 50 days).
 * Not done: the "chains read" count, and the owner decision on letting the `flow` agent support a trade.
 * Verified: full test suite, 570 passed (retention test and horizon-due cases for 29, 30, 32 and 33 days added). Not verified: the dashboard in a browser, or any real 30 day marks (they need about six weeks of real scans).
+* Merge status: PR #11 (`agent/integration` into `main`) was opened but NOT merged: GitHub reports it conflicts with `main` (main has commits integration lacks). The repo has no check runs on the branch; local tests (570 passed) were the gate. Left open for the owner or the next run to resolve. No documented path from `main` to the owner's Mac was found, so nothing could reach it.
