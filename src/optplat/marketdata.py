@@ -10,7 +10,7 @@ import math
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Optional, Sequence
 
 from .models import OptionContract, Quote, Right, utcnow
@@ -24,6 +24,9 @@ class ChainRow:
     volume: Optional[int] = None
     open_interest: Optional[int] = None
     iv: Optional[float] = None
+    # Evidence only: when this contract last traded (Yahoo ``lastTradeDate``). Never used to accept or
+    # reject a quote; None means the provider did not say.
+    last_trade_at: Optional[datetime] = None
 
     def to_quote(self, as_of: datetime, source: str, verified: bool) -> Quote:
         return Quote(self.contract, self.bid, self.ask, as_of, source, timestamp_verified=verified)
@@ -198,6 +201,40 @@ def _num(value: Any) -> Optional[float]:
     return v if math.isfinite(v) else None
 
 
+OLD_TRADE_HOURS = 72.0
+
+
+def _trade_time(value: Any) -> Optional[datetime]:
+    """Parse a provider last-trade time to aware UTC. Anything unparseable or naive is None (unknown)."""
+    if value is None:
+        return None
+    try:
+        dt = value.to_pydatetime() if hasattr(value, "to_pydatetime") else value
+        if isinstance(dt, str):
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        if not isinstance(dt, datetime) or dt.tzinfo is None:
+            return None
+        return dt.astimezone(timezone.utc)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def last_trade_evidence(row: ChainRow, now: datetime) -> dict[str, Any]:
+    """Display-only tag: how long ago this contract last traded. A quote that has not traded for days
+    can look as fresh as a busy one, because Yahoo bid/ask times are the download time."""
+    if row.last_trade_at is None:
+        return {"last_trade_at": None, "last_trade_age_hours": None, "last_trade_status": "UNKNOWN"}
+    age = (now - row.last_trade_at).total_seconds() / 3600
+    if age < 0:  # a trade time in the future is a data fault, not freshness
+        return {"last_trade_at": row.last_trade_at.isoformat(), "last_trade_age_hours": None,
+                "last_trade_status": "UNKNOWN"}
+    return {
+        "last_trade_at": row.last_trade_at.isoformat(),
+        "last_trade_age_hours": round(age, 1),
+        "last_trade_status": "OLD" if age > OLD_TRADE_HOURS else "RECENT",
+    }
+
+
 def rows_from_records(records: Iterable[dict[str, Any]], symbol: str, expiry: date, right: Right) -> list[ChainRow]:
     """Map raw chain records (e.g. DataFrame.to_dict('records')) to rows. Bad rows are dropped, not repaired."""
     rows: list[ChainRow] = []
@@ -216,6 +253,7 @@ def rows_from_records(records: Iterable[dict[str, Any]], symbol: str, expiry: da
                 int(volume) if volume is not None else None,
                 int(oi) if oi is not None else None,
                 iv,
+                _trade_time(r.get("lastTradeDate")),
             )
         )
     return rows

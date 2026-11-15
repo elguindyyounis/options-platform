@@ -48,6 +48,7 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Show `last_trade` evidence from engine entries in the dashboard and the recorder (needs a schema change for `market_quotes`).
 * Show the new closed-row exit fields in the dashboard (display only).
 * Consider a wide-spread exit rule like the alerter's 20% cap: needs owner decision (it changes exit behaviour).
 
@@ -68,3 +69,4 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * 2026-11-15: report honesty: sample-size label, mark completeness, conservative equity (branch
   `agent/2026-11-15-alerter-comparison`).
 * Challenge C5 (branch `agent/2026-11-15-challenger-j`): tests pin that Yahoo quote times are never verified and the default policy rejects them. New idea C8 in `docs/CHALLENGES.md` (last-trade time as evidence).
+* Challenge C8 (branch `agent/2026-11-15-last-trade-evidence`): last-trade time carried as display-only evidence on chain rows and engine entry reports (`RECENT`/`OLD`/`UNKNOWN`). Not stored by the recorder yet.

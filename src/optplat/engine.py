@@ -19,7 +19,7 @@ from typing import Any, Callable, Optional
 from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
 from .market_clock import session_status
-from .marketdata import MarketDataProvider, MarketSnapshot
+from .marketdata import MarketDataProvider, MarketSnapshot, last_trade_evidence
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
 from .orders import OrderManager
 from .pricing import sell_limit_for
@@ -419,6 +419,10 @@ class TradingEngine:
                 "limit_price": proposal.limit_price,
                 "rationale": proposal.rationale,
             }
+            # Evidence only, kept out of the order intent (it changes every cycle and would break
+            # idempotency): how long ago the chosen contract last traded, when the provider says.
+            row = next((r for r in snap.rows if r.contract == proposal.contract), None)
+            item["last_trade"] = last_trade_evidence(row, now) if row is not None else None
             try:
                 order = self.manager.submit(intent)
             except ValueError as exc:

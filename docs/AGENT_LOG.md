@@ -72,3 +72,18 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Verified: 156 tests pass. Not verified: real yfinance output shape; the owner's database.
 * Note: `main` lacks `docs/CHALLENGES.md`; this branch is stacked on `agent/2026-11-15-challenger-i`
   (earlier challenger branches are unmerged), so merge order matters.
+
+## 2026-11-15: challenger run 5, last-trade evidence (scheduled agent)
+
+* Alerter moved `48ccf71..d9ef382` (day-limits, shadow underlying exits, ORB replay, NYSE 2026-2028 table).
+  Read the new modules; notes in `COMPARISON_ALERTER.md`. Logged C9 (day limits) and C10 (holiday table) as
+  owner decisions; nothing adopted.
+* Changed (challenge C8): `ChainRow.last_trade_at`, `last_trade_evidence()`, Yahoo `lastTradeDate` parsing, and a
+  `last_trade` field on engine entry reports. Display only: no entry is blocked or sized differently, the order
+  intent is unchanged. Deliberately not added to the strategy rationale, because that text is part of the intent
+  and a value that changes each cycle would raise an idempotency key conflict.
+* Verified: 160 tests pass (4 new in `tests/test_last_trade_evidence.py`).
+* Not verified: real yfinance `lastTradeDate` values (parsing is tested with a fake pandas-like Timestamp and ISO
+  strings); the dashboard (not changed); the 72 h OLD cutoff is an arbitrary display threshold, not tuned.
+* Note: branch stacked on `agent/2026-11-15-challenger-j` (main still lacks the tracking docs). Many unmerged
+  `agent/*` branches exist; the owner should reconcile them.

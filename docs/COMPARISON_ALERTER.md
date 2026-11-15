@@ -1,6 +1,6 @@
 # Platform vs. options-alerter (read-only comparison)
 
-Alerter commit reviewed: `48ccf71` (v2.8.0-decision-first). The alerter is the owner's other,
+Alerter commit reviewed: `d9ef382` (earlier runs: `48ccf71`) (v2.8.0-decision-first). The alerter is the owner's other,
 ChatGPT-built, private repo. This is a code read only: the owner's database is not visible from
 here, so nothing below says how either system has actually performed.
 
@@ -58,6 +58,15 @@ rejection. `run_council` keeps rejected trades rejected and logs the real agent 
 dialogue. `data_sources.option_rows`: Yahoo rows carry `quote_time: None`,
 `exchange_quote_time_verified: False`, `last_trade_at` (lastTradeDate), and zero-volume rows are dropped unless
 pinned. The platform's Yahoo provider is equally unverified (pinned by tests) but ignores last-trade time (C8).
+
+Run 5 (alerter `48ccf71..d9ef382`: day-trader skill ports): `day_limits.py` adds opt-in per-day realised-loss
+limit, max entries per day and an ET entry window; every limit is OFF by default and it only ever adds failures to
+an entry (the daily loss limit uses the modeled stop share of premium when auto exits are on, which can fill
+worse). `underlying_exits.py` is SHADOW ONLY stop/target on the stock price and never closes anything.
+`session_replay.py` / `intraday_orb_monitor.py` are stock-direction research on 5-minute bars, labelled as not
+option P&L, with fewer than 30 historical triggers reported as no conclusion. `market_clock.py` now carries an
+NYSE 2026-2028 holiday and early-close table (read 2026-11-15) and still labels the calendar `calendar_verified: False`.
+The platform has not adopted any of these; day limits and the holiday table are owner decisions (C9, C10).
 
 ## Never read yet (next runs)
 
