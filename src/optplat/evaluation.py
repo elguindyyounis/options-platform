@@ -33,6 +33,25 @@ def closed_trade_pnl(order: Order) -> float | None:
     return (order.avg_fill_price - order.cost_basis) * order.filled_qty * order.intent.contract.multiplier
 
 
+def split_half_check(pnls: list[float], *, min_trades: int = DEFAULT_MIN_TRADES) -> dict[str, Any]:
+    """Compare the earlier and later half of closed trades (chronological, no tuning, no peeking).
+
+    This is a stability check, not an out-of-sample test: nothing was fit on the first half. It only
+    says whether the sign of the result survives into the later trades. Below ``min_trades`` it
+    reports no numbers at all.
+    """
+    n = len(pnls)
+    if n < min_trades:
+        return {"status": "INSUFFICIENT_SAMPLE", "first_half_pnl_usd": None, "second_half_pnl_usd": None,
+                "consistent": None}
+    first, second = sum(pnls[: n // 2]), sum(pnls[n // 2:])
+    consistent = (first > 0) == (second > 0) and first != 0 and second != 0
+    return {"status": "CHECKED", "trades_per_half": [n // 2, n - n // 2],
+            "first_half_pnl_usd": round(first, 2), "second_half_pnl_usd": round(second, 2),
+            "consistent": consistent,
+            "note": "Same-sign halves are necessary, not sufficient; opposite signs mean the total is unstable."}
+
+
 def summarize_closed_trades(
     orders: Iterable[Order], *, min_trades: int = DEFAULT_MIN_TRADES, starting_equity: float = 100_000.0
 ) -> dict[str, Any]:
@@ -79,6 +98,7 @@ def summarize_closed_trades(
         "best_trade_share_of_gross_wins_pct": round(100.0 * max(pnls) / gross_win, 1) if gross_win > 0 else None,
         "pnl_without_best_trade_usd": round(total - max(pnls), 2) if n else None,
         "closed_trade_max_drawdown_pct": round(max_dd, 3) if n else None,
+        "split_half": split_half_check(pnls, min_trades=min_trades),
         "limitations": list(LIMITATIONS),
     }
 

@@ -55,3 +55,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   venue-timestamped quotes under 120s old; any unmarkable position makes the total null and is listed
   with a reason. Broker errors fail closed. No risk, order, auth or sizing code touched. 4 new tests; 166 pass.
 * Not verified: behaviour against a real broker's `get_positions`/`get_quote`; no commissions modelled.
+
+## 2026-11-15: split-half check (scheduled challenger run 3)
+
+* Alerter advanced to `123eed9` (local durable reports); read `local_reports.py`, `liquidity.py`.
+* `/api/results` gains `split_half`: first vs second half of chronologically ordered closed trades;
+  numbers withheld below the 30-trade gate; `consistent` false on opposite or zero signs. Display only; no
+  risk, order, auth or sizing code touched. 3 new tests; 169 pass.
+* Not verified: behaviour on real data; this is a stability check, not out-of-sample validation. PR/merge result: see below.
