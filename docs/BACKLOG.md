@@ -48,11 +48,16 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Show the new closed-row exit fields in the dashboard (display only).
+* Consider a wide-spread exit rule like the alerter's 20% cap: needs owner decision (it changes exit behaviour).
+
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Exit audit (branch `agent/2026-11-15-challenger-i`): closed-trade rows in `/api/report` show exit trigger, exit quote time, bid at decision and fill minus that bid. Dashboard display still to do.
 
 * 2026-11-15: exit-friction stress scenarios and `stressed_equity` in `/api/report` (display only).
 

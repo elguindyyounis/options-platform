@@ -84,6 +84,25 @@ def sample_assessment(closed_trades: int) -> dict[str, Any]:
     }
 
 
+def exit_audit_fields(trigger: Optional[dict[str, Any]], fill: float) -> dict[str, Any]:
+    """Display-only: why a trade closed, the quote it was decided on, and the fill versus that bid.
+
+    No recorded trigger (a manual close, or an order older than this field) is reported as UNKNOWN,
+    never guessed. ``fill_vs_trigger_bid`` is fill minus the bid at decision time (negative = worse).
+    """
+    if not trigger:
+        return {"exit_trigger": "UNKNOWN", "exit_quote_at": None, "trigger_bid": None,
+                "quote_verified": None, "fill_vs_trigger_bid": None}
+    bid = trigger.get("trigger_bid")
+    return {
+        "exit_trigger": trigger.get("trigger") or "UNKNOWN",
+        "exit_quote_at": trigger.get("quote_as_of"),
+        "trigger_bid": bid,
+        "quote_verified": trigger.get("quote_verified"),
+        "fill_vs_trigger_bid": round(fill - bid, 4) if isinstance(bid, (int, float)) else None,
+    }
+
+
 def exit_stress(bid: float, ask: float, avg_cost: float, quantity: int, multiplier: int) -> list[dict[str, Any]]:
     """Display-only scenarios: what if the bid is not fully hittable? Not a prediction.
 
@@ -268,6 +287,11 @@ class OrderManager:
     def report(self) -> dict[str, Any]:
         """Realized P&L from closed paper trades plus bid-marked open positions."""
         closed = []
+        triggers = {
+            e["order_id"]: e["payload"]
+            for e in self.store.audit_events()
+            if e["kind"] == "exit_trigger" and e["order_id"]
+        }
         for o in self.store.list_orders(limit=1000):
             if (
                 o.intent.side is Side.SELL_TO_CLOSE
@@ -285,6 +309,7 @@ class OrderManager:
                         "exit": o.avg_fill_price,
                         "pnl": pnl,
                         "closed_at": o.updated_at.isoformat(),
+                        **exit_audit_fields(triggers.get(o.id), o.avg_fill_price),
                     }
                 )
         wins = sum(1 for c in closed if c["pnl"] > 0)

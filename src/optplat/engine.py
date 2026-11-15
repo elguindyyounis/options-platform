@@ -298,11 +298,13 @@ class TradingEngine:
                 elif not trading_allowed:
                     item["result"] = "DEFERRED_MARKET_CLOSED"
                 else:
-                    item.update(self._submit_exit(cfg, pos, quote, now))
+                    item.update(self._submit_exit(cfg, pos, quote, now, decision))
             out.append(item)
         return out
 
-    def _submit_exit(self, cfg: EngineConfig, pos: Position, quote: Any, now: datetime) -> dict[str, Any]:
+    def _submit_exit(
+        self, cfg: EngineConfig, pos: Position, quote: Any, now: datetime, decision: Optional[Any] = None
+    ) -> dict[str, Any]:
         pending = self.manager._pending_close_qty(pos.contract)
         quantity = pos.quantity - pending
         if quantity <= 0:
@@ -321,6 +323,24 @@ class TradingEngine:
             order = self.manager.submit(intent)
         except ValueError as exc:
             return {"result": "KEY_CONFLICT", "detail": str(exc)[:100]}
+        if decision is not None and not any(
+            e["kind"] == "exit_trigger" for e in self.manager.store.audit_events(order.id)
+        ):
+            # Research record only (not part of the intent, so idempotency is unchanged): which rule
+            # fired, the bid it fired on, and when that quote was taken, to compare with the fill.
+            self.manager.store.audit(
+                "exit_trigger",
+                order.id,
+                {
+                    "trigger": decision.trigger,
+                    "reason": decision.reason,
+                    "pnl_pct": decision.pnl_pct,
+                    "trigger_bid": quote.bid,
+                    "quote_as_of": quote.as_of.isoformat(),
+                    "quote_verified": quote.timestamp_verified,
+                    "decided_at": now.isoformat(),
+                },
+            )
         result: dict[str, Any] = {"result": order.state.value, "order_id": order.id}
         if order.risk_failures:
             result["risk_failures"] = order.risk_failures

@@ -51,3 +51,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   alerter and are illustrative, not calibrated. `Quote` has no volume/OI, so thin-market risk is
   understated (BACKLOG 11). Branch is based on `agent/2026-11-15-alerter-comparison` because `main` lacks the
   tracking docs; the owner may want to merge those branches in order.
+
+## 2026-11-15 (run 3): challenger, exit auditability (scheduled agent run)
+
+* Base: no branch on `main` carried the challenger docs; built on `agent/2026-11-15-exit-stress-report` (150 tests
+  green). Many parallel `agent/*` branches exist and are unmerged; the owner should reconcile them.
+* Alerter unchanged since `48ccf71`. Read `lane_paper_engine.monitor_lane_options` (see COMPARISON_ALERTER).
+* Changed: engine writes an `exit_trigger` audit event per exit order; `/api/report` closed rows gain
+  `exit_trigger`, `exit_quote_at`, `trigger_bid`, `quote_verified`, `fill_vs_trigger_bid`. No risk, auth,
+  broker or default changed. 154 tests pass (4 new in `tests/test_exit_audit.py`).
+* Not verified: the dashboard (not changed); real-broker behaviour; any live data. In the sim the fill equals the
+  bid by construction, so `fill_vs_trigger_bid` will read near zero until a broker with real slippage exists.

@@ -44,6 +44,14 @@ validity, `lane_portfolio`), `core.py` (head), `data_sources.py` (head), `agent_
 default store settings are big (8% per position, 40% total, 30% drawdown, take-profit 40 / stop 30). These
 are the owner's experimental values and are not copied or changed here.
 
+`lane_paper_engine.monitor_lane_options` (run 3): an exit can only fire on a bid quote newer than the entry
+quote and newer than the last saved mark (replayed marks cannot advance a trailing peak); a held contract
+missing from the snapshot is marked UNOBSERVABLE, never given a fabricated exit; exit quotes with spread above
+`MAX_EXIT_SPREAD_PCT` (20%) are treated as unobservable (so a wide-spread stop does not fire, which can delay a
+loss exit; the platform instead exits on any valid bid). The alerter explicitly does not assume a stop fills at
+the trigger level; it fills at the observed bid less slippage, same idea the platform's `fill_vs_trigger_bid`
+now reports.
+
 ## Never read yet (next runs)
 
 `agents.py` (council, Ollama call), `storage.py`, `server.py`, rest of `storage.py`, rest of `core.py` and `data_sources.py`,
