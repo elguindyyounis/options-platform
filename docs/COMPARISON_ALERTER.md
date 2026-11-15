@@ -143,3 +143,15 @@ These are challenges raised by reading the alerter. None is proven.
   recorded and tagged `OVERSIZED_FOR_LIQUIDITY` per trade, but no summary said how much of a lane's realized P&L came from oversized fills
   (challenge 12, done). Basket caps and the strike-distance screen have no platform equivalent; they are entry rules, so they stay an owner decision.
 * **Still not read:** other skill files, `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, the alerter's tests (not run).
+
+## Addendum 2026-11-15 (challenger-d): `sizing.py` and `risk.py` (alerter still `48ccf71`)
+
+* **Sizing shrinks with thin evidence.** Its evidence index is capped at 0.78 below 20 comparable closed outcomes, and the size fraction is capped
+  (0.60, or 0.45 for the balanced profile) below 10. It labels the index "NOT win probability" and `calibrated_probability` is `None`. Goals never raise
+  size (`goal_affects_size: False`). The platform's committee scale learns from outcomes; whether it also shrinks on few samples was not compared here.
+  Sizing and lane budgets are owner decisions, so this is logged, not changed.
+* **Risk gate is fail-closed and layered:** kill switch, all seven reviews matching the current quote snapshot, spread at most 35%, quote fetch under 30
+  minutes old, per-position, per-symbol and total premium caps, drawdown stop, and new entries paused when held options have no reliable bid mark. The last
+  one is the same gap noted for `automation_readiness` (platform has no "held marks unobservable" blocker).
+* Platform gap found: results were never split by underlying or day (challenge 13, done).
+* **Still not read:** other skill files, `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, the alerter's tests (not run).

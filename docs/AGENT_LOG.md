@@ -597,3 +597,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   (10% volume, 5% OI), so behaviour is unchanged. No lane size, risk limit, default or entry rule touched.
 * Verified: full suite, 583 passed (4 new). Not verified: alerter tests, real trades, dashboard rendering (API-only), whether 10%/5% are right cut-offs.
   Nothing here shows an edge. No PR opened (owner reviews branches).
+
+## 2026-11-15: breadth splits (challenge 13, scheduled run on agent/2026-11-15-challenger-d)
+
+* Based on `origin/agent/2026-11-15-challenger-c` (main lacks the challenge docs; many unmerged agent branches still need an owner decision).
+  Baseline 583 passed. Alerter unchanged at `48ccf71`; read `sizing.py` and `risk.py`.
+* Added `concentration.group_story` and `close_day`; every summary in `/api/trades/all` gets `by_underlying` and `by_day` (realized P&L per group, best
+  group's share, whether a positive total is positive only because of one group, `too_thin` under 3 groups). Display-only; no lane size, risk limit,
+  default or entry rule touched.
+* Verified: full suite, 588 passed (5 new). Not verified: alerter tests, real trades, dashboard rendering (API-only), that 3 groups is a sensible
+  breadth cut-off (a label threshold, not a rule). Nothing here shows an edge. No PR opened (owner reviews branches).

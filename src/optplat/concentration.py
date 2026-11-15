@@ -63,3 +63,52 @@ def liquidity_split(rows: Sequence[tuple]) -> dict:
            **{f"{k}_pnl": round(sum(v), 2) if v else None for k, v in groups.items()}}
     out["positive_only_if_oversized"] = bool(groups["oversized"] and total > 0 and sum(groups["within_limits"]) <= 0)
     return out
+
+
+MAX_GROUPS = 25  # groups listed per split; the totals and flags always use every group
+
+
+def group_story(pairs: Sequence[tuple]) -> dict:
+    """`pairs` are (group_key, pnl) for closed trades. Splits realized P&L by group (underlying, or close day)
+    and says whether a positive total is positive only because of the single best group. A missing key is its own
+    "unknown" group, never dropped. Missing pnl is ignored, never counted as zero. Display-only."""
+    totals: dict[str, list[float]] = {}
+    for key, pnl in pairs:
+        if pnl is None:
+            continue
+        totals.setdefault(str(key) if key else "unknown", []).append(float(pnl))
+    n_groups = len(totals)
+    if n_groups == 0:
+        return {"groups": [], "group_count": 0, "closed": 0, "realized_ex_best_group": None, "best_group": None,
+                "best_group_share_pct": None, "one_group_story": None, "too_thin": True}
+    rows = sorted(({"group": k, "closed": len(v), "pnl": round(sum(v), 2)} for k, v in totals.items()),
+                  key=lambda r: (-r["pnl"], r["group"]))
+    total = sum(sum(v) for v in totals.values())
+    best = rows[0]
+    ex_best = total - best["pnl"]
+    share = round(best["pnl"] / total * 100, 1) if total > 0 and best["pnl"] > 0 else None
+    return {
+        "groups": rows[:MAX_GROUPS], "group_count": n_groups, "closed": sum(len(v) for v in totals.values()),
+        "realized_ex_best_group": round(ex_best, 2), "best_group": best["group"], "best_group_share_pct": share,
+        # True when the total is positive but is not positive without the single best group.
+        "one_group_story": bool(total > 0 and ex_best <= 0),
+        # Fewer than 3 groups cannot show breadth, however many trades there are.
+        "too_thin": n_groups < MIN_GROUPS,
+    }
+
+
+MIN_GROUPS = 3
+
+
+def close_day(closed_at: Optional[str]) -> Optional[str]:
+    """UTC calendar day (YYYY-MM-DD) of a close time, or None when it is missing or unparseable."""
+    if not closed_at:
+        return None
+    from datetime import datetime, timezone
+    try:
+        dt = datetime.fromisoformat(str(closed_at).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).date().isoformat()

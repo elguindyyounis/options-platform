@@ -188,3 +188,5 @@ Existing items, in order:
 * New open ideas: (a) closed-trade-only drawdown beside it, as the alerter reports; (b) a "held marks unobservable" readiness line like the alerter's
   `automation_readiness`; (c) compare the platform's POST origin/content-type checks with the alerter's (auth is owner-gated, tighten only).
 * Challenge run 2026-11-15 (challenger-c): oversized-fill P&L split on all-trades summaries (`liquidity_split`). Display-only.
+
+* 2026-11-15 (challenger-d): by-underlying and by-day realized P&L splits with a one-group flag (`concentration.group_story`). Open: show the `concentration`, `liquidity`, `by_underlying` and `by_day` blocks on the dashboard.

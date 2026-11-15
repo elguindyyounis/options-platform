@@ -59,3 +59,34 @@ def test_the_post_mortem_tag_and_the_split_use_the_same_cutoffs():
     from optplat.concentration import OVERSIZE_OI_PCT, OVERSIZE_VOLUME_PCT
 
     assert (OVERSIZE_VOLUME_PCT, OVERSIZE_OI_PCT) == (10.0, 5.0)   # unchanged from the original tag
+
+
+def test_group_story_flags_a_total_carried_by_one_underlying():
+    from optplat.concentration import group_story
+    g = group_story([("SPY", 500.0), ("SPY", 100.0), ("QQQ", -200.0), ("IWM", -150.0), ("AAPL", None)])
+    assert g["best_group"] == "SPY" and g["group_count"] == 3 and g["closed"] == 4
+    assert g["realized_ex_best_group"] == -350.0 and g["one_group_story"] is True
+    assert g["best_group_share_pct"] == 100 * 600 / 250 and g["too_thin"] is False
+
+
+def test_group_story_broad_result_is_not_flagged_and_unknown_key_is_kept():
+    from optplat.concentration import group_story
+    g = group_story([("A", 100.0), ("B", 90.0), (None, 80.0), ("", -10.0)])
+    assert g["one_group_story"] is False and g["group_count"] == 3
+    unknown = next(r for r in g["groups"] if r["group"] == "unknown")
+    assert unknown["closed"] == 2 and unknown["pnl"] == 70.0
+
+
+def test_group_story_empty_and_losing_and_few_groups():
+    from optplat.concentration import group_story
+    e = group_story([])
+    assert e["one_group_story"] is None and e["too_thin"] is True and e["groups"] == []
+    assert group_story([("A", -5.0), ("B", -1.0), ("C", -2.0)])["one_group_story"] is False
+    assert group_story([("A", 5.0), ("A", 5.0)])["too_thin"] is True
+
+
+def test_close_day_is_utc_and_tolerates_bad_input():
+    from optplat.concentration import close_day
+    assert close_day("2026-11-12T23:30:00-05:00") == "2026-11-13"
+    assert close_day("2026-11-12T10:00:00Z") == "2026-11-12"
+    assert close_day(None) is None and close_day("nonsense") is None

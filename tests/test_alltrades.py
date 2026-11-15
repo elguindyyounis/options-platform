@@ -113,3 +113,15 @@ def test_summaries_split_realized_pnl_by_whether_the_size_was_realistic(parts):
     liq = out["summary"]["all"]["liquidity"]
     assert liq["oversized_trades"] == 1 and liq["within_limits_trades"] == 1 and liq["positive_only_if_oversized"] is True
     assert all("liquidity" in s for s in out["sources"])
+
+
+def test_summaries_split_realized_pnl_by_underlying_and_close_day(parts):
+    manager, engine = parts
+    seed(engine.store)
+    out = build_all(manager, engine.store, True, T0 + timedelta(days=3), engine.option_lanes)
+    s = out["summary"]["all"]
+    u, d = s["by_underlying"], s["by_day"]
+    assert u["closed"] == d["closed"] == s["closed"] == 2
+    assert round(sum(r["pnl"] for r in u["groups"]), 2) == round(sum(r["pnl"] for r in d["groups"]), 2) == s["realized_pnl"]
+    assert u["too_thin"] is True and d["too_thin"] is True  # fewer than 3 groups
+    assert all("by_underlying" in x and "by_day" in x for x in out["sources"])
