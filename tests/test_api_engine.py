@@ -98,3 +98,13 @@ def test_selling_without_a_position_is_rejected_not_errored(client):
         **contract, "idempotency_key": "api-sell-0002", "candidate_id": "t", "quantity": 1,
         "limit_price": 1.85, "side": "SELL_TO_CLOSE"})
     assert r.status_code == 200 and r.json()["state"] == "RISK_REJECTED"
+
+
+def test_dashboard_has_results_panel_that_uses_the_results_api():
+    """UX: results (sample gate, split-half, unrealized) are visible on first sight, text only."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "src" / "optplat" / "static"
+    html, js = (root / "index.html").read_text(), (root / "app.js").read_text()
+    assert 'id="results-status"' in html and "not proof of an edge" in html
+    assert '"/api/results"' in js and "renderResults" in js
+    assert "innerHTML" not in js

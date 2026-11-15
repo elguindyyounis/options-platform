@@ -1,6 +1,6 @@
 # Platform vs. options-alerter
 
-Alerter reviewed up to commit `123eed9`. The alerter is the owner's private research app; this
+Alerter reviewed up to commit `a7a2ca0`. The alerter is the owner's private research app; this
 platform is the safety-first execution skeleton. Notes are from code reading only; neither
 repo's real results are visible from here.
 
@@ -27,3 +27,9 @@ back-date an unobserved quote; its calendar is labelled "estimated". `liquidity.
 spread and size-vs-volume and labels exit estimates `SCENARIO_ONLY`. The platform has no liquidity or
 position-size-vs-volume check on entries (idea for a future run; it would be a risk change, so owner
 decision) and no durable dated archive beyond SQLite retention.
+
+Also read (run 4): the alerter's `static/app.js`/`index.html`/`tests/ui_contract.cjs` redesign (#40).
+It puts a decision verdict first, keeps unmarkable accounts as "unknown" rather than zero, prioritises the
+emergency stop over partial API faults, labels partial/stale evidence, and tests this in a Node contract test.
+The platform dashboard is a flat single page with no such contract test (only an innerHTML ban); the new
+Results panel borrows the "unknown stays unknown" rule. A fuller decision-desk layout is future UX work.
