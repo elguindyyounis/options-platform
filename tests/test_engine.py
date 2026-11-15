@@ -290,5 +290,5 @@ def test_cycle_report_lists_ranked_candidates_without_trading_on_them():
     cands = report["candidates"]
     assert cands and len(cands) <= 10
     assert [c["score"] for c in cands] == sorted((c["score"] for c in cands), reverse=True)
-    assert {"symbol", "contract", "score", "limit_price", "trend", "spread_pct", "dte"} <= set(cands[0])
+    assert {"symbol", "contract", "score", "limit_price", "trend", "spread_pct", "dte", "volume", "open_interest"} <= set(cands[0])
     assert len(manager.list()) <= len(report["entries"])  # candidates are never extra orders

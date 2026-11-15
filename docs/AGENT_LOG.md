@@ -108,3 +108,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Weekend scan: Yahoo unreachable from this session; MONDAY_PLAN unchanged in substance, no demo data used.
 * Not verified: rendering in a real browser (only `node --check` and the node-run test); behaviour on real data. The Mac copy
   is a manual git clone, so this is not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-15: volume/OI on candidates (scheduled challenger run 9)
+
+* Alerter moved to `80672a6`; read `unusual_activity.py` (see COMPARISON_ALERTER). Added `volume`/`open_interest` to cycle-report
+  candidates, two dashboard columns (textContent only, "not reported" for null) and a distinct skip reason for unreported
+  volume/OI in `explain_no_proposal`. No risk, order, auth, sizing or broker code touched; `propose` untouched. 1 new test, 1
+  updated for the new fields; 182 pass.
+* Weekend scan: Yahoo unreachable (HTTP 000, proxy refused); MONDAY_PLAN updated, no demo data used.
+* Not verified: rendering in a real browser (only `node --check`); behaviour on real chains. The Mac copy is a manual git clone,
+  so this is not on the Mac until the owner pulls. PR/merge result: see PR.

@@ -1,6 +1,6 @@
 # Challenges (platform vs. alerter)
 
-Last alerter commit reviewed: `a7a2ca0`
+Last alerter commit reviewed: `80672a6`
 
 ## Open challenges
 
@@ -11,9 +11,19 @@ Last alerter commit reviewed: `a7a2ca0`
 | 3 | Alerter judges many lanes on few trades; platform has one strategy but no multiple-testing note once variants exist. | No |
 | 4 | ~~Open-position losses invisible~~ Addressed 2026-11-15: `/api/results.open_positions` marks to bid with verified fresh quotes; total is null if any position is unmarkable. Still no equity curve or recorded-quote marking. | No |
 | 5 | Alerter's day limits (`day_limits.py`) are all OFF until set and say `NOT_CHECKED` when the ledger cannot measure them; platform has no daily loss halt yet (backlog 3, default is a risk decision). | Yes (default value) |
-| 6 | **UX:** `/api/results` existed only as JSON, so the dashboard showed a bare win rate with no sample warning (fixed 2026-11-15 run 4: Results panel). Why-skipped in plain words done (run 5: Decisions panel + `explain_no_proposal`). Top candidates done run 6 (cycle report `candidates`, dashboard panel). Net GEX done run 7 (cycle report `gex` + dashboard panel, labelled an invented-inventory assumption on a sample chain). Run 8 added an "At a glance" strip (safe? acting? needs you?) with unknown data shown as a warning, never as fine. Still missing from the owner's mock-up: per-account performance/tuning, calendar. The calendar needs a trustworthy event source (owner). Per-account tuning is alerter-only (Mac DB, not visible here). | Partly |
+| 6 | **UX:** `/api/results` existed only as JSON, so the dashboard showed a bare win rate with no sample warning (fixed 2026-11-15 run 4: Results panel). Why-skipped in plain words done (run 5: Decisions panel + `explain_no_proposal`). Top candidates done run 6 (cycle report `candidates`, dashboard panel). Net GEX done run 7 (cycle report `gex` + dashboard panel, labelled an invented-inventory assumption on a sample chain). Run 8 added an "At a glance" strip (safe? acting? needs you?) with unknown data shown as a warning, never as fine. Still missing from the owner's mock-up: per-account performance/tuning, calendar. The calendar needs a trustworthy event source (owner). Per-account tuning is alerter-only (Mac DB, not visible here). Run 9: candidates now show volume and open interest, and an unreported value reads "not reported", never 0. | Partly |
 
 ## Run log
+
+* 2026-11-15 (run 9): Alerter moved to `80672a6` (volume/OI anomaly radar, Mac-only; read `unusual_activity.py`).
+  UX challenge: the Top candidates panel gave a score but not the liquidity behind it, and a skipped contract with
+  missing volume/OI was reported as "too low", which blurs "the provider sent nothing" with "the market is thin".
+  Added volume and open interest to cycle-report candidates and two dashboard columns ("not reported" for null), and a
+  separate skip reason for unreported volume/OI. Display only: `propose` unchanged (missing still fails closed, a test
+  pins that). Weaknesses noted: the candidate score still adds `min(OI,5000)/500`, so it leans on OI that is a prior-day
+  snapshot; the platform has no turnover radar or per-day history (needs recorded chains). 182 pass (1 new test, 1 updated
+  to include the new fields). Weekend scan: Yahoo still refused (HTTP 000); MONDAY_PLAN says so. The Mac copy is a manual
+  git clone: merged code is not on the Mac until the owner pulls.
 
 * 2026-11-15 (run 8): Alerter unchanged (`a7a2ca0`); read `sizing.py` (new to the comparison). UX challenge: a first-time
   reader had to scan five pill badges and a settings row to learn whether the app was safe, acting by itself, or needed

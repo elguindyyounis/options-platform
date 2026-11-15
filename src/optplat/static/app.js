@@ -103,6 +103,8 @@
       { label: "Contract", get: (r) => r.contract }, { label: "Trend", get: (r) => r.trend },
       { label: "Score", get: (r) => r.score }, { label: "Limit", get: (r) => r.limit_price },
       { label: "Spread %", get: (r) => r.spread_pct }, { label: "Days to expiry", get: (r) => r.dte },
+      { label: "Volume", get: (r) => (r.volume == null ? "not reported" : r.volume) },
+      { label: "Open interest", get: (r) => (r.open_interest == null ? "not reported" : r.open_interest) },
     ], rows, "No contract passed the filters in the last cycle");
   }
 

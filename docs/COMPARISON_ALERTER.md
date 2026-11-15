@@ -61,3 +61,14 @@ size at 10% and 20% drawdown, and states that goals never raise risk. Lane polic
 percent-of-equity band. The platform uses a fixed 1% worst-case cost per order from `RiskPolicy`; any move toward
 confidence-scaled sizing is a risk-policy decision for the owner (CLAUDE.md), so it is not attempted here. Worth copying
 when the owner decides: the sample-count caps and the drawdown shrink, both of which make sizing more cautious when evidence is thin.
+
+
+## `unusual_activity.py` (read 2026-11-15, run 9; alerter now at `80672a6`)
+
+A Mac-only "turnover radar" over the Yahoo chain: volume >= 150 and volume/OI >= 3, or volume >= 500 when OI is zero or
+missing. It never turns zero/missing OI into an infinite ratio, labels OI state (`REPORTED`, `REPORTED_ZERO`, `MISSING`),
+states that ask x volume is a proxy and not traded premium, and says a high rank never bypasses the entry-quality veto.
+Extreme rows (ratio >= 20, volume >= 5000) are kept as a per-day high-water mark, never summed across scans. Platform
+difference: `strategy.py` treated a missing volume/OI as 0 silently (fail-closed, right), but the skip reason lumped it
+in with "too low". Run 9 separates the two in the explanation and shows volume and OI (or "not reported") per candidate.
+The platform has no turnover/anomaly radar and no per-day history; that needs recorded chains (backlog) and is not faked.
