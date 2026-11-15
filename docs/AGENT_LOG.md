@@ -80,3 +80,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Weekend scan: Yahoo unreachable from this session (curl returned no response); MONDAY_PLAN updated, no demo data used.
 * Not verified: rendering in a real browser (only `node --check`); behaviour on real data. The Mac copy is a manual
   git clone, so this is not on the Mac until the owner updates it. PR/merge result: see PR.
+
+## 2026-11-15: top candidates panel (scheduled challenger run 6)
+
+* Alerter unchanged at `a7a2ca0`; read `market_breadth.py`. Added `candidates` to the cycle report and a dashboard
+  Top candidates panel (textContent only). No risk, order, auth, sizing or broker code touched; `propose` untouched.
+  1 new test; 175 pass.
+* Weekend scan: Yahoo still refused by the egress proxy; MONDAY_PLAN updated, no demo data used.
+* Not verified: rendering in a real browser (only `node --check`); behaviour on real data. The Mac copy is a manual
+  git clone, so this is not on the Mac until the owner pulls. PR/merge result: see PR.

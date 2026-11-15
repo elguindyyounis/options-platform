@@ -282,3 +282,13 @@ def test_no_proposal_entry_carries_a_plain_reason():
     entry = again["entries"][0]
     assert entry["result"] == "NO_PROPOSAL"
     assert isinstance(entry["reason"], str) and entry["reason"]
+
+
+def test_cycle_report_lists_ranked_candidates_without_trading_on_them():
+    engine, manager, broker, *_ = build(auto_entries=True)
+    report = engine.run_cycle()
+    cands = report["candidates"]
+    assert cands and len(cands) <= 10
+    assert [c["score"] for c in cands] == sorted((c["score"] for c in cands), reverse=True)
+    assert {"symbol", "contract", "score", "limit_price", "trend", "spread_pct", "dte"} <= set(cands[0])
+    assert len(manager.list()) <= len(report["entries"])  # candidates are never extra orders

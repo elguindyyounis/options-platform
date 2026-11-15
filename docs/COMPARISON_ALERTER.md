@@ -39,3 +39,10 @@ that the call-positive/put-negative sign convention is an INVENTED INVENTORY ASS
 result when the row cap is hit and counts omitted rows. The platform's `ChainRow` already carries `iv` and
 open interest, so a net-GEX view is feasible here without new data (correcting the earlier note in
 CHALLENGES row 6); it must carry the same assumption label. Alerter unchanged since `a7a2ca0` this run.
+
+Also read (run 6): `market_breadth.py`. It ranks a broad list (up to 320 names, batches of 20) on one-day change and
+volume relative to the prior five days, labels the output "indicative daily bars, not live quotes" and says the rank is
+NEVER a win probability; tickers the provider fails on stay `DATA_UNAVAILABLE` / `INSUFFICIENT_HISTORY` rather than
+being dropped quietly. The platform's candidate score had no such label on the dashboard; the new Top candidates panel
+now states the score is a ranking heuristic, not a chance of profit. The platform has no breadth/discovery step: it
+only scans the owner's watchlist. Alerter unchanged since `a7a2ca0` this run.

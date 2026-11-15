@@ -94,6 +94,18 @@
     ], rows, "No entry decisions in the last cycle");
   }
 
+  function renderCandidates(c) {
+    const rows = c && c.candidates ? c.candidates : [];
+    $("candidates-note").textContent = c
+      ? "Contracts that passed the strategy filters, best score first. The score ranks liquidity and closeness to the price; it is not a chance of profit. Symbols after a buy in the same cycle are not scanned."
+      : "No cycle has run yet.";
+    table($("candidates-table"), [
+      { label: "Contract", get: (r) => r.contract }, { label: "Trend", get: (r) => r.trend },
+      { label: "Score", get: (r) => r.score }, { label: "Limit", get: (r) => r.limit_price },
+      { label: "Spread %", get: (r) => r.spread_pct }, { label: "Days to expiry", get: (r) => r.dte },
+    ], rows, "No contract passed the filters in the last cycle");
+  }
+
   async function refresh() {
     if (!token) return;
     try {
@@ -107,6 +119,7 @@
       ]);
       renderResults(results);
       renderDecisions(status.last_cycle);
+      renderCandidates(status.last_cycle);
       pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
       pill("data", status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), status.data_source.fictional ? "warn" : "");
       pill("market", "market " + (status.market.open ? "open" : "closed") + ": " + status.market.reason, status.market.open ? "ok" : "");
