@@ -37,11 +37,14 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Open challenges C2-C6 live in `docs/CHALLENGES.md` (exit-stress table, small-sample-per-group warning, report truncation, open-position drawdown).
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Report honesty (challenge C1, branch `agent/2026-11-15-report-sample-honesty`): sample-size label, profit factor, closed-trade drawdown and win-rate range in `/api/report` and dashboard.
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.

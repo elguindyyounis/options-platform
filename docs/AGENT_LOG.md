@@ -23,3 +23,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-15: daily challenger run (report honesty)
+
+* Baseline: 144 tests passed. Read alerter `liquidity.py` and `strategy_performance.py`; created
+  `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md` (neither existed).
+* Changed: new `src/optplat/stats.py`; `/api/report` gains a `stats` block; dashboard shows the
+  win-rate range and a "sample too small" warning. Display only; no risk, sizing, exit or order
+  behaviour changed. 149 tests pass (5 new in `tests/test_stats.py`, 1 assertion added).
+* Verified: unit tests and the API report test. Not verified: dashboard rendering in a browser
+  (JS edited, not run), the alerter's other modules, anything about real data. The 30-trade
+  threshold is a display convention, not a statistical guarantee.

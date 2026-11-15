@@ -27,6 +27,7 @@ from .models import (
     utcnow,
 )
 from .risk import RiskPolicy, evaluate
+from .stats import summarize_closed
 from .store import Store
 
 S = OrderState
@@ -274,6 +275,7 @@ class OrderManager:
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,
             "closed": closed[:50],
             "open": open_rows,
+            "stats": summarize_closed(list(reversed(closed))),
             "caveat": "Paper results with simulated fills. A small sample says nothing about a real edge.",
         }
 
