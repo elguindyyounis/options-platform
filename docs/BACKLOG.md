@@ -37,13 +37,15 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * Liquidity/size-vs-volume entry check modelled on the alerter's `liquidity.py` (risk change: owner decision).
 
 * Fee/commission model for the sim broker (needs an owner-chosen cost assumption).
-* Show `/api/results` in the dashboard (textContent only).
+* Dashboard UX steps (one per run): top candidates and why-taken/skipped from cycle data; per-account view; Node UI contract test like the alerter's.
 
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Dashboard Results panel (`/api/results` shown with sample-size verdict, split-half, unrealized n/a handling; textContent only).
 
 * Split-half stability check in `/api/results` (`split_half_check`): earlier vs later half of closed trades, withheld below the sample gate. Not an out-of-sample test.
 

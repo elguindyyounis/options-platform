@@ -45,16 +45,48 @@
 
   function pill(id, text, cls) { const e = $(id); e.textContent = text; e.className = "pill " + (cls || ""); }
 
+  const pct = (n) => (n === null || n === undefined ? "n/a" : n + "%");
+  const STATUS_TEXT = {
+    NO_CLOSED_TRADES: "No closed trades yet: nothing to judge.",
+    INSUFFICIENT_SAMPLE: "Too few closed trades to say anything. Treat every number below as noise.",
+    SAMPLE_SIZE_MET_NOT_PROOF_OF_EDGE: "Sample size met, but this is still not proof of an edge.",
+  };
+
+  // Results come from /api/results; every value is shown as text, and gaps are shown as "n/a", never as zero.
+  function renderResults(r) {
+    const split = r.split_half || {};
+    const open = r.open_positions || {};
+    const bad = r.status !== "SAMPLE_SIZE_MET_NOT_PROOF_OF_EDGE";
+    $("results-status").replaceChildren(
+      el("div", (STATUS_TEXT[r.status] || String(r.status)) + " (" + r.closed_trades + " of " + r.min_trades_required + " trades)", bad ? "warn" : ""));
+    const rows = [
+      ["Realized P&L (closed trades)", money(r.realized_pnl_usd)],
+      ["Win rate", pct(r.win_rate_pct)],
+      ["P&L without the best trade", money(r.pnl_without_best_trade_usd)],
+      ["Worst closed-trade drawdown (not account drawdown)", pct(r.closed_trade_max_drawdown_pct)],
+      ["Early half vs later half", split.status === "CHECKED"
+        ? money(split.first_half_pnl_usd) + " vs " + money(split.second_half_pnl_usd) + (split.consistent ? " (same sign)" : " (NOT consistent)")
+        : "withheld until enough trades"],
+      ["Unrealized P&L (marked to bid)", open.unrealized_pnl_usd === null || open.unrealized_pnl_usd === undefined
+        ? "n/a: " + (open.error || ((open.unmarked || []).length + " position(s) cannot be marked")) : money(open.unrealized_pnl_usd)],
+      ["Filled exits with no cost basis", r.unpriced_exits],
+    ];
+    table($("results-table"), [{ label: "Measure", get: (x) => x[0] }, { label: "Value", get: (x) => x[1] }], rows, "No results");
+    $("results-limits").textContent = (r.limitations || []).join(" ");
+  }
+
   async function refresh() {
     if (!token) return;
     try {
-      const [health, status, portfolio, orders, report] = await Promise.all([
+      const [health, status, portfolio, orders, report, results] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         api("/api/engine/status"),
         api("/api/portfolio"),
         api("/api/paper/orders"),
         api("/api/report"),
+        api("/api/results"),
       ]);
+      renderResults(results);
       pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
       pill("data", status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), status.data_source.fictional ? "warn" : "");
       pill("market", "market " + (status.market.open ? "open" : "closed") + ": " + status.market.reason, status.market.open ? "ok" : "");

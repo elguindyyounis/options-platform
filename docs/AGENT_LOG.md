@@ -63,3 +63,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   numbers withheld below the 30-trade gate; `consistent` false on opposite or zero signs. Display only; no
   risk, order, auth or sizing code touched. 3 new tests; 169 pass.
 * Not verified: behaviour on real data; this is a stability check, not out-of-sample validation. PR/merge result: see below.
+
+## 2026-11-15: dashboard Results panel (scheduled challenger run 4)
+
+* Alerter advanced to `a7a2ca0` (dashboard redesign); read its UI diff. Weekend scan attempted: Yahoo is blocked by this session's egress proxy, so
+  `docs/MONDAY_PLAN.md` records that no real data was reachable (no demo data used).
+* Added a Results panel to the dashboard fed by `/api/results`. Frontend only; no risk, order, auth, sizing or
+  broker code touched. 1 new test; 170 pass.
+* Not verified: rendering in a real browser (only `node --check` and a static test); behaviour on real data.
