@@ -171,6 +171,15 @@ def test_explain_counts_why_each_contract_failed():
         assert part in text
 
 
+def test_explain_separates_unreported_volume_oi_from_low_values():
+    s = LiquidTrendStrategy()
+    rows = [row(160, vol=None), row(161, oi=None), row(162, vol=1)]
+    text = s.explain_no_proposal(snap(UP, rows), NOW)
+    assert "2 volume or open interest not reported by the data provider" in text
+    assert "1 volume or open interest too low" in text
+    assert s.propose(snap(UP, rows), NOW) == []  # unknown stays fail-closed: still never proposed
+
+
 def test_explain_never_changes_proposals():
     s = LiquidTrendStrategy()
     sn = snap(UP, [row(160)])

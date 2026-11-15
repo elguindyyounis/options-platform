@@ -436,6 +436,8 @@ class TradingEngine:
                         "trend": cand.rationale.get("trend"),
                         "spread_pct": cand.rationale.get("spread_pct"),
                         "dte": cand.rationale.get("dte"),
+                        "volume": cand.rationale.get("volume"),
+                        "open_interest": cand.rationale.get("open_interest"),
                     }
                 )
             account = self.manager.broker.get_account()

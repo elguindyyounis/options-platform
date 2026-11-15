@@ -69,7 +69,7 @@ class LiquidTrendStrategy(Strategy):
             right = Right.PUT
         else:
             return "No clear trend (price, 20-day and 50-day averages are not lined up), so no trade."
-        counts = {"expiry": 0, "quote": 0, "spread": 0, "liquidity": 0, "strike": 0}
+        counts = {"expiry": 0, "quote": 0, "spread": 0, "liquidity_missing": 0, "liquidity": 0, "strike": 0}
         for row in snapshot.rows:
             c = row.contract
             if c.right is not right:
@@ -80,7 +80,10 @@ class LiquidTrendStrategy(Strategy):
                 counts["quote"] += 1
             elif (row.ask - row.bid) / row.ask * 100 > self.max_spread_pct:
                 counts["spread"] += 1
-            elif (row.volume or 0) < self.min_volume or (row.open_interest or 0) < self.min_open_interest:
+            elif row.volume is None or row.open_interest is None:
+                # Display only: propose() still rejects these (None counts as 0), but the reason differs.
+                counts["liquidity_missing"] += 1
+            elif row.volume < self.min_volume or row.open_interest < self.min_open_interest:
                 counts["liquidity"] += 1
             elif abs(c.strike / snapshot.underlying - 1) * 100 > self.max_moneyness_pct:
                 counts["strike"] += 1
@@ -88,6 +91,7 @@ class LiquidTrendStrategy(Strategy):
             "expiry": "expiry outside the allowed window",
             "quote": "no usable bid/ask",
             "spread": "bid/ask spread too wide",
+            "liquidity_missing": "volume or open interest not reported by the data provider (treated as failing)",
             "liquidity": "volume or open interest too low",
             "strike": "strike too far from the price",
         }
