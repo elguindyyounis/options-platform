@@ -34,11 +34,16 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Fee/commission model for the sim broker (needs an owner-chosen cost assumption).
+* Show `/api/results` in the dashboard (textContent only).
+
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Closed-trade summary (`evaluation.py`, `GET /api/results`): sample-size gate, null win rate for zero trades, best-trade concentration, closed-only drawdown, limitations list. Partial progress on item 2 (no out-of-sample split or baseline comparison yet).
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
