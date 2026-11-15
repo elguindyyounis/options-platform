@@ -34,6 +34,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Liquidity/size-vs-volume entry check modelled on the alerter's `liquidity.py` (risk change: owner decision).
+
 * Fee/commission model for the sim broker (needs an owner-chosen cost assumption).
 * Show `/api/results` in the dashboard (textContent only).
 
@@ -42,6 +44,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Split-half stability check in `/api/results` (`split_half_check`): earlier vs later half of closed trades, withheld below the sample gate. Not an out-of-sample test.
 
 * Open-position marks in `/api/results` (`summarize_open_positions`): bid-based, verified and fresh quotes only, null total if any position is unmarkable.
 

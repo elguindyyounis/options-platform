@@ -1,6 +1,6 @@
 # Platform vs. options-alerter
 
-Alerter reviewed up to commit `0107246`. The alerter is the owner's private research app; this
+Alerter reviewed up to commit `123eed9`. The alerter is the owner's private research app; this
 platform is the safety-first execution skeleton. Notes are from code reading only; neither
 repo's real results are visible from here.
 
@@ -20,3 +20,10 @@ silently when they cannot be measured. Same fail-closed spirit as the platform; 
 Where the alerter is more honest: it labels every number's provenance and refuses to total
 separate virtual accounts. Where the platform is stricter: fail-closed risk, order state machine,
 PAPER-only enforcement, quote-time verification.
+
+Also read (run 3): `local_reports.py` and `liquidity.py`. The alerter writes write-once, 0600, dated
+session/weekend JSON archives beside its DB (so release swaps never erase history) and refuses to
+back-date an unobserved quote; its calendar is labelled "estimated". `liquidity.py` scores volume, OI,
+spread and size-vs-volume and labels exit estimates `SCENARIO_ONLY`. The platform has no liquidity or
+position-size-vs-volume check on entries (idea for a future run; it would be a risk change, so owner
+decision) and no durable dated archive beyond SQLite retention.

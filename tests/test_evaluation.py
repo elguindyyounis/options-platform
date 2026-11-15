@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from helpers import CONTRACT, NOW, make_intent
 from optplat.api import create_app
 from optplat.broker import SimBroker
-from optplat.evaluation import closed_trade_pnl, summarize_closed_trades
+from optplat.evaluation import closed_trade_pnl, split_half_check, summarize_closed_trades
 from optplat.models import Order, OrderState, Side
 from optplat.orders import OrderManager
 from optplat.store import Store
@@ -113,3 +113,26 @@ def test_no_positions_is_zero_and_results_endpoint_includes_section():
     c = TestClient(create_app(OrderManager(SimBroker(), Store(":memory:")), "t" * 24))
     body = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()
     assert body["open_positions"]["unrealized_pnl_usd"] == 0.0
+
+
+def test_split_half_withheld_below_min_trades():
+    r = split_half_check([5.0] * 29)
+    assert r["status"] == "INSUFFICIENT_SAMPLE" and r["consistent"] is None and r["first_half_pnl_usd"] is None
+    assert summarize_closed_trades([sell(i, 3.0, 2.0) for i in range(5)])["split_half"]["consistent"] is None
+
+
+def test_split_half_flags_unstable_and_stable_results():
+    unstable = split_half_check([10.0] * 15 + [-4.0] * 15)
+    assert unstable["status"] == "CHECKED" and unstable["consistent"] is False
+    flip = split_half_check([10.0] * 15 + [-20.0] * 15)
+    assert flip["first_half_pnl_usd"] == 150.0 and flip["second_half_pnl_usd"] == -300.0
+    assert flip["consistent"] is False
+    assert split_half_check([1.0] * 30)["consistent"] is True
+    assert split_half_check([0.0] * 30)["consistent"] is False
+
+
+def test_split_half_uses_time_order_in_summary():
+    orders = [sell(i, 3.0, 2.0) for i in range(15)] + [sell(i, 1.0, 2.0) for i in range(15, 30)]
+    s = summarize_closed_trades(list(reversed(orders)))
+    assert s["split_half"]["first_half_pnl_usd"] > 0 > s["split_half"]["second_half_pnl_usd"]
+    assert s["split_half"]["consistent"] is False
