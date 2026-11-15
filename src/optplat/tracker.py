@@ -1,7 +1,7 @@
 """The options tracker: what happened to unusual option contracts after the scanner flagged them.
 
 The scanner flags a contract on a day (volume far above open interest, and so on). This module watches what that
-contract did afterwards. On each later scan it reads the contract's quote again and, for the 1, 3 and 7 trading day
+contract did afterwards. On each later scan it reads the contract's quote again and, for the 1, 3, 7 and 30 trading day
 marks, records two things:
 
 * the contract's return if someone had bought at the ask when it was flagged and sold at the bid at the mark
@@ -23,10 +23,10 @@ from .market_clock import HOLIDAYS
 from .marketdata import MarketSnapshot
 from .models import Right
 
-HORIZONS = (1, 3, 7)     # trading days after the flag
+HORIZONS = (1, 3, 7, 30)   # trading days after the flag
 SLACK = 2                # a mark may be taken up to this many trading days late (a missed scan), never early
 MIN_N = 20               # marks a group needs before the dashboard calls a difference a finding
-WATCH_DAYS = 12          # calendar days a flagged contract stays on the watch list
+WATCH_DAYS = 50          # calendar days on the watch list: 30 trading days plus the late-mark slack (about 46)
 
 
 def _is_trading_day(d: date) -> bool:

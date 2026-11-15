@@ -49,8 +49,7 @@ Own data the owner provides stays out of commits and logs, and results are label
 ## Next up
 
 00. **Follow-ups from the tracker (owner decisions marked).** Once the tracker has 20 or more marks in a group, check whether any feature
-   beats the average; only then consider letting the `flow` agent support a trade (owner decision, since it adds conviction). Add 30 day
-   marks and a "chains read" count to the tracker page. Single-stock watchlists need a first real run to see spreads and earnings handling.
+   beats the average; only then consider letting the `flow` agent support a trade (owner decision, since it adds conviction). Add a "chains read" count to the tracker page. Single-stock watchlists need a first real run to see spreads and earnings handling.
 
 0. **Challenger agent's list.** The open challenges (counterfactual journal, display-only GEX, stressed lane P&L,
    signal provenance doc) live in `docs/CHALLENGES.md`; the daily agent takes one per run.
@@ -109,6 +108,7 @@ Existing items, in order:
 
 ## Done
 
+* Tracker 30 trading day marks: `HORIZONS` is now (1, 3, 7, 30) and the watch window is 50 calendar days so a flag stays watched until its 30 day mark; Tracker page shows the new horizon. Display and research only.
 * Signal provenance doc (challenge 5): `docs/SIGNALS.md` lists each signal, label and post-mortem tag with origin, status and caveat; a test fails if it drifts from `SIGNAL_NAMES`, `VALIDATED_SIGNALS` or `postmortem.CAUSES`.
 * Frozen baseline lane (challenge 3): `frozen-baseline-options`, a literal copy of the first short-term rule, settings pinned by `FROZEN_FINGERPRINT` and a test. Simulated only.
 * Trades, tracker, rotation, research and desk (owner request 2026-11-13): readable contract names, `/api/alltrades` and the unified Trades

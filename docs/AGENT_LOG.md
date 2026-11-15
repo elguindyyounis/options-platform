@@ -550,3 +550,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   code and conflicts with integration docs; the owner should decide whether to fold the many unmerged `agent/2026-11-1[34]-*`
   branches, which overlap each other (several redo the same provenance doc).
 * Verified: full test suite, 565 passed. Not verified: that every row's origin text is accurate beyond reading the code.
+
+## 2026-11-15: tracker 30 trading day marks (scheduled run on agent/integration)
+
+* Backlog item 00 (part): `tracker.HORIZONS` gained 30 and `WATCH_DAYS` went from 12 to 50 calendar days (30 trading days plus the 2-day late-mark slack is about 46), otherwise a flag would drop off the watch list long before day 30. The Tracker page lists the 30 day mark beside 1, 3 and 7. Findings still read only the 3 day horizon. Display and research only: no orders, no risk or sizing change, nothing reads these marks for a decision.
+* Existing flags older than 12 days that were already dropped are not recovered; 30 day marks start filling for flags seen from now on (and any still within 50 days).
+* Not done: the "chains read" count, and the owner decision on letting the `flow` agent support a trade.
+* Verified: full test suite, 569 passed (horizon-due cases for 29, 30, 32 and 33 days added). Not verified: the dashboard in a browser, or any real 30 day marks (they need about six weeks of real scans).

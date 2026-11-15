@@ -46,7 +46,7 @@ def test_trading_days_skip_weekends_and_listed_holidays():
     assert tr.trading_days_between(date(2026, 11, 20), date(2026, 11, 30)) == 5  # Thanksgiving is closed
 
 
-@pytest.mark.parametrize("age,done,due", [(0, set(), []), (1, set(), [1]), (2, {1}, []), (3, {1}, [3]), (5, {1}, [3]), (6, {1}, []), (7, {1, 3}, [7]), (9, {1, 3}, [7]), (10, {1, 3}, [])])
+@pytest.mark.parametrize("age,done,due", [(0, set(), []), (1, set(), [1]), (2, {1}, []), (3, {1}, [3]), (5, {1}, [3]), (6, {1}, []), (7, {1, 3}, [7]), (9, {1, 3}, [7]), (10, {1, 3}, []), (29, {1, 3, 7}, []), (30, {1, 3, 7}, [30]), (32, {1, 3, 7}, [30]), (33, {1, 3, 7}, [])])
 def test_a_mark_is_taken_once_never_early_and_not_too_late(age, done, due):
     assert tr.horizons_due(age, done) == due
 
@@ -114,7 +114,7 @@ def test_the_tracker_endpoint_returns_criteria_marks_and_the_watch_list():
         assert c.get("/api/tracker").status_code == 401
         body = c.get("/api/tracker", headers={"X-API-Token": "t" * 24}).json()
     assert body["criteria"] and body["limitations"] and body["total_marks"] == 0 and body["fictional"] is True
-    assert set(body["horizons"]) == {"1", "3", "7"} and body["findings"] == []
+    assert set(body["horizons"]) == {"1", "3", "7", "30"} and body["findings"] == []
 
 
 def test_the_rotation_endpoint_reads_stored_scans():

@@ -845,11 +845,11 @@
   async function loadSwing() { renderLane("sw", await api("/api/swing")); }
 
   // ---------------------------------------------------------------- Options tracker
-  const TK_H = { 1: "1 trading day", 3: "3 trading days", 7: "7 trading days" };
+  const TK_H = { 1: "1 trading day", 3: "3 trading days", 7: "7 trading days", 30: "30 trading days" };
   const retText = (v) => (v === null || v === undefined ? "n/a" : (v > 0 ? "+" : "") + v.toFixed(1) + "%");
   function tkMarks(m) {
     const w = el("span", null, "marks");
-    ["1", "3", "7"].forEach((h) => {
+    ["1", "3", "7", "30"].forEach((h) => {
       const mk = m[h];
       w.appendChild(el("span", h + "d " + (mk ? retText(mk.ret_pct) : "waiting"), "mark " + (mk ? tone(mk.ret_pct) : "muted")));
     });
@@ -859,7 +859,7 @@
     const r = S.tracker;
     if (!r) return;
     const h3 = r.horizons["3"];
-    $("tk-lede").textContent = "The scanner flags option contracts that traded far above their open interest. The tracker keeps every flag, reads the contract again 1, 3 and 7 trading days later, and records what happened, so the rules for 'unusual' can be tested instead of trusted. " +
+    $("tk-lede").textContent = "The scanner flags option contracts that traded far above their open interest. The tracker keeps every flag, reads the contract again 1, 3, 7 and 30 trading days later, and records what happened, so the rules for 'unusual' can be tested instead of trusted. " +
       (r.fictional ? "This is fictional demo data." : "");
     const f = $("tk-figures");
     f.replaceChildren();
@@ -881,8 +881,8 @@
       { label: "Median return", right: true, get: (x) => retText(x.s.median_ret_pct) },
       { label: "Underlying moved the right way by", right: true, get: (x) => retText(x.s.avg_helpful_move_pct) },
       { label: "Enough to read", get: (x) => el("span", x.s.enough ? "Yes" : "Too few", "tag " + (x.s.enough ? "info" : "")) },
-    ], ["1", "3", "7"].map((h) => ({ h, s: r.horizons[h] })), "No marks yet");
-    chips($("tk-horizon-tabs"), ["1", "3", "7"].map((h) => ({ id: h, label: TK_H[h] + " after" })), S.tkH, (id) => { S.tkH = id; renderTracker(); });
+    ], ["1", "3", "7", "30"].map((h) => ({ h, s: r.horizons[h] })), "No marks yet");
+    chips($("tk-horizon-tabs"), ["1", "3", "7", "30"].map((h) => ({ id: h, label: TK_H[h] + " after" })), S.tkH, (id) => { S.tkH = id; renderTracker(); });
     const groups = r.groups.filter((g) => String(g.horizon) === S.tkH).sort((a, b) => (a.feature === b.feature ? (b.vs_all_pct || 0) - (a.vs_all_pct || 0) : a.feature < b.feature ? -1 : 1));
     table($("tk-groups"), [
       { label: "Feature", get: (g) => g.feature_label }, { label: "Group", get: (g) => el("b", g.bucket) },
