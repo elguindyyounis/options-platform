@@ -51,3 +51,13 @@ Also read (run 7): `gex.py` again for implementation. Same formula now in `optpl
 for 0DTE, 45-day window, call+/put-). Difference: the alerter returns a per-strike table and heatmap and refuses to
 publish when its row cap is reached; the platform only returns a total and the largest +/- strike from whatever sample
 the provider gave, labelled partial. Alerter unchanged since `a7a2ca0`.
+
+
+## `sizing.py` (read 2026-11-15, run 8)
+
+The alerter sizes from an ordinal evidence index (score, trend match, volume vs open interest, spread, IV), explicitly
+"not a win probability". It caps the index at 0.78 until 20 learning samples exist, caps the fraction until 10, shrinks
+size at 10% and 20% drawdown, and states that goals never raise risk. Lane policy (owner-chosen) maps the index to a
+percent-of-equity band. The platform uses a fixed 1% worst-case cost per order from `RiskPolicy`; any move toward
+confidence-scaled sizing is a risk-policy decision for the owner (CLAUDE.md), so it is not attempted here. Worth copying
+when the owner decides: the sample-count caps and the drawdown shrink, both of which make sizing more cautious when evidence is thin.
