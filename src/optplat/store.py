@@ -4,9 +4,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from typing import Any, Optional
+from datetime import datetime, timedelta
+from typing import Any, Iterable, Optional
 
-from .models import Order, OrderState, TERMINAL_STATES, utcnow
+from .models import Order, OrderState, Quote, TERMINAL_STATES, utcnow
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS orders (
@@ -28,6 +29,38 @@ CREATE TABLE IF NOT EXISTS state (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS market_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    underlying REAL NOT NULL,
+    closes TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    source TEXT NOT NULL,
+    timestamp_verified INTEGER NOT NULL,
+    fictional INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_market_snapshots_symbol_rec ON market_snapshots(symbol, recorded_at);
+CREATE TABLE IF NOT EXISTS market_quotes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER,
+    recorded_at TEXT NOT NULL,
+    underlying TEXT NOT NULL,
+    expiry TEXT NOT NULL,
+    right TEXT NOT NULL,
+    strike REAL NOT NULL,
+    bid REAL NOT NULL,
+    ask REAL NOT NULL,
+    volume INTEGER,
+    open_interest INTEGER,
+    iv REAL,
+    as_of TEXT NOT NULL,
+    source TEXT NOT NULL,
+    timestamp_verified INTEGER NOT NULL,
+    fictional INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_market_quotes_rec ON market_quotes(recorded_at);
+CREATE INDEX IF NOT EXISTS idx_market_quotes_snap ON market_quotes(snapshot_id);
 """
 
 
@@ -119,6 +152,103 @@ class Store:
                 (key, value),
             )
             self._db.commit()
+
+    # ---- market data recorder ----------------------------------------
+    # Raw observations only: what a provider returned, when we recorded it, and where it came from.
+    # `as_of` is the provider's claimed time and `timestamp_verified` says whether the venue supplied it.
+    def record_snapshot(self, snap: Any, *, recorded_at: Optional[datetime] = None) -> int:
+        """Persist a MarketSnapshot and its chain rows in one transaction. Returns the snapshot id."""
+        rec = (recorded_at or utcnow()).isoformat()
+        with self._lock:
+            try:
+                cur = self._db.execute(
+                    "INSERT INTO market_snapshots (recorded_at, symbol, underlying, closes, as_of, source,"
+                    " timestamp_verified, fictional) VALUES (?,?,?,?,?,?,?,?)",
+                    (rec, snap.symbol, snap.underlying, json.dumps(list(snap.closes)), snap.as_of.isoformat(),
+                     snap.source, int(snap.timestamp_verified), int(snap.fictional)),
+                )
+                snapshot_id = int(cur.lastrowid)
+                self._db.executemany(
+                    "INSERT INTO market_quotes (snapshot_id, recorded_at, underlying, expiry, right, strike, bid, ask,"
+                    " volume, open_interest, iv, as_of, source, timestamp_verified, fictional)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    [
+                        (snapshot_id, rec, r.contract.underlying, r.contract.expiry.isoformat(), r.contract.right.value,
+                         r.contract.strike, r.bid, r.ask, r.volume, r.open_interest, r.iv, snap.as_of.isoformat(),
+                         snap.source, int(snap.timestamp_verified), int(snap.fictional))
+                        for r in snap.rows
+                    ],
+                )
+                self._db.commit()
+            except Exception:
+                self._db.rollback()
+                raise
+        return snapshot_id
+
+    def record_quotes(
+        self, quotes: Iterable[Quote], *, fictional: bool, recorded_at: Optional[datetime] = None
+    ) -> int:
+        """Persist standalone quotes (e.g. for held positions). Returns the number stored."""
+        rec = (recorded_at or utcnow()).isoformat()
+        rows = [
+            (rec, q.contract.underlying, q.contract.expiry.isoformat(), q.contract.right.value, q.contract.strike,
+             q.bid, q.ask, q.as_of.isoformat(), q.source, int(q.timestamp_verified), int(fictional))
+            for q in quotes
+        ]
+        if not rows:
+            return 0
+        with self._lock:
+            try:
+                self._db.executemany(
+                    "INSERT INTO market_quotes (snapshot_id, recorded_at, underlying, expiry, right, strike, bid, ask,"
+                    " as_of, source, timestamp_verified, fictional) VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?)",
+                    rows,
+                )
+                self._db.commit()
+            except Exception:
+                self._db.rollback()
+                raise
+        return len(rows)
+
+    def recorder_counts(self) -> dict[str, int]:
+        with self._lock:
+            snaps = self._db.execute("SELECT COUNT(*) AS n FROM market_snapshots").fetchone()["n"]
+            quotes = self._db.execute("SELECT COUNT(*) AS n FROM market_quotes").fetchone()["n"]
+        return {"snapshots": snaps, "quotes": quotes}
+
+    def recorded_snapshots(self, symbol: Optional[str] = None, limit: int = 100) -> list[dict[str, Any]]:
+        """Snapshots in recording order (oldest first), each with its chain rows."""
+        with self._lock:
+            if symbol:
+                heads = self._db.execute(
+                    "SELECT * FROM market_snapshots WHERE symbol=? ORDER BY id LIMIT ?", (symbol, limit)
+                ).fetchall()
+            else:
+                heads = self._db.execute("SELECT * FROM market_snapshots ORDER BY id LIMIT ?", (limit,)).fetchall()
+            out = []
+            for h in heads:
+                rows = self._db.execute(
+                    "SELECT underlying, expiry, right, strike, bid, ask, volume, open_interest, iv"
+                    " FROM market_quotes WHERE snapshot_id=? ORDER BY id", (h["id"],)
+                ).fetchall()
+                out.append({
+                    "id": h["id"], "recorded_at": h["recorded_at"], "symbol": h["symbol"],
+                    "underlying": h["underlying"], "closes": json.loads(h["closes"]), "as_of": h["as_of"],
+                    "source": h["source"], "timestamp_verified": bool(h["timestamp_verified"]),
+                    "fictional": bool(h["fictional"]), "rows": [dict(r) for r in rows],
+                })
+        return out
+
+    def purge_market_data(self, retention_days: int, *, now: Optional[datetime] = None) -> int:
+        """Delete recordings older than ``retention_days`` (0 keeps everything). Returns rows removed."""
+        if retention_days <= 0:
+            return 0
+        cutoff = ((now or utcnow()) - timedelta(days=retention_days)).isoformat()
+        with self._lock:
+            q = self._db.execute("DELETE FROM market_quotes WHERE recorded_at < ?", (cutoff,)).rowcount
+            s = self._db.execute("DELETE FROM market_snapshots WHERE recorded_at < ?", (cutoff,)).rowcount
+            self._db.commit()
+        return q + s
 
 
 __all__ = ["Store", "OrderState"]
