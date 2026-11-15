@@ -47,3 +47,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Added `optplat/evaluation.py` and token-protected `GET /api/results`. Read-only, no change to risk,
   orders, auth or sizing. 6 new tests; 162 pass.
 * Not verified: behaviour on real or Yahoo data; no commissions are modelled (logged as challenge 1).
+
+## 2026-11-15: open-position marks (scheduled challenger run 2)
+
+* Alerter unchanged since `0107246`; read `day_limits.py` (see comparison doc).
+* `/api/results` now has `open_positions`: unrealized P&L marked to the bid, only from valid,
+  venue-timestamped quotes under 120s old; any unmarkable position makes the total null and is listed
+  with a reason. Broker errors fail closed. No risk, order, auth or sizing code touched. 4 new tests; 166 pass.
+* Not verified: behaviour against a real broker's `get_positions`/`get_quote`; no commissions modelled.

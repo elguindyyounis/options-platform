@@ -7,15 +7,17 @@ trades, and says what it leaves out (commissions, open-position losses, quote-ti
 """
 from __future__ import annotations
 
-from typing import Any, Iterable
+from datetime import datetime
+from typing import Any, Callable, Iterable
 
-from .models import Order, OrderState, Side
+from .broker.base import QuoteUnavailable
+from .models import Order, OrderState, Position, Quote, Side
 
 DEFAULT_MIN_TRADES = 30
 
 LIMITATIONS = (
     "Simulated fills only; no commissions or exchange fees are modeled, so real costs would be higher.",
-    "Closed trades only: unrealized losses on open positions are excluded, so this is not account P&L.",
+    "Closed-trade figures exclude open positions; see open_positions for marks (bid-based, never guessed).",
     "Max drawdown is measured on the closed-trade equity curve only and understates account drawdown.",
     "Trades are grouped per fill, not per independent idea; correlated trades overstate the sample.",
     "Not evidence of an edge. Synthetic or unverified-quote runs prove nothing about real markets.",
@@ -78,4 +80,52 @@ def summarize_closed_trades(
         "pnl_without_best_trade_usd": round(total - max(pnls), 2) if n else None,
         "closed_trade_max_drawdown_pct": round(max_dd, 3) if n else None,
         "limitations": list(LIMITATIONS),
+    }
+
+
+def summarize_open_positions(
+    positions: Iterable[Position],
+    get_quote: Callable[..., Quote],
+    now: datetime,
+    *,
+    max_age_seconds: float = 120.0,
+) -> dict[str, Any]:
+    """Mark open long options to the BID (what a sell would get), conservatively.
+
+    A position is marked only with a valid, venue-timestamped, fresh quote. Anything else is listed
+    as unmarked and the total is ``None``: a partial total would hide the losses we could not see.
+    """
+    marked: list[dict[str, Any]] = []
+    unmarked: list[dict[str, Any]] = []
+    total = 0.0
+    for pos in positions:
+        label = pos.contract.to_dict()
+        reason = None
+        quote = None
+        try:
+            quote = get_quote(pos.contract)
+        except QuoteUnavailable:
+            reason = "no_quote"
+        except Exception:  # fail closed: any broker error means "cannot mark"
+            reason = "quote_error"
+        if quote is not None:
+            if not quote.is_valid():
+                reason = "invalid_quote"
+            elif not quote.timestamp_verified:
+                reason = "quote_time_unverified"
+            elif not 0 <= quote.age_seconds(now) <= max_age_seconds:
+                reason = "stale_quote"
+        if reason or quote is None:
+            unmarked.append({"contract": label, "quantity": pos.quantity, "reason": reason})
+            continue
+        pnl = (quote.bid - pos.avg_cost) * pos.quantity * pos.contract.multiplier
+        total += pnl
+        marked.append({"contract": label, "quantity": pos.quantity, "avg_cost": pos.avg_cost,
+                       "bid": quote.bid, "unrealized_pnl_usd": round(pnl, 2)})
+    return {
+        "open_positions": len(marked) + len(unmarked),
+        "marked": marked,
+        "unmarked": unmarked,
+        "unrealized_pnl_usd": None if unmarked else round(total, 2),
+        "basis": "bid, verified fresh quotes only; total is null if any position cannot be marked",
     }

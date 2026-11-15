@@ -12,6 +12,11 @@ repo's real results are visible from here.
 | Sizing | Confidence-scaled (owner decision 2026-11-15), conviction gates | Fixed risk limits; not to be changed by agents |
 | Research breadth | Lanes, session replay, GEX, sector rotation, $1K challenge account | One baseline strategy, recorder, no replay yet |
 
+Also read (run 2): `day_limits.py`. Per-day entry limits (realized-loss cap counting the worst case
+of the new entry, max entries per day, ET entry window) that only ever add failures to an entry,
+are OFF until the owner sets them, and report `NOT_CHECKED_NO_CLOSED_LEDGER` instead of passing
+silently when they cannot be measured. Same fail-closed spirit as the platform; relevant to backlog 3.
+
 Where the alerter is more honest: it labels every number's provenance and refuses to total
 separate virtual accounts. Where the platform is stricter: fail-closed risk, order state machine,
 PAPER-only enforcement, quote-time verification.

@@ -63,3 +63,53 @@ def test_results_endpoint_requires_token_and_works():
     assert c.get("/api/results").status_code == 401
     body = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()
     assert body["status"] == "NO_CLOSED_TRADES"
+
+
+# ---- open-position marks (challenge 4) ----
+from helpers import make_quote  # noqa: E402
+from optplat.broker.base import QuoteUnavailable  # noqa: E402
+from optplat.evaluation import summarize_open_positions  # noqa: E402
+from optplat.models import Position  # noqa: E402
+
+
+def _marks(quote_or_exc, **kw):
+    def get_quote(_c):
+        if isinstance(quote_or_exc, Exception):
+            raise quote_or_exc
+        return quote_or_exc
+    return summarize_open_positions([Position(CONTRACT, 2, 2.0)], get_quote, NOW, **kw)
+
+
+def test_open_position_marked_to_bid_not_mid_or_ask():
+    s = _marks(make_quote(bid=1.50, ask=2.50))
+    assert s["unrealized_pnl_usd"] == pytest.approx(-100.0)  # (1.50-2.00)*2*100
+    assert s["marked"][0]["bid"] == 1.50 and not s["unmarked"]
+
+
+def test_unmarkable_positions_make_total_null_never_zero():
+    for q, why in [
+        (QuoteUnavailable("x"), "no_quote"),
+        (RuntimeError("boom"), "quote_error"),
+        (make_quote(verified=False), "quote_time_unverified"),
+        (make_quote(as_of=NOW - timedelta(hours=1)), "stale_quote"),
+        (make_quote(bid=3.0, ask=2.0), "invalid_quote"),
+    ]:
+        s = _marks(q)
+        assert s["unrealized_pnl_usd"] is None and s["unmarked"][0]["reason"] == why
+
+
+def test_partial_marks_do_not_hide_unmarked_losses():
+    other = CONTRACT.__class__("QQQ", CONTRACT.expiry, CONTRACT.right, 500.0)
+    def gq(c):
+        if c == CONTRACT:
+            return make_quote(bid=3.0, ask=3.1)
+        raise QuoteUnavailable("none")
+    s = summarize_open_positions([Position(CONTRACT, 1, 2.0), Position(other, 1, 2.0)], gq, NOW)
+    assert s["unrealized_pnl_usd"] is None and len(s["marked"]) == 1 and len(s["unmarked"]) == 1
+
+
+def test_no_positions_is_zero_and_results_endpoint_includes_section():
+    assert summarize_open_positions([], lambda c: None, NOW)["unrealized_pnl_usd"] == 0.0
+    c = TestClient(create_app(OrderManager(SimBroker(), Store(":memory:")), "t" * 24))
+    body = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()
+    assert body["open_positions"]["unrealized_pnl_usd"] == 0.0
