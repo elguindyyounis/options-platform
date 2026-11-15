@@ -108,3 +108,35 @@ def test_dashboard_has_results_panel_that_uses_the_results_api():
     assert 'id="results-status"' in html and "not proof of an edge" in html
     assert '"/api/results"' in js and "renderResults" in js
     assert "innerHTML" not in js
+
+
+def test_glance_summary_is_text_only_and_flags_unsafe_states():
+    """Runs the dashboard's buildGlance under node with a stub DOM (skips if node is missing)."""
+    import json, shutil, subprocess
+    from pathlib import Path
+    node = shutil.which("node")
+    if not node:
+        import pytest
+        pytest.skip("node not installed")
+    root = Path(__file__).resolve().parents[1] / "src" / "optplat" / "static"
+    js = (root / "app.js").read_text()
+    assert "innerHTML" not in js and 'id="glance"' in (root / "index.html").read_text()
+    harness = """
+global.document={getElementById:()=>({addEventListener(){}}),createElement:()=>({})};
+global.window={};global.sessionStorage={getItem:()=>''};global.fetch=()=>{};global.setInterval=()=>0;
+require(process.argv[1]);
+const g=window.optplatGlance;
+const st={data_source:{name:'x',fictional:true},config:{auto_entries:true,auto_exits:false},last_cycle:{errors:['boom'],entries:[],exits:[]},runner:{running:false}};
+const bad=g({mode:'LIVE'},st,{kill_switch:true},{status:'INSUFFICIENT_SAMPLE',closed_trades:2,open_positions:{unrealized_pnl_usd:null}},{max_position_pct:1,max_total_premium_pct:10,max_open_positions:12});
+const none=g({mode:'PAPER'},{config:{}},null,null,null);
+console.log(JSON.stringify({bad,none}));
+"""
+    out = subprocess.run([node, "-e", harness, str(root / "app.js")], capture_output=True, text=True, check=True).stdout
+    r = json.loads(out)
+    text = " ".join(i["text"] for i in r["bad"])
+    assert any(i["level"] == "bad" and "not PAPER" in i["text"] for i in r["bad"])
+    assert "Kill switch is ON" in text and "FICTIONAL" in text and "boom" in text and "loop is stopped" in text
+    assert "too few to judge" in text and "cannot be fully measured" in text
+    # missing data must never read as fine
+    assert any("unknown" in i["text"] and i["level"] == "warn" for i in r["none"])
+    assert not any("Kill switch is off" in i["text"] for i in r["none"])

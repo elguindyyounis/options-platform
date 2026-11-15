@@ -45,6 +45,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Dashboard "At a glance" strip (safety, activity, what needs the owner) built from existing API data; tested under node.
+
 * Modeled net GEX: `optplat/gex.py`, cycle report `gex`, dashboard panel with assumption label; display only.
 
 * Top candidates: cycle report `candidates` (top 3 per symbol, best 10) and a dashboard panel; display only.

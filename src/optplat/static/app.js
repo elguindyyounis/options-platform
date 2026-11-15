@@ -121,17 +121,61 @@
     ], rows, "No GEX computed in the last cycle");
   }
 
+  // "At a glance": plain-words reading of safety, money and what needs the owner. Pure function of API data.
+  // Each item is {level: "ok"|"warn"|"bad", text}. Unknown or missing data is reported as unknown, never as fine.
+  function buildGlance(h, st, pf, res, pol) {
+    const out = [];
+    const add = (level, text) => out.push({ level, text });
+    if (h.mode !== "PAPER") add("bad", "Broker mode is " + h.mode + ", not PAPER. Stop and check.");
+    else add("ok", "Paper only: no real money can be used by this app.");
+    if (pf && pf.kill_switch) add("bad", "Kill switch is ON: no new orders are accepted.");
+    else if (pf) add("ok", "Kill switch is off (you can still press it any time).");
+    else add("warn", "Kill switch state unknown.");
+    if (st.data_source && st.data_source.fictional) add("warn", "Market data is FICTIONAL demo data: every number here is made up.");
+    else if (st.data_source) add("ok", "Market data source: " + st.data_source.name + " (not demo data).");
+    else add("warn", "Market data source unknown.");
+    if (st.config && st.config.auto_entries) add("warn", "Automatic entries are ON: the engine may buy paper contracts by itself.");
+    else if (st.config) add("ok", "Automatic entries are off: nothing is bought unless you press Run one cycle.");
+    if (pol && pol.require_verified_quote_time === false) add("warn", "Quote-time verification is OFF.");
+    if (pol && typeof pol.max_position_pct === "number")
+      add("ok", "Risk limits: up to " + pol.max_position_pct + "% of equity per order, " + pol.max_total_premium_pct + "% open in total, " + pol.max_open_positions + " positions.");
+    const c = st.last_cycle;
+    if (!c) add("warn", "No cycle has run yet, so there is no recent activity to show.");
+    else if (c.errors && c.errors.length) add("bad", "The last cycle had " + c.errors.length + " error(s): " + c.errors.join("; "));
+    else add("ok", "Last cycle ran without errors (" + c.entries.length + " entry decision(s), " + c.exits.length + " exit decision(s)).");
+    if (st.runner && !st.runner.running && st.config && (st.config.auto_entries || st.config.auto_exits))
+      add("warn", "Automatic actions are enabled but the loop is stopped, so nothing runs on its own.");
+    if (res) {
+      if (res.status !== "SAMPLE_SIZE_MET_NOT_PROOF_OF_EDGE") add("warn", "Results: only " + res.closed_trades + " closed trade(s); too few to judge anything.");
+      const u = res.open_positions ? res.open_positions.unrealized_pnl_usd : null;
+      if (u === null || u === undefined) add("warn", "Open-position profit or loss cannot be fully measured right now.");
+    }
+    return out;
+  }
+
+  function renderGlance(items) {
+    const box = $("glance");
+    box.replaceChildren();
+    const worst = items.some((i) => i.level === "bad") ? "bad" : items.some((i) => i.level === "warn") ? "warn" : "ok";
+    box.appendChild(el("div", worst === "bad" ? "Needs your attention" : worst === "warn" ? "Check these" : "Nothing needs you right now", "pill " + worst));
+    const ul = el("ul");
+    items.forEach((i) => ul.appendChild(el("li", (i.level === "ok" ? "OK: " : i.level === "warn" ? "Note: " : "ACTION: ") + i.text, i.level)));
+    box.appendChild(ul);
+  }
+
   async function refresh() {
     if (!token) return;
     try {
-      const [health, status, portfolio, orders, report, results] = await Promise.all([
+      const [health, status, portfolio, orders, report, results, policy] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         api("/api/engine/status"),
         api("/api/portfolio"),
         api("/api/paper/orders"),
         api("/api/report"),
         api("/api/results"),
+        api("/api/risk/policy"),
       ]);
+      renderGlance(buildGlance(health, status, portfolio, results, policy));
       renderResults(results);
       renderDecisions(status.last_cycle);
       renderCandidates(status.last_cycle);
@@ -202,6 +246,7 @@
     }),
   })));
 
+  window.optplatGlance = buildGlance; // exposed so tests can run it under node
   refresh();
   setInterval(refresh, 10000);
 })();
