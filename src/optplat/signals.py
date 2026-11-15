@@ -112,22 +112,50 @@ def activity(snap: MarketSnapshot, top: int = 5) -> dict[str, Any]:
     }
 
 
+MAX_GEX_IV = 3.0          # an IV above 300% on a listed option is a stale or broken quote, not information
+MAX_GEX_LOG_MONEYNESS = 0.30   # strikes further than ~30% from spot add almost no gamma and carry the junk IVs
+ZERO_GAMMA_GRID = [round(0.85 + 0.01 * i, 2) for i in range(31)]  # spot revaluation, 85% to 115% of spot
+
+
 def gex(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
-    """Dollar gamma exposure per 1% move in the underlying, summed over the sampled chain. Partial by construction."""
+    """Dollar gamma exposure per 1% move in the underlying, summed over the sampled chain. Partial by construction.
+
+    Dealer positions are not observed. ``gross_usd_per_1pct`` needs no assumption about who holds what. The two net
+    figures are mirror images by construction (the sign is the assumption), and ``total_usd_per_1pct`` keeps the
+    original convention for existing consumers. ``zero_gamma_spot`` revalues the chain at nearby spots and is a model
+    estimate, not a fixed boundary."""
     by_strike: dict[float, float] = {}
+    legs: list[tuple[float, float, float, float]] = []  # (strike, t_years, iv, signed open-interest weight)
     used = skipped = 0
+    reasons: dict[str, int] = {}
+    gross = 0.0
     spot = snap.underlying
+
+    def skip(why: str) -> None:
+        nonlocal skipped
+        skipped += 1
+        reasons[why] = reasons.get(why, 0) + 1
+
     for r in snap.rows:
         dte = (r.contract.expiry - now.date()).days
         if r.iv is None or not r.open_interest or dte < 1:
-            skipped += 1
+            skip("missing_iv_or_oi_or_expired")
+            continue
+        if r.iv > MAX_GEX_IV:
+            skip("implausible_iv")
+            continue
+        if spot > 0 and r.contract.strike > 0 and abs(math.log(r.contract.strike / spot)) > MAX_GEX_LOG_MONEYNESS:
+            skip("far_from_spot")
             continue
         g = bs_gamma(spot, r.contract.strike, dte / 365, r.iv)
         if g is None:
-            skipped += 1
+            skip("undefined_gamma")
             continue
         sign = 1.0 if r.contract.right is Right.CALL else -1.0
-        by_strike[r.contract.strike] = by_strike.get(r.contract.strike, 0.0) + sign * g * r.open_interest * r.contract.multiplier * spot * spot * 0.01
+        unit = r.open_interest * r.contract.multiplier
+        by_strike[r.contract.strike] = by_strike.get(r.contract.strike, 0.0) + sign * g * unit * spot * spot * 0.01
+        gross += g * unit * spot * spot * 0.01
+        legs.append((r.contract.strike, dte / 365, r.iv, sign * unit))
         used += 1
     cum, flip, prev = 0.0, None, None  # flip: first strike where cumulative exposure changes sign
     for strike in sorted(by_strike):
@@ -136,11 +164,37 @@ def gex(snap: MarketSnapshot, now: datetime) -> dict[str, Any]:
             flip = strike
         prev = cum
     total = cum
+
+    def net_at(s: float) -> float:
+        out = 0.0
+        for strike, t, iv, w in legs:
+            g2 = bs_gamma(s, strike, t, iv)
+            if g2 is not None:
+                out += w * g2 * s * s * 0.01
+        return out
+
+    zero_spot = None
+    if legs and spot > 0:
+        pts = [(spot * m, net_at(spot * m)) for m in ZERO_GAMMA_GRID]
+        for (s0, v0), (s1, v1) in zip(pts, pts[1:]):
+            if v0 == 0:
+                zero_spot = round(s0, 2)
+                break
+            if (v0 < 0 < v1) or (v0 > 0 > v1):
+                zero_spot = round(s0 + (s1 - s0) * (-v0) / (v1 - v0), 2)
+                break
     return {
         "total_usd_per_1pct": round(total), "flip_strike": flip,
-        "rows_used": used, "rows_skipped": skipped, "partial_chain": True,
+        "gross_usd_per_1pct": round(gross),
+        "net_if_dealers_short_puts_long_calls": round(total),
+        "net_if_dealers_short_calls_long_puts": round(-total),
+        "zero_gamma_spot": zero_spot,
+        "sign_is_assumption": True,
+        "rows_used": used, "rows_skipped": skipped, "skip_reasons": reasons, "partial_chain": True,
         "assumptions": ["Customers are long calls and short puts, so dealers hold the opposite (contested).",
-                        "Open interest is the previous day's; IV is Yahoo's; the chain is a sample; no risk-free rate."],
+                        "The two net figures are exact mirrors: the sign comes from the assumption, not from data.",
+                        "Open interest is the previous day's; IV is Yahoo's; the chain is a sample; no risk-free rate.",
+                        "zero_gamma_spot revalues the sampled chain at 85-115% of spot: a model estimate, not a boundary."],
     }
 
 

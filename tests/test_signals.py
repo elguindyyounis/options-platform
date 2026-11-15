@@ -77,6 +77,33 @@ def test_the_gamma_flip_strike_is_where_cumulative_exposure_changes_sign():
     assert out["flip_strike"] in (160.0, 170.0) and gex(snap(cr(160)), NOW)["flip_strike"] is None
 
 
+def test_the_two_net_conventions_are_exact_mirrors_and_gross_needs_no_sign():
+    out = gex(snap(cr(160, Right.CALL, oi=4000), cr(150, Right.PUT, oi=1000)), NOW)
+    assert out["sign_is_assumption"] is True
+    assert out["net_if_dealers_short_puts_long_calls"] == out["total_usd_per_1pct"]
+    assert out["net_if_dealers_short_calls_long_puts"] == -out["total_usd_per_1pct"]
+    flipped = gex(snap(cr(160, Right.PUT, oi=4000), cr(150, Right.CALL, oi=1000)), NOW)
+    assert out["gross_usd_per_1pct"] > 0 and out["gross_usd_per_1pct"] >= abs(out["total_usd_per_1pct"])
+    assert gex(snap(cr(160, Right.CALL, oi=4000)), NOW)["gross_usd_per_1pct"] == abs(
+        gex(snap(cr(160, Right.PUT, oi=4000)), NOW)["gross_usd_per_1pct"])
+    assert flipped["gross_usd_per_1pct"] > 0
+
+
+def test_stale_or_far_quotes_are_skipped_with_a_stated_reason():
+    out = gex(snap(cr(160), cr(161, iv=0.93 * 4), cr(400), cr(165, iv=None)), NOW)
+    assert out["rows_used"] == 1 and out["rows_skipped"] == 3
+    assert out["skip_reasons"] == {"implausible_iv": 1, "far_from_spot": 1, "missing_iv_or_oi_or_expired": 1}
+
+
+def test_zero_gamma_spot_is_a_model_estimate_found_by_revaluing_the_chain():
+    rows = [cr(150, Right.PUT, oi=9000), cr(170, Right.CALL, oi=9000)]
+    out = gex(snap(*rows, underlying=160.0), NOW)
+    z = out["zero_gamma_spot"]
+    assert z is not None and 140 < z < 180
+    assert gex(snap(cr(160), underlying=160.0), NOW)["zero_gamma_spot"] is None
+    assert any("model estimate" in a for a in out["assumptions"])
+
+
 # ------------------------------------------------------------ activity, liquidity, coverage
 def test_unusual_activity_needs_volume_at_least_equal_to_open_interest_and_enough_of_both():
     rows = [cr(160, vol=600, oi=400), cr(165, vol=300, oi=1000), cr(170, vol=90, oi=60), cr(175, vol=500, oi=10),
