@@ -10,7 +10,7 @@ meaningless. Nothing here says a strategy has an edge.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional, Sequence
 
 from .replay import ReplayResult, run_replay
@@ -39,18 +39,44 @@ def _max_drawdown_pct(equity: Sequence[float], start: float) -> float:
     return round(worst, 2)
 
 
+DRAWDOWN_BASIS = ("Sampled mark-to-market equity points only. A dip between samples, or while a position's mark was "
+                  "unobservable, is not seen, so the true drawdown is at least this deep. Not a closed-trade or broker figure.")
+
+
+def _parse_ts(value: Any) -> Optional[datetime]:
+    try:
+        dt = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _largest_gap_seconds(points: Sequence[dict[str, Any]]) -> Optional[float]:
+    """Longest wait between consecutive samples; None unless every point has a readable timestamp."""
+    times = [_parse_ts(p.get("ts")) for p in points]
+    if len(times) < 2 or any(t is None for t in times):
+        return None
+    return max((b - a).total_seconds() for a, b in zip(times, times[1:]))  # type: ignore[operator]
+
+
 def equity_summary(points: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    """Peak, drawdowns and change from the first point, for the equity chart's headline numbers."""
+    """Peak, drawdowns and change from the first point, for the equity chart's headline numbers.
+
+    The drawdowns are measured on sampled points only; `drawdown_basis` and `drawdown_is_lower_bound` say so, and
+    `largest_gap_seconds` shows how coarse the sampling was (None when timestamps are missing). Figures are unchanged.
+    """
     values = [float(p["equity"]) for p in points]
+    labels = {"drawdown_basis": DRAWDOWN_BASIS, "drawdown_is_lower_bound": True,
+              "largest_gap_seconds": _largest_gap_seconds(points)}
     if not values:
         return {"points": 0, "start": None, "last": None, "change_pct": None, "peak": None,
-                "current_drawdown_pct": None, "max_drawdown_pct": None}
+                "current_drawdown_pct": None, "max_drawdown_pct": None, **labels}
     peak = max(values)
     return {
         "points": len(values), "start": values[0], "last": values[-1],
         "change_pct": round((values[-1] - values[0]) / values[0] * 100, 3) if values[0] else None,
         "peak": peak, "current_drawdown_pct": round((peak - values[-1]) / peak * 100, 2) if peak > 0 else None,
-        "max_drawdown_pct": _max_drawdown_pct(values, values[0]),
+        "max_drawdown_pct": _max_drawdown_pct(values, values[0]), **labels,
     }
 
 

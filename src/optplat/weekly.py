@@ -111,7 +111,8 @@ def format_report(r: dict[str, Any]) -> str:
         lines.append("* Not enough equity points in the period to say anything.")
     else:
         lines.append(f"* Equity {eq['start']:,.2f} to {eq['last']:,.2f} ({eq['change_pct']:+.2f}%), "
-                     f"worst drawdown {eq['max_drawdown_pct']}%, over {eq['points']} points.")
+                     f"worst sampled drawdown at least {eq['max_drawdown_pct']}% (marks only, not a closed-trade or broker figure), "
+                     f"over {eq['points']} points.")
     lines.append(f"* Anything under {MIN_TRADES} closed trades is not evidence of an edge.")
     lines += ["", "## Decisions in the period"]
     lines += [f"* {k}: {v}" for k, v in sorted(r["decisions"].items())] or ["* None recorded."]

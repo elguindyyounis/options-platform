@@ -174,3 +174,21 @@ def test_options_page_and_market_additions_have_every_element_the_script_writes(
     # direction is never carried by colour alone: the heat map and the figures use arrows and signs
     assert "\u25b2" in js and "\u25bc" in js
     assert "innerHTML" not in js
+
+
+def test_equity_summary_labels_drawdown_as_sampled_and_a_lower_bound():
+    pts = [{"ts": "2026-11-12T15:00:00+00:00", "equity": 100.0}, {"ts": "2026-11-12T15:05:00+00:00", "equity": 90.0},
+           {"ts": "2026-11-12T17:05:00+00:00", "equity": 95.0}]
+    s = equity_summary(pts)
+    assert s["max_drawdown_pct"] == 10.0 and s["current_drawdown_pct"] == 5.0  # figures unchanged
+    assert s["drawdown_is_lower_bound"] is True and "Sampled" in s["drawdown_basis"]
+    assert s["largest_gap_seconds"] == 7200.0
+    assert equity_summary([{"equity": 1.0}, {"equity": 2.0}])["largest_gap_seconds"] is None  # no timestamps: unknown
+    assert equity_summary([{"ts": "garbage", "equity": 1.0}, {"ts": "2026-11-12T15:00:00", "equity": 2.0}])["largest_gap_seconds"] is None
+    empty = equity_summary([])
+    assert empty["drawdown_is_lower_bound"] is True and empty["largest_gap_seconds"] is None
+
+
+def test_dashboard_wording_says_the_drawdown_is_sampled(client):
+    c, _ = client
+    assert "worst sampled" in c.get("/static/app.js").text

@@ -578,3 +578,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   that trade, and `too_thin` under 5 closed trades. Display-only; no trading, risk or default changed.
 * Verified: full suite, 577 passed (8 new). Not verified: alerter tests, any real trades, dashboard rendering (the block is API-only),
   that 5 is a sensible thin-sample cut-off (it is a label threshold, not a rule). Nothing here shows an edge. No PR opened.
+
+## 2026-11-15: drawdown label (challenge 11, scheduled run on agent/2026-11-15-challenger-b)
+
+* Based on `origin/agent/2026-11-15-challenger` (main lacks the challenge docs; many unmerged agent branches still need an owner decision).
+  Baseline 577 passed. Alerter unchanged at `48ccf71`; read `server.py`.
+* `equity_summary` now says its drawdown is from sampled marks and a lower bound, and reports the largest sampling gap. Dashboard tile and weekly
+  report wording updated. Figures, `max_drawdown_pct` consumers (`research.py` criteria use replay equity, untouched) and all gates unchanged.
+* Verified: full suite, 579 passed (2 new). Not verified: alerter tests, real equity data, dashboard rendering in a browser (only the JS string is
+  asserted). Nothing here shows an edge. No PR opened (owner reviews branches).

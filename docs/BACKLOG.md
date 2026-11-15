@@ -179,3 +179,11 @@ Existing items, in order:
 * Tracker splits flagged contracts by size of open interest (challenge 7), display-only.
 * GEX display upgrade (challenge 2): `signals.gex` now also returns a sign-free gross figure, both dealer-sign conventions as exact mirrors, a zero-gamma spot found by revaluing the chain, and skip reasons (implausible IV, far from spot). Still UNVALIDATED; nothing reads it.
 * Challenge 8 (2026-11-14): `signals.gex` flags one-sided chains (`two_sided`, `sides_used`). Challenge 9 (GEX freshness and spot-agreement flags) is open.
+
+## 2026-11-15: drawdown label (challenge 11, scheduled run on agent/2026-11-15-challenger-b)
+
+* Based on `origin/agent/2026-11-15-challenger`. Alerter unchanged at `48ccf71`; read `server.py`.
+* `equity_summary` keeps its figures but adds `drawdown_basis`, `drawdown_is_lower_bound: true` and `largest_gap_seconds`. The dashboard tile
+  reads "worst sampled -X% (at least; marks only)" and the weekly report says "worst sampled drawdown at least X%". Display and wording only.
+* New open ideas: (a) closed-trade-only drawdown beside it, as the alerter reports; (b) a "held marks unobservable" readiness line like the alerter's
+  `automation_readiness`; (c) compare the platform's POST origin/content-type checks with the alerter's (auth is owner-gated, tighten only).

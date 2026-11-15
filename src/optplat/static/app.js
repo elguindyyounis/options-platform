@@ -302,7 +302,7 @@
       fig(money(a.cash), "Cash"),
       fig(money(a.open_premium), "In open options", report.open.length + " position" + (report.open.length === 1 ? "" : "s")),
       fig(sgn(report.realized_pnl), "Realized profit", report.closed_trades + " closed" + (report.win_rate_pct === null ? "" : ", " + report.win_rate_pct + "% winners"), tone(report.realized_pnl)),
-      fig(sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "%", "Below its peak", "worst -" + (sm.max_drawdown_pct || 0) + "%"),
+      fig(sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "%", "Below its peak", "worst sampled -" + (sm.max_drawdown_pct || 0) + "% (at least; marks only)"),
     ]);
     $("sample").textContent = report.caveat;
     S.lastPoints = eq.points;

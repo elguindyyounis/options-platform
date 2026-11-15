@@ -121,3 +121,14 @@ These are challenges raised by reading the alerter. None is proven.
   contract/entry-day matches. Same stance as this platform's no-edge rule; no change needed there.
 * Platform gap found: nothing showed a result without its best trade (challenge 10, done) and the equity-chart drawdown is not
   labelled as sampled (challenge 11, open). Still not read: `server.py`, `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, tests.
+
+## Addendum 2026-11-15 (challenger-b): `server.py` (alerter still `48ccf71`)
+
+* **Public bind needs a token.** Refuses to start on a non-loopback host unless `OA_ADMIN_TOKEN` is at least 24 characters. Host header must be
+  loopback (DNS-rebinding guard) when no token is set. POSTs must be same-origin JSON, reject `Sec-Fetch-Site: cross-site`, and cap bodies at 16 KB.
+  The platform's `api.py` has token and host checks; whether it also rejects cross-origin and non-JSON POSTs was not compared here. Auth
+  changes may only be tightened and need the owner, so this is logged, not changed.
+* **`automation_readiness` is honest about what it cannot know.** Status is `CONFIGURED_NOT_LIVE_VERIFIED` at best, `quote_time_verified: False`,
+  and it blocks automatic entries when held contracts have stale, missing or over-35% spread marks, or the exit monitor heartbeat is stale.
+  The platform's runner health shows heartbeat; it has no "held marks unobservable" blocker. Candidate for a later challenge.
+* **Still not read:** other skill files, `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, the alerter's tests (not run).
