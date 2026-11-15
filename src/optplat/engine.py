@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from .broker.sim import SimBroker
+from .gex import ASSUMPTIONS as GEX_ASSUMPTIONS, net_gex
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
 from .market_clock import session_status
 from .marketdata import MarketDataProvider, MarketSnapshot
@@ -175,6 +176,8 @@ class TradingEngine:
                 "entries": [],
                 "entries_note": "",
                 "candidates": [],
+                "gex": [],
+                "gex_assumptions": list(GEX_ASSUMPTIONS),
                 "errors": [],
             }
             snapshots: dict[str, Optional[MarketSnapshot]] = {}
@@ -241,10 +244,19 @@ class TradingEngine:
             try:
                 cache[symbol] = self.provider.snapshot(symbol)
                 self._record_snapshot(cache[symbol], report)
+                self._summarize_gex(cache[symbol], report)
             except Exception as exc:  # noqa: BLE001
                 cache[symbol] = None
                 report["errors"].append(f"data {symbol}: {type(exc).__name__}: {str(exc)[:100]}")
         return cache[symbol]
+
+    @staticmethod
+    def _summarize_gex(snap: MarketSnapshot, report: dict[str, Any]) -> None:
+        """Display-only context; a failure here is reported but never affects trading."""
+        try:
+            report["gex"].append(net_gex(snap))
+        except Exception as exc:  # noqa: BLE001
+            report["errors"].append(f"gex {snap.symbol}: {type(exc).__name__}")
 
     def _record_snapshot(self, snap: MarketSnapshot, report: dict[str, Any]) -> None:
         """Recording is best effort: a storage failure is reported but never blocks trading or exits."""

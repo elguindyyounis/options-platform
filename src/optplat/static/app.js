@@ -106,6 +106,21 @@
     ], rows, "No contract passed the filters in the last cycle");
   }
 
+  function renderGex(c) {
+    const rows = c && c.gex ? c.gex : [];
+    $("gex-note").textContent = c
+      ? "Calls are counted positive and puts negative. That is an assumption, not real dealer positions, and it uses only the chain sample the provider returned. Context, not a prediction. " + (rows.some((r) => r.fictional) ? "Some rows are from FICTIONAL demo data." : "")
+      : "No cycle has run yet.";
+    table($("gex-table"), [
+      { label: "Symbol", get: (r) => r.symbol + (r.fictional ? " (fictional)" : "") },
+      { label: "Net GEX, USD M per 1% move", get: (r) => (r.net_gex_musd === null ? "n/a" : r.net_gex_musd) },
+      { label: "Largest positive strike", get: (r) => (r.largest_positive_strike === null ? "-" : r.largest_positive_strike) },
+      { label: "Largest negative strike", get: (r) => (r.largest_negative_strike === null ? "-" : r.largest_negative_strike) },
+      { label: "Rows used / skipped", get: (r) => r.rows_used + " / " + r.rows_skipped },
+      { label: "As of", get: (r) => r.as_of },
+    ], rows, "No GEX computed in the last cycle");
+  }
+
   async function refresh() {
     if (!token) return;
     try {
@@ -120,6 +135,7 @@
       renderResults(results);
       renderDecisions(status.last_cycle);
       renderCandidates(status.last_cycle);
+      renderGex(status.last_cycle);
       pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
       pill("data", status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), status.data_source.fictional ? "warn" : "");
       pill("market", "market " + (status.market.open ? "open" : "closed") + ": " + status.market.reason, status.market.open ? "ok" : "");

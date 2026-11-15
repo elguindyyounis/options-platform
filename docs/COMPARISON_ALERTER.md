@@ -46,3 +46,8 @@ NEVER a win probability; tickers the provider fails on stay `DATA_UNAVAILABLE` /
 being dropped quietly. The platform's candidate score had no such label on the dashboard; the new Top candidates panel
 now states the score is a ranking heuristic, not a chance of profit. The platform has no breadth/discovery step: it
 only scans the owner's watchlist. Alerter unchanged since `a7a2ca0` this run.
+
+Also read (run 7): `gex.py` again for implementation. Same formula now in `optplat/gex.py` (Black-Scholes gamma, r=4%, one-day floor
+for 0DTE, 45-day window, call+/put-). Difference: the alerter returns a per-strike table and heatmap and refuses to
+publish when its row cap is reached; the platform only returns a total and the largest +/- strike from whatever sample
+the provider gave, labelled partial. Alerter unchanged since `a7a2ca0`.
