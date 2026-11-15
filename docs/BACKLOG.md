@@ -37,13 +37,15 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * Liquidity/size-vs-volume entry check modelled on the alerter's `liquidity.py` (risk change: owner decision).
 
 * Fee/commission model for the sim broker (needs an owner-chosen cost assumption).
-* Dashboard UX steps (one per run): top candidates and why-taken/skipped from cycle data; per-account view; Node UI contract test like the alerter's.
+* Dashboard UX steps (one per run): top candidates and why-taken/skipped from cycle data; per-account view (alerter-only data); upcoming calendar (needs event source); Node UI contract test like the alerter's.
 
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Modeled net GEX: `optplat/gex.py`, cycle report `gex`, dashboard panel with assumption label; display only.
 
 * Top candidates: cycle report `candidates` (top 3 per symbol, best 10) and a dashboard panel; display only.
 

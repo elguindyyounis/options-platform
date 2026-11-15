@@ -89,3 +89,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Weekend scan: Yahoo still refused by the egress proxy; MONDAY_PLAN updated, no demo data used.
 * Not verified: rendering in a real browser (only `node --check`); behaviour on real data. The Mac copy is a manual
   git clone, so this is not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-15: net GEX panel (scheduled challenger run 7)
+
+* Alerter unchanged at `a7a2ca0`; re-read `gex.py`. Added `optplat/gex.py`, `gex`/`gex_assumptions` in the cycle report
+  and a dashboard panel (textContent only), labelled as an assumption on a sample chain. No risk, order, auth, sizing or
+  broker code touched; `propose` untouched. 5 new tests; 180 pass.
+* Weekend scan: Yahoo unreachable from this session; MONDAY_PLAN updated, no demo data used.
+* Not verified: rendering in a real browser (only `node --check`); behaviour on real chains; correctness of the formula
+  against the alerter's output on identical input. The Mac copy is a manual git clone, so this is not on the Mac until the
+  owner pulls. PR/merge result: see PR.

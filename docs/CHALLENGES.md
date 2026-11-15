@@ -11,9 +11,19 @@ Last alerter commit reviewed: `a7a2ca0`
 | 3 | Alerter judges many lanes on few trades; platform has one strategy but no multiple-testing note once variants exist. | No |
 | 4 | ~~Open-position losses invisible~~ Addressed 2026-11-15: `/api/results.open_positions` marks to bid with verified fresh quotes; total is null if any position is unmarkable. Still no equity curve or recorded-quote marking. | No |
 | 5 | Alerter's day limits (`day_limits.py`) are all OFF until set and say `NOT_CHECKED` when the ledger cannot measure them; platform has no daily loss halt yet (backlog 3, default is a risk decision). | Yes (default value) |
-| 6 | **UX:** `/api/results` existed only as JSON, so the dashboard showed a bare win rate with no sample warning (fixed 2026-11-15 run 4: Results panel). Why-skipped in plain words done (run 5: Decisions panel + `explain_no_proposal`). Top candidates done run 6 (cycle report `candidates`, dashboard panel). Still missing from the owner's mock-up: per-account performance/tuning, net GEX, calendar. Net GEX is feasible from the platform's own `ChainRow` iv/OI (run 5 correction) but must be labelled an invented-inventory assumption like the alerter's `gex.py`; the calendar needs a trustworthy event source (owner). Per-account tuning is alerter-only (Mac DB, not visible here). | Partly |
+| 6 | **UX:** `/api/results` existed only as JSON, so the dashboard showed a bare win rate with no sample warning (fixed 2026-11-15 run 4: Results panel). Why-skipped in plain words done (run 5: Decisions panel + `explain_no_proposal`). Top candidates done run 6 (cycle report `candidates`, dashboard panel). Net GEX done run 7 (cycle report `gex` + dashboard panel, labelled an invented-inventory assumption on a sample chain). Still missing from the owner's mock-up: per-account performance/tuning, calendar. The calendar needs a trustworthy event source (owner). Per-account tuning is alerter-only (Mac DB, not visible here). | Partly |
 
 ## Run log
+
+* 2026-11-15 (run 7): Alerter unchanged (`a7a2ca0`); re-read `gex.py` for the formula and caveats. UX challenge: the
+  owner asked for net GEX and the dashboard had no market-context view at all. Added `optplat/gex.py` (`net_gex`),
+  a `gex` list and `gex_assumptions` in the cycle report, and a dashboard panel with the assumption stated in the
+  note. Display only: `propose`, sizing, risk and orders untouched; a GEX failure is logged to `errors` only.
+  Weaknesses noted: the platform's chain is a provider sample, so totals are partial (the alerter refuses partial
+  results at its row cap; the platform labels instead of refusing); GEX is computed from the symbols the cycle
+  scans, so symbols after an early buy are missing; the 4% rate and call+/put- sign are the alerter's assumptions
+  copied for comparability. 5 new tests; 180 pass. Weekend scan: Yahoo still unreachable (no response); MONDAY_PLAN
+  says so. The Mac copy is a manual git clone: merged code is not on the Mac until the owner pulls.
 
 * 2026-11-15 (run 6): Alerter unchanged (`a7a2ca0`); read `market_breadth.py`. UX challenge: the owner could see
   only the one contract bought (or a skip reason), never what else qualified, so a buy looked arbitrary. The cycle
