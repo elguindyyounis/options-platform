@@ -39,3 +39,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   interval stores a full chain sample per cycle; the 90 day default is a guess the owner should tune),
   and no migration path for existing databases beyond `CREATE TABLE IF NOT EXISTS` (new tables only).
 
+
+## 2026-11-15: closed-trade summary (scheduled challenger run)
+
+* Compared with options-alerter (reviewed to `0107246`; see `docs/COMPARISON_ALERTER.md`). The alerter
+  labels fill modelling and returns null stats for empty samples; the platform reported no results at all.
+* Added `optplat/evaluation.py` and token-protected `GET /api/results`. Read-only, no change to risk,
+  orders, auth or sizing. 6 new tests; 162 pass.
+* Not verified: behaviour on real or Yahoo data; no commissions are modelled (logged as challenge 1).

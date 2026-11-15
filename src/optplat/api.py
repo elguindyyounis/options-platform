@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .broker.sim import SimBroker
+from .evaluation import summarize_closed_trades
 from .engine import Runner, TradingEngine
 from .models import OptionContract, OrderIntent, Quote, Right, Side, utcnow
 from .orders import InvalidTransition, LiveTradingDisabled, OrderManager
@@ -170,6 +171,11 @@ def create_app(
                 Quote(body.to_contract(), body.bid, body.ask, utcnow(), "sim", timestamp_verified=True)
             )
             return {"ok": True}
+
+    @app.get("/api/results", dependencies=[Depends(auth)])
+    def results() -> dict[str, Any]:
+        """Closed-trade summary with sample-size and limitation labels (research display only)."""
+        return summarize_closed_trades(manager.store.list_orders(limit=5000))
 
     @app.get("/api/report", dependencies=[Depends(auth)])
     def report() -> dict[str, Any]:
