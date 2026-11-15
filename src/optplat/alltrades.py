@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from .concentration import one_trade_story
+from .concentration import liquidity_split, one_trade_story
 from .contracts import contract_label, parse_occ
 
 MAX_PER_SOURCE = 300
@@ -64,6 +64,8 @@ def _lane_rows(rep: dict[str, Any], source: str, source_label: str, horizon: str
             "status": t["status"], "opened_at": t["opened_at"], "closed_at": t["closed_at"],
             "held_seconds": _seconds(t["opened_at"], t["closed_at"]), "exit_reason": t.get("close_reason"),
             "exit_text": t.get("close_text"), "has_file": False, "detail": t,
+            "size_vs_volume_pct": (t.get("why_entered") or {}).get("size_vs_volume_pct"),
+            "size_vs_oi_pct": (t.get("why_entered") or {}).get("size_vs_oi_pct"),
         })
     return rows
 
@@ -89,7 +91,8 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
                 "win_rate_pct": round(len(wins) / len(done) * 100, 1) if done else None,
                 "realized_pnl": round(sum(r["pnl"] for r in done), 2),
                 "open_pnl": round(sum(r["pnl"] or 0.0 for r in sel if r["status"] != "CLOSED"), 2),
-                "concentration": one_trade_story([r["pnl"] for r in done])}
+                "concentration": one_trade_story([r["pnl"] for r in done]),
+                "liquidity": liquidity_split([(r["pnl"], r.get("size_vs_volume_pct"), r.get("size_vs_oi_pct")) for r in done])}
 
     sources: dict[str, dict[str, Any]] = {}
     for r in rows:

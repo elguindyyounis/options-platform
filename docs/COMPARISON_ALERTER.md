@@ -132,3 +132,14 @@ These are challenges raised by reading the alerter. None is proven.
   and it blocks automatic entries when held contracts have stale, missing or over-35% spread marks, or the exit monitor heartbeat is stale.
   The platform's runner health shows heartbeat; it has no "held marks unobservable" blocker. Candidate for a later challenge.
 * **Still not read:** other skill files, `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, the alerter's tests (not run).
+
+## Addendum 2026-11-15 (challenger-c): `entry_quality.py` (alerter still `48ccf71`)
+
+* **Entry gates the alerter applies to real-source paper entries:** spread at most 15% of ask, a nonzero bid, volume at least 20, open interest
+  at least 100, order size at most 10% of reported daily volume and 10% of open interest, 7 to 730 days, strike within 30/40/60% of spot by
+  horizon, at most two open contracts per symbol and side, and basket caps (SPY/QQQ/IWM three, big growth tech four). Its docstring says
+  "Observation is not authorization": poor-quality contracts stay in research but are never simulated as entries.
+* **Platform difference:** the lanes buy at the ask with large experimental budgets (owner's choice, not changed). Size against volume and OI was
+  recorded and tagged `OVERSIZED_FOR_LIQUIDITY` per trade, but no summary said how much of a lane's realized P&L came from oversized fills
+  (challenge 12, done). Basket caps and the strike-distance screen have no platform equivalent; they are entry rules, so they stay an owner decision.
+* **Still not read:** other skill files, `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, the alerter's tests (not run).

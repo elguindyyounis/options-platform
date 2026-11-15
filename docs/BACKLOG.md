@@ -187,3 +187,4 @@ Existing items, in order:
   reads "worst sampled -X% (at least; marks only)" and the weekly report says "worst sampled drawdown at least X%". Display and wording only.
 * New open ideas: (a) closed-trade-only drawdown beside it, as the alerter reports; (b) a "held marks unobservable" readiness line like the alerter's
   `automation_readiness`; (c) compare the platform's POST origin/content-type checks with the alerter's (auth is owner-gated, tighten only).
+* Challenge run 2026-11-15 (challenger-c): oversized-fill P&L split on all-trades summaries (`liquidity_split`). Display-only.

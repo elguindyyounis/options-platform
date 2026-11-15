@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+from .concentration import is_oversized
 from .liquidity import liquidity_tier, stress_exit
 
 MIN_TRADES_FOR_PATTERN = 5
@@ -99,7 +100,7 @@ def post_mortem(trade: dict[str, Any], exit_price: float, reason: str, closed_at
         tags.append("WIDE_SPREAD_ENTRY")
     if p.get("stack_index", 0) > 0:
         tags.append("STACKED")
-    if (p.get("size_vs_volume_pct") or 0) > 10 or (p.get("size_vs_oi_pct") or 0) > 5:
+    if is_oversized(p.get("size_vs_volume_pct"), p.get("size_vs_oi_pct")):
         tags.append("OVERSIZED_FOR_LIQUIDITY")
     if (p.get("open_interest") or 0) < 50:
         tags.append("THIN_MARKET")

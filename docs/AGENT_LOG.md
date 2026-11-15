@@ -587,3 +587,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   report wording updated. Figures, `max_drawdown_pct` consumers (`research.py` criteria use replay equity, untouched) and all gates unchanged.
 * Verified: full suite, 579 passed (2 new). Not verified: alerter tests, real equity data, dashboard rendering in a browser (only the JS string is
   asserted). Nothing here shows an edge. No PR opened (owner reviews branches).
+
+## 2026-11-15: oversized-fill split (challenge 12, scheduled run on agent/2026-11-15-challenger-c)
+
+* Based on `origin/agent/2026-11-15-challenger-b` (main lacks the challenge docs; many unmerged agent branches still need an owner decision).
+  Baseline 579 passed. Alerter unchanged at `48ccf71`; read `entry_quality.py`.
+* Added `concentration.liquidity_split` and `is_oversized`; every summary in `/api/trades/all` gets a `liquidity` block (realized P&L for oversized,
+  within-limit and size-unknown trades, plus `positive_only_if_oversized`). The post-mortem tag now calls the same helper with the same cut-offs
+  (10% volume, 5% OI), so behaviour is unchanged. No lane size, risk limit, default or entry rule touched.
+* Verified: full suite, 583 passed (4 new). Not verified: alerter tests, real trades, dashboard rendering (API-only), whether 10%/5% are right cut-offs.
+  Nothing here shows an edge. No PR opened (owner reviews branches).

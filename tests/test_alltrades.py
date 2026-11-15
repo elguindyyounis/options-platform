@@ -100,3 +100,16 @@ def test_summaries_carry_the_one_trade_story_check(parts):
     assert c["closed"] == out["summary"]["all"]["closed"] == 2 and c["too_thin"] is True
     assert c["best_pnl"] == 198.7 and c["realized_ex_best"] == -50.0
     assert all("concentration" in s for s in out["sources"])
+
+
+def test_summaries_split_realized_pnl_by_whether_the_size_was_realistic(parts):
+    manager, engine = parts
+    store = engine.store
+    big = store.lane_open("swing-options-base", "SPY", T0, 2.0, 50, True, opt_payload(size_vs_volume_pct=40.0))
+    store.lane_close(big, T0 + timedelta(hours=5), 4.0, "target", {"fees_close": 0.65})
+    small = store.lane_open("swing-options-base", "QQQ", T0, 2.0, 1, True, opt_payload(size_vs_volume_pct=1.0, size_vs_oi_pct=0.5))
+    store.lane_close(small, T0 + timedelta(hours=5), 1.0, "stop", {"fees_close": 0.65})
+    out = build_all(manager, store, True, T0 + timedelta(days=3), engine.option_lanes)
+    liq = out["summary"]["all"]["liquidity"]
+    assert liq["oversized_trades"] == 1 and liq["within_limits_trades"] == 1 and liq["positive_only_if_oversized"] is True
+    assert all("liquidity" in s for s in out["sources"])
