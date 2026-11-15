@@ -23,3 +23,15 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-15: daily challenger run, sample-honesty stats
+
+* Changed: new `evaluation.py` (pure functions); `/api/report` gains a `stats` block (Wilson 95%
+  win-rate interval, `INSUFFICIENT_SAMPLE` label under 30 trades, avg return, profit factor,
+  closed-trade drawdown, unusable rows counted); dashboard line shows the range and label.
+  No trading behaviour, risk policy, auth or broker code touched. Created CHALLENGES.md and
+  COMPARISON_ALERTER.md (first run; neither existed).
+* Verified: 150 tests pass (144 baseline plus 6 new); baseline was green before the change.
+* Not verified: dashboard rendering in a browser (JS edited, not run); alerter diffs beyond the
+  files listed in COMPARISON_ALERTER.md; anything about real data. The 30-trade threshold is a
+  display convention, not a statistical guarantee.

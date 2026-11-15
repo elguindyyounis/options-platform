@@ -37,12 +37,17 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Record order size vs contract volume/OI on each fill (display tag) to flag optimistic fills; see
+  `docs/CHALLENGES.md` #2.
+
 * Per-sector concentration limit once a sector map exists.
 * Notification hook (email/webhook) for kill-switch, stalled runner, unresolved orders.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
 
+* Sample-honesty stats on the report (Wilson interval, sample label, profit factor, closed-trade
+  drawdown); branch `agent/2026-11-15-sample-honesty`. Partial groundwork for item 3.
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market
