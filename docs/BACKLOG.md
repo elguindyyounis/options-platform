@@ -43,6 +43,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Open-position marks in `/api/results` (`summarize_open_positions`): bid-based, verified and fresh quotes only, null total if any position is unmarkable.
+
 * Closed-trade summary (`evaluation.py`, `GET /api/results`): sample-size gate, null win rate for zero trades, best-trade concentration, closed-only drawdown, limitations list. Partial progress on item 2 (no out-of-sample split or baseline comparison yet).
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,

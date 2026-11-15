@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .broker.sim import SimBroker
-from .evaluation import summarize_closed_trades
+from .evaluation import summarize_closed_trades, summarize_open_positions
 from .engine import Runner, TradingEngine
 from .models import OptionContract, OrderIntent, Quote, Right, Side, utcnow
 from .orders import InvalidTransition, LiveTradingDisabled, OrderManager
@@ -175,7 +175,13 @@ def create_app(
     @app.get("/api/results", dependencies=[Depends(auth)])
     def results() -> dict[str, Any]:
         """Closed-trade summary with sample-size and limitation labels (research display only)."""
-        return summarize_closed_trades(manager.store.list_orders(limit=5000))
+        body = summarize_closed_trades(manager.store.list_orders(limit=5000))
+        try:
+            positions = manager.broker.get_positions()
+            body["open_positions"] = summarize_open_positions(positions, manager.broker.get_quote, utcnow())
+        except Exception:  # fail closed: say the marks are unavailable rather than omit open risk
+            body["open_positions"] = {"unrealized_pnl_usd": None, "error": "positions_unavailable"}
+        return body
 
     @app.get("/api/report", dependencies=[Depends(auth)])
     def report() -> dict[str, Any]:
