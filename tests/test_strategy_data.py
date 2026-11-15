@@ -152,3 +152,28 @@ def test_yahoo_style_records_are_mapped_and_bad_rows_dropped():
     assert [r.contract.strike for r in rows] == [100.0, 120.0]
     assert rows[0].volume == 10 and rows[0].open_interest == 50 and rows[0].iv == 0.4
     assert rows[1].volume is None and rows[1].iv is None  # NaN volume and absurd IV become unknown, not guessed
+
+
+# ------------------------------------------------ explain_no_proposal (display only)
+def test_explain_flat_trend_and_short_history():
+    s = LiquidTrendStrategy()
+    assert "No clear trend" in s.explain_no_proposal(snap(FLAT, [row()]), NOW)
+    assert "Fewer than 50" in s.explain_no_proposal(snap(UP[:10], [row()]), NOW)
+
+
+def test_explain_counts_why_each_contract_failed():
+    s = LiquidTrendStrategy()
+    rows = [row(160, bid=1.0, ask=5.0), row(161, vol=1), row(150, expiry=NOW.date() + timedelta(days=5)), row(400)]
+    text = s.explain_no_proposal(snap(UP, rows), NOW)
+    assert "Trend is up" in text
+    for part in ("1 bid/ask spread too wide", "1 volume or open interest too low",
+                 "1 expiry outside the allowed window", "1 strike too far"):
+        assert part in text
+
+
+def test_explain_never_changes_proposals():
+    s = LiquidTrendStrategy()
+    sn = snap(UP, [row(160)])
+    before = s.propose(sn, NOW)
+    s.explain_no_proposal(sn, NOW)
+    assert s.propose(sn, NOW) == before

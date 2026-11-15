@@ -75,6 +75,25 @@
     $("results-limits").textContent = (r.limitations || []).join(" ");
   }
 
+  // Plain-language reading of the last cycle: what was taken, what was skipped, and why.
+  const RESULT_TEXT = {
+    FILLED: "Bought (paper)", NO_DATA: "Skipped: no market data for this symbol",
+    NO_PROPOSAL: "Skipped: nothing met the strategy rules",
+    NOTHING_AFFORDABLE_WITHIN_SIZE_CAP: "Skipped: nothing fits the position size cap",
+    REJECTED: "Blocked by a risk check", KEY_CONFLICT: "Skipped: duplicate order key",
+  };
+  function renderDecisions(c) {
+    const rows = (c ? c.entries : []).map((x) => ({
+      what: x.contract || x.symbol,
+      outcome: RESULT_TEXT[x.result] || String(x.result),
+      why: x.reason || (x.risk_failures || []).join("; ") || (x.rationale && x.rationale.trend ? "Trend " + x.rationale.trend + ", spread " + x.rationale.spread_pct + "%" : ""),
+    }));
+    $("decisions-note").textContent = c ? (c.entries_note || (rows.length ? "" : "No symbols were evaluated.")) : "No cycle has run yet.";
+    table($("decisions-table"), [
+      { label: "Symbol / contract", get: (r) => r.what }, { label: "Outcome", get: (r) => r.outcome }, { label: "Why", get: (r) => r.why },
+    ], rows, "No entry decisions in the last cycle");
+  }
+
   async function refresh() {
     if (!token) return;
     try {
@@ -87,6 +106,7 @@
         api("/api/results"),
       ]);
       renderResults(results);
+      renderDecisions(status.last_cycle);
       pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
       pill("data", status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), status.data_source.fictional ? "warn" : "");
       pill("market", "market " + (status.market.open ? "open" : "closed") + ": " + status.market.reason, status.market.open ? "ok" : "");

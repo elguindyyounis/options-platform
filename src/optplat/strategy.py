@@ -55,6 +55,48 @@ class LiquidTrendStrategy(Strategy):
         self.min_volume = min_volume
         self.min_open_interest = min_open_interest
 
+    def explain_no_proposal(self, snapshot: MarketSnapshot, now: datetime) -> str:
+        """Plain-language reason `propose` found nothing. Display only; never used to trade."""
+        closes = snapshot.closes
+        if len(closes) < 50 or snapshot.underlying <= 0:
+            return "Fewer than 50 daily closes, so no trend can be measured."
+        sma20 = sum(closes[-20:]) / 20
+        sma50 = sum(closes[-50:]) / 50
+        last = closes[-1]
+        if last > sma20 > sma50:
+            right = Right.CALL
+        elif last < sma20 < sma50:
+            right = Right.PUT
+        else:
+            return "No clear trend (price, 20-day and 50-day averages are not lined up), so no trade."
+        counts = {"expiry": 0, "quote": 0, "spread": 0, "liquidity": 0, "strike": 0}
+        for row in snapshot.rows:
+            c = row.contract
+            if c.right is not right:
+                continue
+            if not self.min_dte <= (c.expiry - now.date()).days <= self.max_dte:
+                counts["expiry"] += 1
+            elif row.bid <= 0 or row.ask <= 0 or row.bid > row.ask:
+                counts["quote"] += 1
+            elif (row.ask - row.bid) / row.ask * 100 > self.max_spread_pct:
+                counts["spread"] += 1
+            elif (row.volume or 0) < self.min_volume or (row.open_interest or 0) < self.min_open_interest:
+                counts["liquidity"] += 1
+            elif abs(c.strike / snapshot.underlying - 1) * 100 > self.max_moneyness_pct:
+                counts["strike"] += 1
+        label = {
+            "expiry": "expiry outside the allowed window",
+            "quote": "no usable bid/ask",
+            "spread": "bid/ask spread too wide",
+            "liquidity": "volume or open interest too low",
+            "strike": "strike too far from the price",
+        }
+        trend = "up" if right is Right.CALL else "down"
+        parts = [f"{n} {label[k]}" for k, n in counts.items() if n]
+        if not parts:
+            return f"Trend is {trend} but the snapshot has no {right.name.lower()} contracts to consider."
+        return f"Trend is {trend}, but every {right.name.lower()} contract failed: " + "; ".join(parts) + "."
+
     def propose(self, snapshot: MarketSnapshot, now: datetime) -> list[Proposal]:
         closes = snapshot.closes
         if len(closes) < 50 or snapshot.underlying <= 0:
