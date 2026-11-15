@@ -1,6 +1,6 @@
 # Monday plan (research, not advice)
 
-As of 2026-11-15 18:20 UTC (Sunday). Data source: none.
+As of 2026-11-15 19:20 UTC (Sunday; rechecked, still unreachable). Data source: none.
 
 The weekend scan could not run. The only free provider the platform supports (Yahoo options chains) was
 refused by this session's egress proxy (`query1.finance.yahoo.com` connection rejected), and no other free

@@ -71,3 +71,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Added a Results panel to the dashboard fed by `/api/results`. Frontend only; no risk, order, auth, sizing or
   broker code touched. 1 new test; 170 pass.
 * Not verified: rendering in a real browser (only `node --check` and a static test); behaviour on real data.
+
+## 2026-11-15: why-skipped panel (scheduled challenger run 5)
+
+* Alerter unchanged at `a7a2ca0`; read `gex.py`. Added `explain_no_proposal` to `LiquidTrendStrategy`, a `reason`
+  field on `NO_PROPOSAL` cycle entries and a dashboard Decisions panel (textContent only). No risk, order, auth,
+  sizing or broker code touched; `propose` untouched. 4 new tests; 174 pass.
+* Weekend scan: Yahoo unreachable from this session (curl returned no response); MONDAY_PLAN updated, no demo data used.
+* Not verified: rendering in a real browser (only `node --check`); behaviour on real data. The Mac copy is a manual
+  git clone, so this is not on the Mac until the owner updates it. PR/merge result: see PR.

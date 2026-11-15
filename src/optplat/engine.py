@@ -404,7 +404,14 @@ class TradingEngine:
                 p for p in self.strategy.propose(snap, now) if p.contract not in held and not cooling(p.contract)
             ]
             if not proposals:
-                report["entries"].append({"symbol": symbol, "result": "NO_PROPOSAL"})
+                item_np: dict[str, Any] = {"symbol": symbol, "result": "NO_PROPOSAL"}
+                explain = getattr(self.strategy, "explain_no_proposal", None)
+                if callable(explain):
+                    try:
+                        item_np["reason"] = str(explain(snap, now))[:300]
+                    except Exception:  # noqa: BLE001  # display only: never let it affect trading
+                        pass
+                report["entries"].append(item_np)
                 continue
             account = self.manager.broker.get_account()
             chosen = None

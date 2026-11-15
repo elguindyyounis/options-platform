@@ -33,3 +33,9 @@ It puts a decision verdict first, keeps unmarkable accounts as "unknown" rather 
 emergency stop over partial API faults, labels partial/stale evidence, and tests this in a Node contract test.
 The platform dashboard is a flat single page with no such contract test (only an innerHTML ban); the new
 Results panel borrows the "unknown stays unknown" rule. A fuller decision-desk layout is future UX work.
+
+Also read (run 5): `gex.py`. Its header says plainly that open interest does not reveal dealer inventories and
+that the call-positive/put-negative sign convention is an INVENTED INVENTORY ASSUMPTION; it refuses a partial
+result when the row cap is hit and counts omitted rows. The platform's `ChainRow` already carries `iv` and
+open interest, so a net-GEX view is feasible here without new data (correcting the earlier note in
+CHALLENGES row 6); it must carry the same assumption label. Alerter unchanged since `a7a2ca0` this run.

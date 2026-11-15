@@ -273,3 +273,12 @@ def test_runner_starts_runs_a_cycle_and_stops():
     assert engine.last_cycle() is not None and runner.running()
     runner.stop()
     assert not runner.running() and runner.last_error is None
+
+
+def test_no_proposal_entry_carries_a_plain_reason():
+    engine, manager, broker, *_ = build(auto_entries=True)
+    engine.run_cycle()
+    again = engine.run_cycle()
+    entry = again["entries"][0]
+    assert entry["result"] == "NO_PROPOSAL"
+    assert isinstance(entry["reason"], str) and entry["reason"]
