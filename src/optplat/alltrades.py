@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from .concentration import close_day, group_story, liquidity_split, one_trade_story
+from .concentration import close_day, closed_trade_drawdown, group_story, liquidity_split, one_trade_story
 from .contracts import contract_label, parse_occ
 
 MAX_PER_SOURCE = 300
@@ -94,6 +94,7 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
                 "concentration": one_trade_story([r["pnl"] for r in done]),
                 "by_underlying": group_story([(r["symbol"], r["pnl"]) for r in done]),
                 "by_day": group_story([(close_day(r["closed_at"]), r["pnl"]) for r in done]),
+                "closed_drawdown": closed_trade_drawdown([(r["closed_at"], r["pnl"]) for r in done]),
                 "liquidity": liquidity_split([(r["pnl"], r.get("size_vs_volume_pct"), r.get("size_vs_oi_pct")) for r in done])}
 
     sources: dict[str, dict[str, Any]] = {}

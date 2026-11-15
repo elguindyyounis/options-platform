@@ -155,3 +155,13 @@ These are challenges raised by reading the alerter. None is proven.
   one is the same gap noted for `automation_readiness` (platform has no "held marks unobservable" blocker).
 * Platform gap found: results were never split by underlying or day (challenge 13, done).
 * **Still not read:** other skill files, `sector_rotation.py`, `technical_confluence.py`, `goal_sprint.py`, the alerter's tests (not run).
+
+## Addendum 2026-11-15 (challenger-e): `goal_sprint.py` (read)
+
+* A goal is arithmetic, never risk authority: `goal_alters_position_sizing: False`, and the module says not to boost risk because the
+  required pace is high. Target gap is null when equity marks are stale or missing (`UNVERIFIABLE_EQUITY`). The platform's 10x
+  challenge panel should keep the same rule; nothing here changes it.
+* States that a premium budget is maximum exposed principal, not a stop loss, and shows a three-full-loss sequence per policy.
+* Keeps a frozen `baseline-fixed` policy next to shadow-only variants; matches the platform's frozen-baseline lane (challenge 3).
+* Session counts are marked `calendar_verified: False` and an upper bound. Still not read: `sector_rotation.py`, `technical_confluence.py`, its tests.
+

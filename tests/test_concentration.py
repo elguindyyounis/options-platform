@@ -90,3 +90,30 @@ def test_close_day_is_utc_and_tolerates_bad_input():
     assert close_day("2026-11-12T23:30:00-05:00") == "2026-11-13"
     assert close_day("2026-11-12T10:00:00Z") == "2026-11-12"
     assert close_day(None) is None and close_day("nonsense") is None
+
+
+def test_closed_trade_drawdown_follows_close_order_not_input_order():
+    from optplat.concentration import closed_trade_drawdown
+    d = closed_trade_drawdown([
+        ("2026-11-03T15:00:00Z", -30.0), ("2026-11-01T15:00:00Z", 100.0),
+        ("2026-11-02T15:00:00Z", -60.0), ("2026-11-04T15:00:00Z", 50.0), ("2026-11-05T15:00:00Z", -10.0),
+    ])
+    # curve: +100, +40, +10, +60, +50 -> peak 100, trough 10
+    assert d["max_drawdown_usd"] == 90.0 and d["ordered"] == 5 and d["unordered"] == 0
+    assert d["is_account_drawdown"] is False and d["is_lower_bound"] is True and d["too_thin"] is False
+
+
+def test_closed_trade_drawdown_counts_a_losing_start_and_never_guesses_unplaceable_trades():
+    from optplat.concentration import closed_trade_drawdown
+    d = closed_trade_drawdown([("2026-11-01T10:00:00Z", -40.0), (None, -500.0), ("garbage", -500.0), ("2026-11-02T10:00:00Z", None)])
+    assert d["max_drawdown_usd"] == 40.0 and d["closed"] == 3 and d["ordered"] == 1 and d["unordered"] == 2
+    assert d["too_thin"] is True
+
+
+def test_closed_trade_drawdown_ties_take_losses_first_and_empty_is_null():
+    from optplat.concentration import closed_trade_drawdown
+    t = "2026-11-01T10:00:00Z"
+    assert closed_trade_drawdown([(t, 50.0), (t, -50.0)])["max_drawdown_usd"] == 50.0
+    e = closed_trade_drawdown([])
+    assert e["max_drawdown_usd"] is None and e["too_thin"] is True
+    assert closed_trade_drawdown([("2026-11-01T10:00:00Z", 5.0)])["max_drawdown_usd"] == 0.0

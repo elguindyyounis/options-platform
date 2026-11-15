@@ -125,3 +125,5 @@ def test_summaries_split_realized_pnl_by_underlying_and_close_day(parts):
     assert round(sum(r["pnl"] for r in u["groups"]), 2) == round(sum(r["pnl"] for r in d["groups"]), 2) == s["realized_pnl"]
     assert u["too_thin"] is True and d["too_thin"] is True  # fewer than 3 groups
     assert all("by_underlying" in x and "by_day" in x for x in out["sources"])
+    assert all(x["closed_drawdown"]["is_account_drawdown"] is False for x in out["sources"])
+    assert out["summary"]["all"]["closed_drawdown"]["basis"] == "closed_trades_only"

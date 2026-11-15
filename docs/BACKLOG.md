@@ -190,3 +190,4 @@ Existing items, in order:
 * Challenge run 2026-11-15 (challenger-c): oversized-fill P&L split on all-trades summaries (`liquidity_split`). Display-only.
 
 * 2026-11-15 (challenger-d): by-underlying and by-day realized P&L splits with a one-group flag (`concentration.group_story`). Open: show the `concentration`, `liquidity`, `by_underlying` and `by_day` blocks on the dashboard.
+* Closed-trade drawdown (dollars, close-time order) on all-trades summaries; display-only (agent/2026-11-15-challenger-e).

@@ -112,3 +112,43 @@ def close_day(closed_at: Optional[str]) -> Optional[str]:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).date().isoformat()
+
+
+def closed_trade_drawdown(pairs: Sequence[tuple]) -> dict:
+    """Largest fall in cumulative realized P&L when closed trades are taken in close-time order.
+
+    `pairs` are (closed_at, pnl). This is NOT account drawdown: it ignores unrealized losses on open
+    positions and anything between closes, so the real worst dip was at least this deep. The curve
+    starts at 0, so a losing start counts. Trades closed in the same instant are taken losses first
+    (the pessimistic order). Trades with no parseable close time or no P&L cannot be placed in the
+    sequence; they are counted in `unordered`, never guessed.
+    """
+    from datetime import datetime, timezone
+
+    def _when(v: Optional[str]) -> Optional[datetime]:
+        if not v:
+            return None
+        try:
+            dt = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+
+    with_pnl = [(c, float(p)) for c, p in pairs if p is not None]
+    placed = [(w, p) for w, p in ((_when(c), p) for c, p in with_pnl) if w is not None]
+    placed.sort(key=lambda x: (x[0], x[1]))  # equal times: losses first
+    cum = peak = worst = 0.0
+    for _, p in placed:
+        cum += p
+        peak = max(peak, cum)
+        worst = max(worst, peak - cum)
+    return {
+        "basis": "closed_trades_only",
+        "is_account_drawdown": False,
+        "is_lower_bound": True,
+        "closed": len(with_pnl),
+        "ordered": len(placed),
+        "unordered": len(with_pnl) - len(placed),
+        "max_drawdown_usd": round(worst, 2) if placed else None,
+        "too_thin": len(placed) < MIN_TRADES,
+    }

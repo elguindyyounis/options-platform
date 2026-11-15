@@ -607,3 +607,14 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   default or entry rule touched.
 * Verified: full suite, 588 passed (5 new). Not verified: alerter tests, real trades, dashboard rendering (API-only), that 3 groups is a sensible
   breadth cut-off (a label threshold, not a rule). Nothing here shows an edge. No PR opened (owner reviews branches).
+
+## 2026-11-15: closed-trade drawdown (challenge 11 follow-up, scheduled run on agent/2026-11-15-challenger-e)
+
+* Based on `origin/agent/2026-11-15-challenger-d` (main lacks the challenge docs; many unmerged agent branches still need an owner decision).
+  Baseline 588 passed. Alerter unchanged at `48ccf71`; read `goal_sprint.py`.
+* Added `concentration.closed_trade_drawdown` and a `closed_drawdown` block on every summary in `/api/trades/all`: largest fall in cumulative
+  realized P&L in close-time order, in dollars, labelled not-account-drawdown and a lower bound. Trades without a parseable close time are counted
+  as `unordered`, never guessed; same-instant ties take losses first. Display-only; no lane size, risk limit, default or entry rule touched.
+* Verified: full suite, 591 passed (3 new tests plus assertions in the all-trades test). Not verified: alerter tests, real trades, dashboard
+  rendering (API-only), a percentage drawdown (no per-lane starting capital is stored). Nothing here shows an edge. No PR opened.
+
