@@ -157,3 +157,39 @@ def test_side_survives_persistence(env):
     manager, _, _ = env
     order = manager.submit(sell())
     assert manager.get(order.id).intent.side is Side.SELL_TO_CLOSE
+
+
+def test_report_flags_unmarked_positions_and_gives_a_conservative_equity(env):
+    manager, broker, _ = env
+    manager.submit(make_intent())
+    cash = broker.get_account().cash
+    r = manager.report()
+    assert r["marks_complete"] and r["open_unmarked"] == 0
+    assert r["conservative_equity"] == round(cash + 1.90 * 4 * 100, 2)
+    broker._quotes.clear()
+    r = manager.report()
+    assert not r["marks_complete"] and r["open_unmarked"] == 1
+    # The broker's headline equity still counts the position at cost; the conservative figure must not.
+    assert broker.get_account().equity > r["conservative_equity"]
+    assert r["conservative_equity"] == round(cash, 2)
+
+
+def test_report_with_no_positions_is_complete(env):
+    manager, broker, _ = env
+    r = manager.report()
+    assert r["marks_complete"] and r["conservative_equity"] == round(broker.get_account().cash, 2)
+
+
+def test_sample_assessment_never_claims_validation():
+    from optplat.orders import MIN_TRADES_FOR_ANY_CONCLUSION, sample_assessment
+
+    assert sample_assessment(0)["status"] == "INSUFFICIENT_SAMPLE"
+    assert sample_assessment(MIN_TRADES_FOR_ANY_CONCLUSION - 1)["status"] == "INSUFFICIENT_SAMPLE"
+    top = sample_assessment(MIN_TRADES_FOR_ANY_CONCLUSION)
+    assert top["status"] == "DESCRIPTIVE_ONLY" and "not to prove" in top["note"]
+    assert sample_assessment(10_000)["status"] == "DESCRIPTIVE_ONLY"
+
+
+def test_report_exposes_sample_status(env):
+    manager, _, _ = env
+    assert manager.report()["sample"]["status"] == "INSUFFICIENT_SAMPLE"

@@ -66,6 +66,24 @@ class InvalidTransition(RuntimeError):
     pass
 
 
+MIN_TRADES_FOR_ANY_CONCLUSION = 30
+
+
+def sample_assessment(closed_trades: int) -> dict[str, Any]:
+    """Label how little a closed-trade count can support. Never returns a 'validated' state."""
+    enough = closed_trades >= MIN_TRADES_FOR_ANY_CONCLUSION
+    return {
+        "closed_trades": closed_trades,
+        "min_trades": MIN_TRADES_FOR_ANY_CONCLUSION,
+        "status": "DESCRIPTIVE_ONLY" if enough else "INSUFFICIENT_SAMPLE",
+        "note": (
+            "Enough trades to describe, not to prove an edge: simulated fills, no out-of-sample split."
+            if enough
+            else f"{closed_trades} closed trades; win rate and P&L below {MIN_TRADES_FOR_ANY_CONCLUSION} are noise."
+        ),
+    }
+
+
 class OrderManager:
     def __init__(
         self,
@@ -247,7 +265,8 @@ class OrderManager:
                 )
         wins = sum(1 for c in closed if c["pnl"] > 0)
         open_rows = []
-        for p in self.broker.get_positions():
+        positions = self.broker.get_positions()
+        for p in positions:
             row: dict[str, Any] = {
                 "contract": p.contract.occ_symbol.strip(),
                 "quantity": p.quantity,
@@ -267,8 +286,24 @@ class OrderManager:
             except Exception:  # noqa: BLE001 - an unobservable mark is reported, never guessed
                 pass
             open_rows.append(row)
+        unmarked = sum(1 for r in open_rows if r["mark"] is None)
+        # Display only. The broker's headline equity may value a position it cannot quote at cost,
+        # which hides losses. This figure values unquotable positions at zero (worst case).
+        marked_value = sum(
+            r["mark"] * r["quantity"] * p.contract.multiplier
+            for r, p in zip(open_rows, positions)
+            if r["mark"] is not None
+        )
+        try:
+            conservative_equity: Optional[float] = round(self.broker.get_account().cash + marked_value, 2)
+        except Exception:  # noqa: BLE001 - unknown means unknown
+            conservative_equity = None
         return {
             "closed_trades": len(closed),
+            "sample": sample_assessment(len(closed)),
+            "open_unmarked": unmarked,
+            "marks_complete": unmarked == 0,
+            "conservative_equity": conservative_equity,
             "wins": wins,
             "realized_pnl": round(sum(c["pnl"] for c in closed), 2),
             "win_rate_pct": round(wins / len(closed) * 100, 1) if closed else None,

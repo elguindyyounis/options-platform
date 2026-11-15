@@ -23,3 +23,17 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   name.
 * Not verified: any real broker, any real market data, performance on anything but a synthetic
   random-walk market (where the baseline loses money, as expected).
+
+## 2026-11-15: alerter comparison and honest report (daily challenger)
+
+* Created `docs/COMPARISON_ALERTER.md` and `docs/CHALLENGES.md` (first run; neither existed).
+* Challenge C1: `SimBroker.get_account` values a position with no usable quote at cost, so headline
+  equity can hide losses, and the win rate had no sample-size warning. The alerter returns no equity
+  at all in that case. Added to `OrderManager.report()`: `sample` (INSUFFICIENT_SAMPLE under 30 closed
+  trades, otherwise DESCRIPTIVE_ONLY, never "validated"), `open_unmarked`, `marks_complete`,
+  `conservative_equity` (unquotable positions at zero). Dashboard text shows them. Display only: no
+  risk limit, sizing, default or auth changed.
+* Verified: `python -m pytest -q` 148 passed (144 before, 4 new). Baseline passed before the change.
+* Not verified: the dashboard text in a browser; the 30-trade threshold is a labelling choice, not a
+  statistical test; the owner's real alerter data (not visible from here). Risk sizing still uses
+  broker equity; whether to switch is left to the owner (BACKLOG).

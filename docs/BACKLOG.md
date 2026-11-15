@@ -35,6 +35,13 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * **2027 NYSE holiday table.** Needs an official source; the clock fails closed for unknown years.
 * **Risk-limit tuning, strategy promotion.** Owner decisions, driven by evidence from items 1-3.
 
+## Discovered by the daily challenger
+
+* Exit-friction stress scenarios in the report (CHALLENGES C2).
+* Record trigger price vs fill price for exits (C3).
+* Decide whether risk sizing should use `conservative_equity` instead of broker equity when marks are
+  incomplete (owner decision: it would tighten risk, but changes behaviour of the account's limits).
+
 ## Ideas (unscheduled)
 
 * Per-sector concentration limit once a sector map exists.
@@ -47,3 +54,5 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
   simulated broker, conformance tests, token-protected API.
 * MVP: sell-to-close, exit policy, demo/static/Yahoo data providers, baseline strategy, market
   clock, trading engine + runner, same-underlying concentration limit, re-entry cooldown, dashboard.
+* 2026-11-15: report honesty: sample-size label, mark completeness, conservative equity (branch
+  `agent/2026-11-15-alerter-comparison`).
