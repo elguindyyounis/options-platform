@@ -27,6 +27,10 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 9. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
    they find without changing behaviour.
 
+10. **Exit quote age and reason on closed rows** (CHALLENGES C7). Display only.
+11. **Volume/open interest on `Quote`** so exit stress can include participation (needs a provider
+    that supplies them; check the free Yahoo fields first, no paid data).
+
 ## Blocked on a human
 
 * **Real broker adapter (IBKR paper).** Owner is implementing `broker/ibkr.py`. Do not start it.
@@ -49,6 +53,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-15: exit-friction stress scenarios and `stressed_equity` in `/api/report` (display only).
 
 * Foundation: models, fail-closed risk engine, order state machine with reconcile, broker contract,
   simulated broker, conformance tests, token-protected API.

@@ -71,7 +71,8 @@
       $("report").textContent = report.closed_trades + " closed trades, realized " + money(report.realized_pnl) +
         (report.win_rate_pct === null ? "" : ", win rate " + report.win_rate_pct + "%") + ". " + report.caveat +
         " [" + report.sample.status + "]" +
-        (report.marks_complete ? "" : " WARNING: " + report.open_unmarked + " open position(s) have no usable quote; conservative equity " + money(report.conservative_equity) + " counts them at zero.");
+        (report.marks_complete ? "" : " WARNING: " + report.open_unmarked + " open position(s) have no usable quote; conservative equity " + money(report.conservative_equity) + " counts them at zero.") +
+        (report.stressed_equity === null ? "" : " Stress scenario (spread-based, not a forecast): equity " + money(report.stressed_equity) + " if exits concede extra bid.");
 
       table($("positions"), [
         { label: "Contract", get: (r) => r.contract }, { label: "Qty", get: (r) => r.quantity },

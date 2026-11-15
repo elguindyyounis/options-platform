@@ -37,3 +37,17 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Not verified: the dashboard text in a browser; the 30-trade threshold is a labelling choice, not a
   statistical test; the owner's real alerter data (not visible from here). Risk sizing still uses
   broker equity; whether to switch is left to the owner (BACKLOG).
+
+## 2026-11-15: exit-friction stress (daily challenger, run 2)
+
+* Alerter unchanged since `48ccf71`. Read `liquidity.exit_stress` closely and the head of `storage.py`.
+* Challenge C2: the platform values and exits at the observed bid, assuming it is hittable at size.
+  Added display-only `exit_stress()` in `orders.py`: per open position BID / THIN_MARKET /
+  STRESSED_EXIT scenarios (concession from spread only, same spread term as the alerter), plus
+  report-level `stressed_equity` and one dashboard sentence. No risk limit, sizing, exit threshold,
+  default or auth changed; the SimBroker fill logic is untouched.
+* Verified: baseline 148 passed, after change 150 passed (2 new); app.js parses.
+* Not verified: dashboard rendering in a browser; the concession constants are borrowed from the
+  alerter and are illustrative, not calibrated. `Quote` has no volume/OI, so thin-market risk is
+  understated (BACKLOG 11). Branch is based on `agent/2026-11-15-alerter-comparison` because `main` lacks the
+  tracking docs; the owner may want to merge those branches in order.

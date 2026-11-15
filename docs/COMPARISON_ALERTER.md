@@ -40,9 +40,13 @@ here, so nothing below says how either system has actually performed.
 validity, `lane_portfolio`), `core.py` (head), `data_sources.py` (head), `agent_skills/skeptic-red-team`,
 `CHANGELOG.md`.
 
+`storage.py` (head, run 2): `trade_journal` keeps `exit_quote_at` and `exit_reason` per closed trade, and the
+default store settings are big (8% per position, 40% total, 30% drawdown, take-profit 40 / stop 30). These
+are the owner's experimental values and are not copied or changed here.
+
 ## Never read yet (next runs)
 
-`agents.py` (council, Ollama call), `storage.py`, `server.py`, rest of `core.py` and `data_sources.py`,
+`agents.py` (council, Ollama call), `storage.py`, `server.py`, rest of `storage.py`, rest of `core.py` and `data_sources.py`,
 `lane_paper_engine.py` exit logic (trailing stop, `MAX_EXIT_SPREAD_PCT`), `sizing.py`, `risk.py`,
 `adaptive.py`, `feedback.py`, other `agent_skills`.
 

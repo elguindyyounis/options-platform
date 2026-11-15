@@ -193,3 +193,31 @@ def test_sample_assessment_never_claims_validation():
 def test_report_exposes_sample_status(env):
     manager, _, _ = env
     assert manager.report()["sample"]["status"] == "INSUFFICIENT_SAMPLE"
+
+
+def test_exit_stress_scenarios_are_ordered_and_display_only():
+    from optplat.orders import exit_stress
+
+    tight = exit_stress(1.98, 2.00, 1.50, 2, 100)
+    assert [x["scenario"] for x in tight] == ["BID", "THIN_MARKET", "STRESSED_EXIT"]
+    assert tight[0]["exit_value"] == 396.0 and tight[0]["pnl"] == 96.0
+    assert tight[1]["bid_concession_pct"] == 0.0 and tight[2]["bid_concession_pct"] == 20.0
+    wide = exit_stress(1.00, 2.00, 1.50, 1, 100)  # 50% spread
+    assert wide[1]["bid_concession_pct"] == 15.75
+    assert wide[0]["exit_value"] > wide[1]["exit_value"] > wide[2]["exit_value"]
+    assert exit_stress(0.0, 1.0, 1.0, 1, 100)[0]["exit_value"] == 0.0
+
+
+def test_report_stressed_equity_is_below_conservative_and_skips_unmarked(env):
+    manager, broker, _ = env
+    manager.submit(make_intent())
+    broker.set_quote(make_quote(1.00, 2.00))
+    r = manager.report()
+    row = r["open"][0]
+    assert [x["scenario"] for x in row["exit_stress"]] == ["BID", "THIN_MARKET", "STRESSED_EXIT"]
+    assert row["exit_stress"][0]["exit_value"] == round(1.00 * 4 * 100, 2)
+    assert r["stressed_equity"] < r["conservative_equity"]
+    broker._quotes.clear()
+    r = manager.report()
+    assert "exit_stress" not in r["open"][0]
+    assert r["stressed_equity"] == r["conservative_equity"]

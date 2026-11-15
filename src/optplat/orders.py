@@ -84,6 +84,30 @@ def sample_assessment(closed_trades: int) -> dict[str, Any]:
     }
 
 
+def exit_stress(bid: float, ask: float, avg_cost: float, quantity: int, multiplier: int) -> list[dict[str, Any]]:
+    """Display-only scenarios: what if the bid is not fully hittable? Not a prediction.
+
+    The spread term mirrors the alerter's ``exit_stress`` (concession grows once the spread passes
+    5% of ask). Volume and open interest are not on ``Quote``, so the participation terms the
+    alerter has are deliberately absent: these scenarios understate thin-market risk.
+    """
+    spread = (ask - bid) / ask * 100 if ask > 0 else 100.0
+    thin = min(65.0, max(0.0, spread - 5.0) * 0.35)
+    scenarios = [("BID", 0.0), ("THIN_MARKET", thin), ("STRESSED_EXIT", min(95.0, thin + 20.0))]
+    out = []
+    for label, concession in scenarios:
+        proceeds = round(bid * (1 - concession / 100) * quantity * multiplier, 2)
+        out.append(
+            {
+                "scenario": label,
+                "bid_concession_pct": round(concession, 2),
+                "exit_value": proceeds,
+                "pnl": round(proceeds - avg_cost * quantity * multiplier, 2),
+            }
+        )
+    return out
+
+
 class OrderManager:
     def __init__(
         self,
@@ -279,6 +303,7 @@ class OrderManager:
                 q = self.broker.get_quote(p.contract)
                 if q.is_valid() and q.bid > 0:
                     row.update(
+                        exit_stress=exit_stress(q.bid, q.ask, p.avg_cost, p.quantity, p.contract.multiplier),
                         mark=q.bid,
                         unrealized_pnl=round((q.bid - p.avg_cost) * p.quantity * p.contract.multiplier, 2),
                         mark_quality="BID",
@@ -298,8 +323,19 @@ class OrderManager:
             conservative_equity: Optional[float] = round(self.broker.get_account().cash + marked_value, 2)
         except Exception:  # noqa: BLE001 - unknown means unknown
             conservative_equity = None
+        stressed_equity: Optional[float] = None
+        if conservative_equity is not None:
+            cash = conservative_equity - marked_value
+            stressed_value = sum(
+                next(x for x in r["exit_stress"] if x["scenario"] == "STRESSED_EXIT")["exit_value"]
+                for r in open_rows
+                if r["mark"] is not None
+            )
+            stressed_equity = round(cash + stressed_value, 2)
         return {
             "closed_trades": len(closed),
+            "stressed_equity": stressed_equity,
+            "stress_note": "Scenario only: bid concession from spread alone; no volume/OI depth known.",
             "sample": sample_assessment(len(closed)),
             "open_unmarked": unmarked,
             "marks_complete": unmarked == 0,
