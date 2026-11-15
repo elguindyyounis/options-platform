@@ -52,9 +52,16 @@ loss exit; the platform instead exits on any valid bid). The alerter explicitly 
 the trigger level; it fills at the observed bid less slippage, same idea the platform's `fill_vs_trigger_bid`
 now reports.
 
+`agents.py` (run 4): the council is deterministic first; the optional local Ollama step only accepts
+localhost endpoints, treats headlines as untrusted, and can only add caution (a VETO), never upgrade a
+rejection. `run_council` keeps rejected trades rejected and logs the real agent sequence, not invented
+dialogue. `data_sources.option_rows`: Yahoo rows carry `quote_time: None`,
+`exchange_quote_time_verified: False`, `last_trade_at` (lastTradeDate), and zero-volume rows are dropped unless
+pinned. The platform's Yahoo provider is equally unverified (pinned by tests) but ignores last-trade time (C8).
+
 ## Never read yet (next runs)
 
-`agents.py` (council, Ollama call), `storage.py`, `server.py`, rest of `storage.py`, rest of `core.py` and `data_sources.py`,
+`storage.py`, `server.py`, rest of `storage.py`, rest of `core.py` and `data_sources.py`,
 `lane_paper_engine.py` exit logic (trailing stop, `MAX_EXIT_SPREAD_PCT`), `sizing.py`, `risk.py`,
 `adaptive.py`, `feedback.py`, other `agent_skills`.
 

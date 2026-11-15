@@ -67,3 +67,4 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
   clock, trading engine + runner, same-underlying concentration limit, re-entry cooldown, dashboard.
 * 2026-11-15: report honesty: sample-size label, mark completeness, conservative equity (branch
   `agent/2026-11-15-alerter-comparison`).
+* Challenge C5 (branch `agent/2026-11-15-challenger-j`): tests pin that Yahoo quote times are never verified and the default policy rejects them. New idea C8 in `docs/CHALLENGES.md` (last-trade time as evidence).

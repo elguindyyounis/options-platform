@@ -62,3 +62,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   broker or default changed. 154 tests pass (4 new in `tests/test_exit_audit.py`).
 * Not verified: the dashboard (not changed); real-broker behaviour; any live data. In the sim the fill equals the
   bid by construction, so `fill_vs_trigger_bid` will read near zero until a broker with real slippage exists.
+
+## 2026-11-15: challenger run 4 (scheduled agent)
+
+* Alerter unchanged at 48ccf71. Read `agents.py` and `data_sources.option_rows`; notes in `COMPARISON_ALERTER.md`.
+* Challenge C5 checked: the platform's Yahoo provider never verifies quote times. Added
+  `tests/test_yahoo_unverified.py` (2 tests, offline, fake `yfinance`). No production code changed.
+* Logged C8 (last-trade time not carried as evidence).
+* Verified: 156 tests pass. Not verified: real yfinance output shape; the owner's database.
+* Note: `main` lacks `docs/CHALLENGES.md`; this branch is stacked on `agent/2026-11-15-challenger-i`
+  (earlier challenger branches are unmerged), so merge order matters.
