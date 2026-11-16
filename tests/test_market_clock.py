@@ -49,3 +49,22 @@ def test_unknown_year_fails_closed():
 def test_naive_datetime_is_rejected():
     with pytest.raises(ValueError):
         session_status(datetime(2026, 11, 16, 15, 0))
+
+
+def test_upcoming_closures_lists_known_holidays_and_early_closes():
+    from optplat.market_clock import upcoming_closures
+
+    got = upcoming_closures(utc(2026, 11, 16, 15, 0), days=40)
+    assert {"date": "2026-11-26", "kind": "closed"} in got
+    assert {"date": "2026-11-27", "kind": "early_close"} in got
+    assert {"date": "2026-12-24", "kind": "early_close"} in got
+    assert {"date": "2026-12-25", "kind": "closed"} in got
+    assert [e["date"] for e in got] == sorted(e["date"] for e in got)
+
+
+def test_upcoming_closures_empty_for_years_without_a_table_and_needs_aware_time():
+    from optplat.market_clock import upcoming_closures
+
+    assert upcoming_closures(utc(2030, 3, 4, 15, 0)) == []
+    with pytest.raises(ValueError):
+        upcoming_closures(datetime(2026, 11, 16, 15, 0))

@@ -46,6 +46,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Glance line "Coming up" from the clock's holiday/early-close table (run 22, challenge 21); display only. Earnings/Fed events still blocked on an event source.
+
 * Glance line "Strategy in use" (run 21, challenge 20); display only. Per-strategy results still need the strategy recorded on each order.
 
 * Multiple-testing note in `/api/results` and the dashboard (challenge 3, run 20); per-strategy split still open: record the strategy on each order.

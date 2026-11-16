@@ -140,7 +140,8 @@ const srvOk=g({mode:'PAPER'},{...st2,last_cycle:{...st2.last_cycle,started_at:'2
 const mk=(a)=>g({mode:'PAPER'},{config:{}},{kill_switch:false,account:a},null,null,now);
 const riskLow=mk({equity:1000,open_premium:100});const riskHigh=mk({equity:1000,open_premium:600});const riskMissing=mk({equity:0});
 const strat=g({mode:'PAPER'},{config:{},strategy:{name:'flow-otm',version:'1.0'}},{kill_switch:false},null,null,now);
-console.log(JSON.stringify({strat,riskLow,riskHigh,riskMissing,bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
+const cal=g({mode:'PAPER'},{config:{},market:{open:false,reason:'x',upcoming:[{date:'2026-11-26',kind:'closed'},{date:'2026-11-27',kind:'early_close'}]}},{kill_switch:false},null,null,now);
+console.log(JSON.stringify({cal,strat,riskLow,riskHigh,riskMissing,bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
 """
     out = subprocess.run([node, "-e", harness, str(root / "app.js")], capture_output=True, text=True, check=True).stdout
     r = json.loads(out)
@@ -171,6 +172,10 @@ console.log(JSON.stringify({strat,riskLow,riskHigh,riskMissing,bad,none,stale,fr
     assert high and high[0]["level"] == "warn" and "60.0% of equity" in high[0]["text"]
     assert any("Money at risk unknown" in i["text"] and i["level"] == "warn" for i in r["riskMissing"])
     assert not any("Worst case" in i["text"] or "Money at risk" in i["text"] for i in r["none"])
+    # calendar line: lists known closures from the exchange table only; absent data adds no line
+    c = " ".join(i["text"] for i in r["cal"])
+    assert "2026-11-26 market closed" in c and "2026-11-27 early close" in c and "not earnings or news" in c
+    assert not any("Coming up" in i["text"] for i in r["none"])
     # strategy line: names the running strategy and warns that results are not split; unknown reads as a warning
     s = [i for i in r["strat"] if "Strategy in use" in i["text"]]
     assert s and "flow-otm 1.0" in s[0]["text"] and "not split by strategy" in s[0]["text"] and "no demonstrated edge" in s[0]["text"]

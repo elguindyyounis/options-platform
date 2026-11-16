@@ -232,3 +232,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Changed: dashboard glance now shows "Strategy in use" from `/api/engine/status.strategy` (name, version, no-edge note, results-not-split warning); unknown shows a warning. Frontend only.
 * Verified: `python -m pytest -q` 206 pass (glance node test extended, runs under node 22). Alerter unchanged at `30c64d7`.
 * Not verified: not viewed in a real browser; no real market data (cloud run, Monday, no weekend scan). Not on the owner's Mac until they pull their clone.
+
+## 2026-11-16 (run 22, challenger)
+
+* Alerter unchanged at `30c64d7`; read `market_clock.py`. Monday: no weekend scan.
+* Changed: `upcoming_closures()` in `market_clock.py`, `market.upcoming` in engine status, one glance line. Display only; holiday table, risk, auth, broker untouched.
+* Verified: 208 pass (2 new tests, node glance test extended). Not verified: browser rendering; real data (cloud run). Not on the owner's Mac until they pull their clone.

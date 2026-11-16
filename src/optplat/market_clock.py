@@ -5,7 +5,7 @@ holiday-schedule changes are not detected.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 NY = ZoneInfo("America/New_York")
@@ -59,3 +59,24 @@ def session_status(now: datetime) -> tuple[bool, str]:
 
 def is_open(now: datetime) -> bool:
     return session_status(now)[0]
+
+
+def upcoming_closures(now: datetime, days: int = 21) -> list[dict[str, str]]:
+    """Known market holidays and early closes in the next ``days`` days, from the table above.
+
+    Display only. Empty when the year has no table (the clock then fails closed anyway), and it
+    knows nothing about earnings, Fed or data releases: those need an event source.
+    """
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    today = now.astimezone(NY).date()
+    out: list[dict[str, str]] = []
+    for offset in range(days + 1):
+        day = today + timedelta(days=offset)
+        if day.year not in HOLIDAYS:
+            continue
+        if day in HOLIDAYS[day.year]:
+            out.append({"date": day.isoformat(), "kind": "closed"})
+        elif day in EARLY_CLOSES.get(day.year, frozenset()):
+            out.append({"date": day.isoformat(), "kind": "early_close"})
+    return out

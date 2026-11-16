@@ -184,3 +184,7 @@ replay yet (backlog 1) and no intraday-bar strategy; when it gets one, copy the 
 * Honest points the platform can copy: freeze the entry-time GEX snapshot and never use later gamma to justify an earlier entry; keep vetoed and
   unselected candidates with future marks for a baseline; record chain truncation. Platform gap: its flow radar has no cross-strike context, and
   no point-in-time GEX record. Not copied this run (data lives in the alerter on the Mac).
+
+## market_clock.py (read run 22)
+
+The alerter keeps the same NYSE-published 2026-2028 holiday and early-close table (read 2026-11-15) but adds rule-based fallbacks outside those years (platform fails closed instead, which is safer) and a conservative session window of 09:35-15:55 ET (12:55 on early closes). The platform opens at 09:30 and runs to 16:00 exactly. Both say they are not live exchange status. Takeaway: the alerter's buffers avoid the least reliable quotes at the open and close; adopting them is an owner decision.
