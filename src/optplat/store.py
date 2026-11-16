@@ -5,6 +5,7 @@ import json
 import sqlite3
 import threading
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from .models import Order, OrderState, Quote, TERMINAL_STATES, utcnow
@@ -29,6 +30,113 @@ CREATE TABLE IF NOT EXISTS state (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    source TEXT NOT NULL,
+    fictional INTEGER NOT NULL,
+    timestamp_verified INTEGER NOT NULL,
+    payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS data_issues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    count INTEGER NOT NULL,
+    detail TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_data_issues_ts ON data_issues(ts);
+CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    disposition TEXT NOT NULL,
+    contract TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    ref_price REAL,
+    order_id TEXT,
+    fictional INTEGER NOT NULL,
+    payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_decisions_ts ON decisions(ts);
+CREATE TABLE IF NOT EXISTS equity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    equity REAL NOT NULL,
+    cash REAL NOT NULL,
+    open_premium REAL NOT NULL,
+    fictional INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_equity_ts ON equity(ts);
+CREATE TABLE IF NOT EXISTS scan_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    fictional INTEGER NOT NULL,
+    payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS lane_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lane TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    opened_at TEXT NOT NULL,
+    entry_price REAL NOT NULL,
+    quantity INTEGER NOT NULL,
+    open_payload TEXT NOT NULL,
+    closed_at TEXT,
+    exit_price REAL,
+    close_reason TEXT,
+    close_payload TEXT,
+    fictional INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_lane_trades_lane ON lane_trades(lane, id);
+CREATE TABLE IF NOT EXISTS unusual_history (
+    day TEXT NOT NULL,
+    contract TEXT NOT NULL,
+    fictional INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (day, contract, fictional)
+);
+CREATE TABLE IF NOT EXISTS tracker_marks (
+    contract TEXT NOT NULL,
+    sighted_day TEXT NOT NULL,
+    horizon INTEGER NOT NULL,
+    fictional INTEGER NOT NULL,
+    observed_day TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (contract, sighted_day, horizon, fictional)
+);
+CREATE TABLE IF NOT EXISTS agent_weights (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    agent TEXT NOT NULL,
+    weight REAL NOT NULL,
+    n INTEGER NOT NULL,
+    accuracy REAL,
+    fictional INTEGER NOT NULL,
+    note TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS hypotheses (
+    id TEXT PRIMARY KEY,
+    registered_at TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS hypothesis_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hypothesis_id TEXT NOT NULL,
+    evaluated_at TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_snapshots_symbol_time ON snapshots(symbol, recorded_at);
+CREATE INDEX IF NOT EXISTS idx_snapshots_recorded ON snapshots(recorded_at);
 CREATE TABLE IF NOT EXISTS market_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     recorded_at TEXT NOT NULL,
@@ -65,13 +173,19 @@ CREATE INDEX IF NOT EXISTS idx_market_quotes_snap ON market_quotes(snapshot_id);
 
 
 class Store:
-    def __init__(self, path: str = ":memory:") -> None:
-        self._db = sqlite3.connect(path, check_same_thread=False)
+    def __init__(self, path: str = ":memory:", *, read_only: bool = False) -> None:
+        if read_only:
+            # For analysis tools: the file cannot be modified through this handle, and no tables are created.
+            uri = Path(path).resolve().as_uri() + "?mode=ro"
+            self._db = sqlite3.connect(uri, uri=True, check_same_thread=False)
+        else:
+            self._db = sqlite3.connect(path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._lock = threading.RLock()
-        with self._lock:
-            self._db.executescript(SCHEMA)
-            self._db.commit()
+        if not read_only:
+            with self._lock:
+                self._db.executescript(SCHEMA)
+                self._db.commit()
 
     # ---- orders -------------------------------------------------------
     def insert_order(self, order: Order) -> None:
@@ -139,6 +253,371 @@ class Store:
             for r in rows
         ]
 
+    # ---- recorded market snapshots -----------------------------------
+    def record_snapshot(
+        self,
+        symbol: str,
+        recorded_at: datetime,
+        as_of: datetime,
+        source: str,
+        fictional: bool,
+        timestamp_verified: bool,
+        payload: dict[str, Any],
+    ) -> None:
+        """Append one observed snapshot. Rows are never updated; `fictional` keeps made-up data separable."""
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO snapshots (symbol, recorded_at, as_of, source, fictional, timestamp_verified, payload)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (
+                    symbol,
+                    recorded_at.isoformat(),
+                    as_of.isoformat(),
+                    source,
+                    int(fictional),
+                    int(timestamp_verified),
+                    json.dumps(payload, default=str),
+                ),
+            )
+            self._db.commit()
+
+    def list_snapshots(
+        self,
+        symbol: Optional[str] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        include_fictional: bool = False,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Oldest first, so a replay can walk them in order. Fictional rows only when asked for."""
+        where, args = [], []  # type: list[str], list[Any]
+        if symbol:
+            where.append("symbol=?")
+            args.append(symbol)
+        if since:
+            where.append("recorded_at>=?")
+            args.append(since.isoformat())
+        if until:
+            where.append("recorded_at<?")
+            args.append(until.isoformat())
+        if not include_fictional:
+            where.append("fictional=0")
+        sql = "SELECT * FROM snapshots" + (" WHERE " + " AND ".join(where) if where else "")
+        sql += " ORDER BY recorded_at, id LIMIT ?"
+        with self._lock:
+            rows = self._db.execute(sql, (*args, max(1, min(limit, 100_000)))).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "symbol": r["symbol"],
+                "recorded_at": r["recorded_at"],
+                "as_of": r["as_of"],
+                "source": r["source"],
+                "fictional": bool(r["fictional"]),
+                "timestamp_verified": bool(r["timestamp_verified"]),
+                "payload": json.loads(r["payload"]),
+            }
+            for r in rows
+        ]
+
+    def prune_snapshots(self, before: datetime) -> int:
+        with self._lock:
+            cur = self._db.execute("DELETE FROM snapshots WHERE recorded_at<?", (before.isoformat(),))
+            self._db.commit()
+            return cur.rowcount
+
+    def snapshot_stats(self) -> dict[str, Any]:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT COUNT(*) AS n, COALESCE(SUM(fictional), 0) AS fake, MIN(recorded_at) AS oldest,"
+                " MAX(recorded_at) AS newest FROM snapshots"
+            ).fetchone()
+        n, fake = int(row["n"]), int(row["fake"])
+        return {"total": n, "real": n - fake, "fictional": fake, "oldest": row["oldest"], "newest": row["newest"]}
+
+    # ---- equity curve ------------------------------------------------
+    def record_equity(self, ts: datetime, equity: float, cash: float, open_premium: float, fictional: bool) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO equity (ts, equity, cash, open_premium, fictional) VALUES (?,?,?,?,?)",
+                (ts.isoformat(), equity, cash, open_premium, int(fictional)),
+            )
+            self._db.commit()
+
+    def list_equity(self, limit: int = 500, fictional: Optional[bool] = None) -> list[dict[str, Any]]:
+        """The newest `limit` points, returned oldest first. `fictional` keeps made-up and real curves apart."""
+        sql = "SELECT * FROM equity" + ("" if fictional is None else " WHERE fictional=?")
+        args: tuple[Any, ...] = () if fictional is None else (int(fictional),)
+        with self._lock:
+            rows = self._db.execute(sql + " ORDER BY ts DESC, id DESC LIMIT ?", (*args, max(1, min(limit, 5000)))).fetchall()
+        return [{"ts": r["ts"], "equity": r["equity"], "cash": r["cash"], "open_premium": r["open_premium"],
+                 "fictional": bool(r["fictional"])} for r in reversed(rows)]
+
+    def prune_equity(self, before: datetime) -> int:
+        with self._lock:
+            cur = self._db.execute("DELETE FROM equity WHERE ts<?", (before.isoformat(),))
+            self._db.commit()
+            return cur.rowcount
+
+    # ---- scanner results (most-active names, unusual option activity): the newest per data kind is the live one ----
+    def record_scan(self, ts: datetime, fictional: bool, payload: dict[str, Any]) -> None:
+        with self._lock:
+            self._db.execute("INSERT INTO scan_results (ts, fictional, payload) VALUES (?,?,?)",
+                             (ts.isoformat(), int(fictional), json.dumps(payload, default=str)))
+            self._db.execute("DELETE FROM scan_results WHERE id NOT IN (SELECT id FROM scan_results ORDER BY id DESC LIMIT 200)")
+            self._db.commit()
+
+    def latest_scan(self, fictional: bool) -> Optional[dict[str, Any]]:
+        with self._lock:
+            r = self._db.execute("SELECT payload FROM scan_results WHERE fictional=? ORDER BY id DESC LIMIT 1",
+                                 (int(fictional),)).fetchone()
+        return json.loads(r["payload"]) if r else None
+
+    def scan_history(self, fictional: bool, limit: int = 200) -> list[dict[str, Any]]:
+        """Stored scans, oldest first (the store keeps the newest 200)."""
+        with self._lock:
+            rows = self._db.execute("SELECT payload FROM scan_results WHERE fictional=? ORDER BY id DESC LIMIT ?",
+                                    (int(fictional), max(1, min(limit, 200)))).fetchall()
+        return [json.loads(r["payload"]) for r in reversed(rows)]
+
+    # ---- unusual option contracts, remembered by New York trading day so the next day can confirm them ----
+    def record_unusual(self, day: str, fictional: bool, rows: list[dict[str, Any]]) -> None:
+        """Keep the highest-volume sighting of each contract for the day (volume only grows through the session)."""
+        with self._lock:
+            for r in rows:
+                cur = self._db.execute("SELECT payload FROM unusual_history WHERE day=? AND contract=? AND fictional=?",
+                                       (day, r["contract"], int(fictional))).fetchone()
+                if cur and json.loads(cur["payload"]).get("volume", 0) >= r["volume"]:
+                    continue
+                self._db.execute("INSERT OR REPLACE INTO unusual_history (day, contract, fictional, symbol, payload) VALUES (?,?,?,?,?)",
+                                 (day, r["contract"], int(fictional), r["symbol"], json.dumps(r, default=str)))
+            self._db.execute("DELETE FROM unusual_history WHERE day < date(?, '-60 day')", (day,))  # the tracker watches flags for 50 days
+            self._db.commit()
+
+    def unusual_before(self, day: str, fictional: bool) -> dict[str, dict[str, Any]]:
+        """The newest earlier sighting of every contract, keyed by contract, each with its day."""
+        with self._lock:
+            rows = self._db.execute("SELECT day, contract, payload FROM unusual_history WHERE day < ? AND fictional=? ORDER BY day",
+                                    (day, int(fictional))).fetchall()
+        out: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            out[r["contract"]] = {**json.loads(r["payload"]), "day": r["day"]}
+        return out
+
+    def unusual_sightings(self, symbol: Optional[str], since_day: str, before_day: str, fictional: bool) -> list[dict[str, Any]]:
+        """Every unusual sighting from since_day up to (not including) before_day, oldest first, each with its day."""
+        sql = "SELECT day, contract, payload FROM unusual_history WHERE fictional=? AND day>=? AND day<?"
+        args: list[Any] = [int(fictional), since_day, before_day]
+        if symbol is not None:
+            sql += " AND symbol=?"
+            args.append(symbol)
+        with self._lock:
+            rows = self._db.execute(sql + " ORDER BY day", args).fetchall()
+        return [{**json.loads(r["payload"]), "day": r["day"]} for r in rows]
+
+    def record_tracker_mark(self, contract: str, sighted_day: str, horizon: int, fictional: bool, observed_day: str, payload: dict[str, Any]) -> bool:
+        with self._lock:
+            cur = self._db.execute("INSERT OR IGNORE INTO tracker_marks (contract, sighted_day, horizon, fictional, observed_day, payload)"
+                                   " VALUES (?,?,?,?,?,?)", (contract, sighted_day, horizon, int(fictional), observed_day, json.dumps(payload, default=str)))
+            self._db.execute("DELETE FROM tracker_marks WHERE sighted_day < date(?, '-400 day')", (observed_day,))
+            self._db.commit()
+            return cur.rowcount == 1
+
+    def tracker_marks(self, fictional: bool) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT payload FROM tracker_marks WHERE fictional=? ORDER BY sighted_day, horizon", (int(fictional),)).fetchall()
+        return [json.loads(r["payload"]) for r in rows]
+
+    def unusual_streak(self, day: str, fictional: bool, contract: str) -> int:
+        """How many earlier trading days in a row (ending at the newest earlier day) this contract was unusual."""
+        with self._lock:
+            days = [r["day"] for r in self._db.execute(
+                "SELECT day FROM unusual_history WHERE contract=? AND fictional=? AND day<? ORDER BY day DESC",
+                (contract, int(fictional), day)).fetchall()]
+        return len(days)
+
+    # ---- research lanes that simulate trades outside the options account (the short-term lane) ----
+    def lane_open(self, lane: str, symbol: str, ts: datetime, price: float, quantity: int, fictional: bool,
+                  payload: dict[str, Any]) -> int:
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT INTO lane_trades (lane, symbol, opened_at, entry_price, quantity, open_payload, fictional)"
+                " VALUES (?,?,?,?,?,?,?)", (lane, symbol, ts.isoformat(), price, quantity, json.dumps(payload, default=str), int(fictional)))
+            self._db.commit()
+            return int(cur.lastrowid)
+
+    def lane_close(self, trade_id: int, ts: datetime, price: float, reason: str, payload: dict[str, Any]) -> bool:
+        with self._lock:
+            cur = self._db.execute(
+                "UPDATE lane_trades SET closed_at=?, exit_price=?, close_reason=?, close_payload=? WHERE id=? AND closed_at IS NULL",
+                (ts.isoformat(), price, reason, json.dumps(payload, default=str), trade_id))
+            self._db.commit()
+            return cur.rowcount == 1
+
+    def lane_trades(self, lane: str, fictional: bool, limit: int = 300) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM lane_trades WHERE lane=? AND fictional=? ORDER BY id DESC LIMIT ?",
+                                    (lane, int(fictional), max(1, min(limit, 2000)))).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["open_payload"] = json.loads(d["open_payload"])
+            d["close_payload"] = json.loads(d["close_payload"]) if d["close_payload"] else None
+            out.append(d)
+        return out
+
+    # ---- learned agent weights: append-only audit trail, the latest row per agent is the live value ----
+    def record_agent_weight(self, ts: datetime, agent: str, weight: float, n: int, accuracy: Optional[float],
+                            fictional: bool, note: str) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO agent_weights (ts, agent, weight, n, accuracy, fictional, note) VALUES (?,?,?,?,?,?,?)",
+                (ts.isoformat(), agent, weight, n, accuracy, int(fictional), note[:300]))
+            self._db.commit()
+
+    def latest_agent_weights(self, fictional: bool) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM agent_weights WHERE fictional=? ORDER BY id", (int(fictional),)).fetchall()
+        return {r["agent"]: {"weight": r["weight"], "n": r["n"], "accuracy": r["accuracy"], "ts": r["ts"]} for r in rows}
+
+    def list_agent_weights(self, fictional: bool, limit: int = 50) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM agent_weights WHERE fictional=? ORDER BY id DESC LIMIT ?",
+                                    (int(fictional), max(1, min(limit, 500)))).fetchall()
+        return [{"ts": r["ts"], "agent": r["agent"], "weight": r["weight"], "n": r["n"], "accuracy": r["accuracy"],
+                 "note": r["note"]} for r in rows]
+
+    # ---- pre-registered hypotheses (append-only: no update, no delete) -
+    def register_hypothesis(self, registered_at: datetime, content_hash: str, payload: dict[str, Any]) -> str:
+        with self._lock:
+            n = self._db.execute("SELECT COUNT(*) FROM hypotheses").fetchone()[0]
+            hid = f"H-{n + 1:04d}"
+            self._db.execute(
+                "INSERT INTO hypotheses (id, registered_at, content_hash, payload) VALUES (?,?,?,?)",
+                (hid, registered_at.isoformat(), content_hash, json.dumps({**payload, "id": hid}, sort_keys=True)),
+            )
+            self._db.commit()
+            return hid
+
+    def get_hypothesis(self, hid: str) -> Optional[dict[str, Any]]:
+        with self._lock:
+            r = self._db.execute("SELECT * FROM hypotheses WHERE id=?", (hid,)).fetchone()
+        if r is None:
+            return None
+        return {"id": r["id"], "registered_at": r["registered_at"], "content_hash": r["content_hash"],
+                "payload": json.loads(r["payload"])}
+
+    def list_hypotheses(self) -> list[dict[str, Any]]:
+        with self._lock:
+            ids = [r["id"] for r in self._db.execute("SELECT id FROM hypotheses ORDER BY id").fetchall()]
+        return [h for h in (self.get_hypothesis(i) for i in ids) if h]
+
+    def record_hypothesis_result(
+        self, hid: str, evaluated_at: datetime, mode: str, status: str, payload: dict[str, Any]
+    ) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO hypothesis_results (hypothesis_id, evaluated_at, mode, status, payload) VALUES (?,?,?,?,?)",
+                (hid, evaluated_at.isoformat(), mode, status, json.dumps(payload, default=str)),
+            )
+            self._db.commit()
+
+    def hypothesis_results(self, hid: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT * FROM hypothesis_results WHERE hypothesis_id=? ORDER BY id", (hid,)
+            ).fetchall()
+        return [{"evaluated_at": r["evaluated_at"], "mode": r["mode"], "status": r["status"],
+                 "payload": json.loads(r["payload"])} for r in rows]
+
+    # ---- decision journal --------------------------------------------
+    def record_decision(
+        self,
+        ts: datetime,
+        symbol: str,
+        kind: str,
+        disposition: str,
+        contract: str,
+        strategy: str,
+        ref_price: Optional[float],
+        order_id: Optional[str],
+        fictional: bool,
+        payload: dict[str, Any],
+    ) -> int:
+        """Append-only. A decision is never edited; outcomes are computed from it later, not written into it."""
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT INTO decisions (ts, symbol, kind, disposition, contract, strategy, ref_price, order_id,"
+                " fictional, payload) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (ts.isoformat(), symbol, kind, disposition, contract, strategy, ref_price, order_id, int(fictional),
+                 json.dumps(payload, default=str)),
+            )
+            self._db.commit()
+            return int(cur.lastrowid)
+
+    def list_decisions(
+        self,
+        kind: Optional[str] = None,
+        include_fictional: bool = True,
+        newest_first: bool = True,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        where, args = [], []  # type: list[str], list[Any]
+        if kind:
+            where.append("kind=?")
+            args.append(kind)
+        if not include_fictional:
+            where.append("fictional=0")
+        sql = "SELECT * FROM decisions" + (" WHERE " + " AND ".join(where) if where else "")
+        sql += " ORDER BY ts DESC, id DESC LIMIT ?" if newest_first else " ORDER BY ts, id LIMIT ?"
+        with self._lock:
+            rows = self._db.execute(sql, (*args, max(1, min(limit, 100_000)))).fetchall()
+        return [
+            {
+                "id": r["id"], "ts": r["ts"], "symbol": r["symbol"], "kind": r["kind"],
+                "disposition": r["disposition"], "contract": r["contract"], "strategy": r["strategy"],
+                "ref_price": r["ref_price"], "order_id": r["order_id"], "fictional": bool(r["fictional"]),
+                "payload": json.loads(r["payload"]),
+            }
+            for r in rows
+        ]
+
+    def first_snapshot_at_or_after(
+        self, symbol: str, when: datetime, include_fictional: bool = False
+    ) -> Optional[dict[str, Any]]:
+        sql = "SELECT * FROM snapshots WHERE symbol=? AND recorded_at>=?" + ("" if include_fictional else " AND fictional=0")
+        with self._lock:
+            r = self._db.execute(sql + " ORDER BY recorded_at, id LIMIT 1", (symbol, when.isoformat())).fetchone()
+        if r is None:
+            return None
+        return {"id": r["id"], "symbol": r["symbol"], "recorded_at": r["recorded_at"], "fictional": bool(r["fictional"]),
+                "payload": json.loads(r["payload"])}
+
+    # ---- data-quality log --------------------------------------------
+    def record_data_issue(self, ts: datetime, symbol: str, kind: str, severity: str, count: int, detail: str) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO data_issues (ts, symbol, kind, severity, count, detail) VALUES (?,?,?,?,?,?)",
+                (ts.isoformat(), symbol, kind, severity, int(count), detail[:200]),
+            )
+            self._db.commit()
+
+    def data_issue_summary(self, since: datetime) -> dict[str, dict[str, Any]]:
+        """Per issue kind since `since`: severity, how many times it occurred, and how many rows/cycles it touched."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT kind, severity, COUNT(*) AS events, SUM(count) AS items FROM data_issues"
+                " WHERE ts>=? GROUP BY kind, severity ORDER BY kind",
+                (since.isoformat(),),
+            ).fetchall()
+        return {r["kind"]: {"severity": r["severity"], "events": int(r["events"]), "items": int(r["items"])} for r in rows}
+
+    def prune_data_issues(self, before: datetime) -> int:
+        with self._lock:
+            cur = self._db.execute("DELETE FROM data_issues WHERE ts<?", (before.isoformat(),))
+            self._db.commit()
+            return cur.rowcount
+
     # ---- key/value state ---------------------------------------------
     def get_state(self, key: str, default: str = "") -> str:
         with self._lock:
@@ -156,7 +635,7 @@ class Store:
     # ---- market data recorder ----------------------------------------
     # Raw observations only: what a provider returned, when we recorded it, and where it came from.
     # `as_of` is the provider's claimed time and `timestamp_verified` says whether the venue supplied it.
-    def record_snapshot(self, snap: Any, *, recorded_at: Optional[datetime] = None) -> int:
+    def record_market_snapshot(self, snap: Any, *, recorded_at: Optional[datetime] = None) -> int:
         """Persist a MarketSnapshot and its chain rows in one transaction. Returns the snapshot id."""
         rec = (recorded_at or utcnow()).isoformat()
         with self._lock:
@@ -185,7 +664,7 @@ class Store:
                 raise
         return snapshot_id
 
-    def record_quotes(
+    def record_market_quotes(
         self, quotes: Iterable[Quote], *, fictional: bool, recorded_at: Optional[datetime] = None
     ) -> int:
         """Persist standalone quotes (e.g. for held positions). Returns the number stored."""
@@ -210,13 +689,13 @@ class Store:
                 raise
         return len(rows)
 
-    def recorder_counts(self) -> dict[str, int]:
+    def market_recorder_counts(self) -> dict[str, int]:
         with self._lock:
             snaps = self._db.execute("SELECT COUNT(*) AS n FROM market_snapshots").fetchone()["n"]
             quotes = self._db.execute("SELECT COUNT(*) AS n FROM market_quotes").fetchone()["n"]
         return {"snapshots": snaps, "quotes": quotes}
 
-    def recorded_snapshots(self, symbol: Optional[str] = None, limit: int = 100) -> list[dict[str, Any]]:
+    def recorded_market_snapshots(self, symbol: Optional[str] = None, limit: int = 100) -> list[dict[str, Any]]:
         """Snapshots in recording order (oldest first), each with its chain rows."""
         with self._lock:
             if symbol:

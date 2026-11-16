@@ -16,17 +16,27 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
+from . import committee as cmt
+from .agents import Context
 from .broker.sim import SimBroker
+from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
+from .market_clock import session_status, upcoming_closures
+from .events import EventCalendar
+from .dataquality import MAX_FUTURE_SKEW_S, check_snapshot, frozen_issue, quote_fingerprint
+from .diagnostics import clock_status
 from .liquidity import size_vs_liquidity
 from .flow import CAVEATS as FLOW_CAVEATS, related_themes, scan_flow
 from .gex import ASSUMPTIONS as GEX_ASSUMPTIONS, net_gex
-from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
-from .market_clock import session_status, upcoming_closures
-from .marketdata import MarketDataProvider, MarketSnapshot
+from .marketdata import MarketDataProvider, MarketSnapshot, snapshot_to_dict
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
 from .orders import OrderManager
 from .pricing import sell_limit_for
 from .risk import RiskPolicy
+from .scanner import Scanner
+from .universe import SECTORS
+from .shortterm import ShortTermLane
+from .swing import SwingLane
+from .optionlanes import OptionLanes
 from .strategy import Strategy
 
 SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
@@ -58,6 +68,13 @@ class EngineConfig:
     max_days_held: int = 0
     min_dte_to_hold: int = 5
     reentry_cooldown_s: int = 86400  # do not re-buy a contract within this long of selling it
+    record_snapshots: bool = True  # keep every observed snapshot: the raw material for honest replay
+    snapshot_retention_days: int = 30
+    scan_interval_s: int = 0  # 0 = off; otherwise the most-active and unusual-activity scan runs this often
+    committee_mode: str = "shadow"  # off | shadow (records its votes only) | active (its vote and size apply)
+    shortterm_enabled: bool = False  # research lane: simulated intraday share trades on the underlying, no orders
+    swing_enabled: bool = False  # research lane: simulated multi-day share trades on daily bars, no orders
+    option_lanes_enabled: bool = False  # research lanes: simulated long calls and puts from real chain quotes, no orders
     record_market_data: bool = True  # persist every snapshot/quote the engine sees (replay raw material)
     record_retention_days: int = 90  # 0 keeps recordings forever
 
@@ -91,7 +108,7 @@ class EngineConfig:
         for name, value in asdict(self).items():
             if name == "watchlist":
                 continue
-            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_market_data")):
+            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots", "record_market_data", "shortterm_enabled", "swing_enabled", "option_lanes_enabled")):
                 raise ValueError(f"{name} has the wrong type")
         checks = [
             (0 <= self.max_new_per_cycle <= 5, "max_new_per_cycle must be 0-5"),
@@ -102,6 +119,9 @@ class EngineConfig:
             (0 <= self.max_days_held <= 365, "max_days_held must be 0-365"),
             (0 <= self.min_dte_to_hold <= 60, "min_dte_to_hold must be 0-60"),
             (0 <= self.reentry_cooldown_s <= 2_592_000, "reentry_cooldown_s must be 0-2592000"),
+            (1 <= self.snapshot_retention_days <= 3650, "snapshot_retention_days must be 1-3650"),
+            (self.scan_interval_s == 0 or 600 <= self.scan_interval_s <= 86400, "scan_interval_s must be 0 or 600-86400"),
+            (self.committee_mode in ("off", "shadow", "active"), "committee_mode must be off, shadow or active"),
             (0 <= self.record_retention_days <= 3650, "record_retention_days must be 0-3650"),
         ]
         for ok, message in checks:
@@ -131,7 +151,9 @@ class TradingEngine:
         *,
         clock: Callable[[], datetime] = utcnow,
         default_config: Optional[EngineConfig] = None,
+        calendar: Optional[EventCalendar] = None,
     ) -> None:
+        self.calendar = calendar or EventCalendar(clock=clock)
         self.manager = manager
         self.provider = provider
         self.strategy = strategy
@@ -139,7 +161,16 @@ class TradingEngine:
         self.clock = clock
         self._default = default_config or EngineConfig()
         self._lock = threading.RLock()
-        self._record = True  # per-cycle copy of cfg.record_market_data
+        self._cycle_cfg: EngineConfig = self._default
+        self._cycle_now: datetime = self.clock()
+        self._cycle_market_open: bool = False
+        self._journal_seen: dict[tuple[str, str, str], datetime] = {}
+        self._last_fingerprint: dict[str, tuple[str, int]] = {}
+        self.scanner = Scanner(provider, self.store, clock=clock)
+        self.shortterm = ShortTermLane(provider, self.store, clock=clock)
+        self.swing = SwingLane(provider, self.store, clock=clock, calendar=self.calendar)
+        self.option_lanes = OptionLanes(provider, self.store, clock=clock, calendar=self.calendar)
+        self._record_market = True  # per-cycle copy of cfg.record_market_data
 
     # ---- config -------------------------------------------------------
     def config(self) -> EngineConfig:
@@ -158,6 +189,10 @@ class TradingEngine:
         self.store.audit("engine_config", None, {"changes": changes})
         return new
 
+    def _hours_enforced(self, cfg: EngineConfig) -> bool:
+        """Market hours can only be switched off for fictional data. Real quotes outside the session are stale."""
+        return cfg.enforce_market_hours or not self.provider.fictional
+
     def last_cycle(self) -> Optional[dict[str, Any]]:
         raw = self.store.get_state("last_cycle", "")
         return json.loads(raw) if raw else None
@@ -166,11 +201,19 @@ class TradingEngine:
         is_open, reason = session_status(self.clock())
         return {
             "config": self.config().to_dict(),
-            "market": {"open": is_open, "reason": reason, "upcoming": upcoming_closures(self.clock())},
+            "market": {"open": is_open, "reason": reason, "hours_enforced": self._hours_enforced(self.config()),
+                       "upcoming": upcoming_closures(self.clock())},
             "data_source": {"name": self.provider.name, "fictional": self.provider.fictional},
             "strategy": {"name": self.strategy.name, "version": self.strategy.version},
             "kill_switch": self.manager.kill_switch_active(),
             "last_cycle": self.last_cycle(),
+            "clock": clock_status((self.last_cycle() or {}).get("clock_ahead_s"), MAX_FUTURE_SKEW_S),
+            "sectors": list(SECTORS),
+            "recorder": self.store.snapshot_stats(),
+            "data_quality": {
+                "window_hours": 24,
+                "issues": self.store.data_issue_summary(self.clock() - timedelta(hours=24)),
+            },
             "recent_outcomes": self.recent_outcomes(),
             "exit_plans": self.exit_plans(),
         }
@@ -226,7 +269,9 @@ class TradingEngine:
             now = self.clock()
             cfg = self.config()
             is_open, reason = session_status(now)
-            trading_allowed = is_open or not cfg.enforce_market_hours
+            trading_allowed = is_open or not self._hours_enforced(cfg)
+            self._cycle_cfg, self._cycle_now = cfg, now
+            self._cycle_market_open = is_open
             report: dict[str, Any] = {
                 "started_at": now.isoformat(),
                 "market_open": is_open,
@@ -239,6 +284,8 @@ class TradingEngine:
                 "exits": [],
                 "entries": [],
                 "entries_note": "",
+                "snapshots_recorded": 0,
+                "data_quality": [],
                 "candidates": [],
                 "gex": [],
                 "gex_assumptions": list(GEX_ASSUMPTIONS),
@@ -247,8 +294,10 @@ class TradingEngine:
                 "flow_caveats": list(FLOW_CAVEATS),
                 "errors": [],
             }
+            self._guard(report, "snapshot prune", lambda: self._maybe_prune_snapshots(cfg, now))
+            self._maybe_learn(cfg, now)
             snapshots: dict[str, Optional[MarketSnapshot]] = {}
-            self._record = cfg.record_market_data
+            self._record_market = cfg.record_market_data
 
             if hasattr(self.provider, "advance"):
                 self.provider.advance()  # demo market moves one step per cycle
@@ -284,6 +333,12 @@ class TradingEngine:
     def _finish(self, report: dict[str, Any]) -> dict[str, Any]:
         self._purge_recordings(report)
         report["finished_at"] = self.clock().isoformat()
+        if report.get("trading_allowed"):  # equity only moves with the market; flat overnight points would stretch the chart
+            try:
+                acct = self.manager.broker.get_account()
+                self.store.record_equity(self._cycle_now, acct.equity, acct.cash, acct.open_premium, self.provider.fictional)
+            except Exception:  # noqa: BLE001 - a missing chart point must never affect a cycle
+                pass
         self._guard(report, "outcome_history", lambda: self._remember_outcomes(report))
         self.store.set_state("last_cycle", json.dumps(report, default=str))
         self.store.audit("engine_cycle", None, {"exits": len(report["exits"]), "entries": len(report["entries"])})
@@ -311,14 +366,216 @@ class TradingEngine:
         if symbol not in cache:
             try:
                 cache[symbol] = self.provider.snapshot(symbol)
-                self._record_snapshot(cache[symbol], report)
+                self._record_market_snapshot(cache[symbol], report)
                 self._summarize_gex(cache[symbol], report)
                 self._summarize_flow(cache[symbol], report)
             except Exception as exc:  # noqa: BLE001
                 cache[symbol] = None
                 report["errors"].append(f"data {symbol}: {type(exc).__name__}: {str(exc)[:100]}")
+            else:
+                self._record(cache[symbol], report)  # the raw snapshot is kept as the provider returned it
+                cache[symbol] = self._vet(cache[symbol], report)
         return cache[symbol]
 
+    JOURNAL_DEDUPE_S = 3600
+    JOURNAL_MAX_CANDIDATES = 5
+    _ALWAYS_JOURNAL = {"FILLED", "SUBMITTED", "PARTIALLY_FILLED", "RISK_REJECTED", "BROKER_REJECTED"}
+
+    def _journal(
+        self,
+        kind: str,
+        symbol: str,
+        disposition: str,
+        contract: Any,
+        ref_price: Optional[float],
+        payload: dict[str, Any],
+        snap: Optional[MarketSnapshot] = None,
+        order_id: Optional[str] = None,
+    ) -> None:
+        """Append one decision record. Repeats of the same contract/disposition within an hour are not re-written
+        (a candidate that stays on screen every cycle would otherwise flood the journal). Never blocks trading."""
+        try:
+            key = (contract.occ_symbol.strip(), kind, disposition)
+            last = self._journal_seen.get(key)
+            if disposition not in self._ALWAYS_JOURNAL and last is not None and (
+                self._cycle_now - last
+            ).total_seconds() < self.JOURNAL_DEDUPE_S:
+                return
+            self._journal_seen[key] = self._cycle_now
+            provenance = {
+                "data_source": self.provider.name,
+                "snapshot_source": snap.source if snap else None,
+                "quote_time_verified": snap.timestamp_verified if snap else None,
+                "broker": self.manager.broker.name,
+            }
+            assumptions = ["Fills are simulated; the strategy has no demonstrated edge."]
+            if snap is not None and not snap.timestamp_verified:
+                assumptions.append("Quote times are unverified (download time, not exchange time).")
+            self.store.record_decision(
+                self._cycle_now, symbol, kind, disposition, contract.occ_symbol.strip(),
+                f"{self.strategy.name}:{self.strategy.version}", ref_price, order_id,
+                self.provider.fictional, {**payload, "contract": contract.to_dict(), "provenance": provenance,
+                                          "assumptions": assumptions},
+            )
+        except Exception:  # noqa: BLE001 - the journal must never stop a cycle
+            pass
+
+    def _vet(self, snap: MarketSnapshot, report: dict[str, Any]) -> Optional[MarketSnapshot]:
+        """Run the data-quality gate. A rejected snapshot is treated exactly like a failed data fetch."""
+        result = check_snapshot(snap, self._cycle_now)
+        ahead = (snap.as_of - self._cycle_now).total_seconds()
+        report["clock_ahead_s"] = max(ahead, report.get("clock_ahead_s", ahead))
+        issues = list(result.issues)
+        fp = quote_fingerprint(snap)
+        prev, n = self._last_fingerprint.get(snap.symbol, ("", 0))
+        n = n + 1 if fp == prev else 0
+        self._last_fingerprint[snap.symbol] = (fp, n)
+        frozen = frozen_issue(n, self._cycle_market_open)
+        if frozen:
+            issues.append(frozen)
+        for issue in issues:
+            report["data_quality"].append(
+                {"symbol": snap.symbol, "kind": issue.kind, "severity": issue.severity, "count": issue.count}
+            )
+            try:
+                self.store.record_data_issue(self._cycle_now, snap.symbol, issue.kind, issue.severity, issue.count, issue.detail)
+            except Exception as exc:  # noqa: BLE001 - logging trouble must not hide the data problem
+                report["errors"].append(f"data issue log: {type(exc).__name__}")
+        if result.rejected:
+            reason = next(i for i in issues if i.severity == "reject")
+            report["errors"].append(f"data {snap.symbol}: rejected ({reason.kind}: {reason.detail})")
+        return result.snapshot
+
+    def _record(self, snap: MarketSnapshot, report: dict[str, Any]) -> None:
+        """Keep what the market looked like. A recording failure is reported but never blocks trading logic."""
+        if not self._cycle_cfg.record_snapshots:
+            return
+        try:
+            self.store.record_snapshot(
+                snap.symbol,
+                self._cycle_now,
+                snap.as_of,
+                snap.source,
+                snap.fictional or self.provider.fictional,
+                snap.timestamp_verified,
+                snapshot_to_dict(snap),
+            )
+            report["snapshots_recorded"] += 1
+        except Exception as exc:  # noqa: BLE001
+            report["errors"].append(f"record {snap.symbol}: {type(exc).__name__}: {str(exc)[:100]}")
+
+    def _flow_view(self, symbol: str, now: datetime) -> Optional[dict[str, Any]]:
+        """The scanner's unusual contracts on one name, from the newest stored scan. None when there is no scan."""
+        try:
+            scan = self.store.latest_scan(self.provider.fictional)
+            if not scan:
+                return None
+            age_h = (now - datetime.fromisoformat(scan["as_of"])).total_seconds() / 3600
+            rows = [{k: u.get(k) for k in ("contract", "right", "likely_side", "quoted_turnover_usd", "volume_oi_ratio")}
+                    for u in scan.get("unusual", []) if u.get("symbol") == symbol]
+            return {"as_of": scan["as_of"], "age_h": round(age_h, 1), "rows": rows}
+        except Exception:  # noqa: BLE001 - flow is advisory; no view means the agent abstains
+            return None
+
+    def _committee_votes(self, cfg: EngineConfig, symbol: str, snap: MarketSnapshot, proposals: list[Any],
+                         positions: list[Position], account: Account, now: datetime) -> dict[Any, cmt.CommitteeDecision]:
+        """Ask the committee about the top candidates and journal every verdict. In shadow mode that is all it does."""
+        if cfg.committee_mode == "off":
+            return {}
+        votes: dict[Any, cmt.CommitteeDecision] = {}
+        try:
+            weights, trust = cmt.current(self.store, self.provider.fictional)
+        except Exception:  # noqa: BLE001
+            return {}
+        for p in proposals[: self.JOURNAL_MAX_CANDIDATES]:
+            cap = size_quantity(account, self.manager.policy, p.limit_price)
+            if cap < 1:
+                continue
+            try:
+                view = self.calendar.view(symbol, now.date(), p.contract.expiry)
+                ctx = Context(snap, p, now, account, self.manager.policy, tuple(positions), cap,
+                              cfg.min_dte_to_hold, cfg.stop_loss_pct, view, self._flow_view(symbol, now))
+                d = cmt.decide(ctx, weights, trust)
+            except Exception:  # noqa: BLE001 - no decision: shadow ignores it, active mode refuses the candidate
+                continue
+            votes[p.contract] = d
+            self._journal(cmt.KIND, symbol, d.disposition, p.contract, p.limit_price, d.to_payload(weights, trust), snap)
+        return votes
+
+    def maybe_shortterm(self) -> Optional[dict[str, Any]]:
+        """One pass of the short-term research lane when it is switched on and the market is open (or the data is
+        fictional with hours not enforced). It never places an order and never raises into the trading loop."""
+        try:
+            cfg = self.config()
+            if not cfg.shortterm_enabled:
+                return None
+            if not session_status(self.clock())[0] and self._hours_enforced(cfg):
+                return None
+            return self.shortterm.step()
+        except Exception:  # noqa: BLE001
+            return None
+
+    def maybe_swing(self, force: bool = False) -> Optional[dict[str, Any]]:
+        """One pass of the swing research lane when it is switched on. Throttled inside the lane. It never places an
+        order and never raises into the trading loop."""
+        try:
+            if not self.config().swing_enabled:
+                return None
+            return self.swing.step(force=force)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def maybe_option_lanes(self, force: bool = False) -> Optional[list[dict[str, Any]]]:
+        """One pass of the five options research lanes when they are switched on and quotes exist (the market is open,
+        or the data is fictional with hours not enforced). Each lane throttles itself. Nothing here places an order, and
+        nothing raises into the trading loop."""
+        try:
+            cfg = self.config()
+            if not cfg.option_lanes_enabled:
+                return None
+            if not session_status(self.clock())[0] and self._hours_enforced(cfg):
+                return None
+            return self.option_lanes.step(force=force)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def maybe_scan(self) -> None:
+        """Start the background scan when it is due. Never blocks or raises into the trading loop."""
+        try:
+            cfg = self.config()
+            if cfg.scan_interval_s == 0:
+                return
+            now = self.clock()
+            last = self.store.get_state("scan_last_started", "")
+            if last and (now - datetime.fromisoformat(last)).total_seconds() < cfg.scan_interval_s:
+                return
+            if self.scanner.start():
+                self.store.set_state("scan_last_started", now.isoformat())
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _maybe_learn(self, cfg: EngineConfig, now: datetime) -> None:
+        """Refit agent weights and committee trust from matured outcomes, at most every 30 minutes."""
+        if cfg.committee_mode == "off":
+            return
+        try:
+            last = self.store.get_state("committee_last_learn", "")
+            if last and now - datetime.fromisoformat(last) < timedelta(minutes=30):
+                return
+            cmt.learn(self.store, now, self.provider.fictional)
+            self.store.set_state("committee_last_learn", now.isoformat())
+        except Exception:  # noqa: BLE001 - learning must never stop a cycle
+            pass
+
+    def _maybe_prune_snapshots(self, cfg: EngineConfig, now: datetime) -> None:
+        """Delete snapshots older than the retention window, at most once an hour."""
+        last = self.store.get_state("snapshot_last_prune", "")
+        if last and now - datetime.fromisoformat(last) < timedelta(hours=1):
+            return
+        self.store.prune_snapshots(now - timedelta(days=cfg.snapshot_retention_days))
+        self.store.prune_data_issues(now - timedelta(days=cfg.snapshot_retention_days))
+        self.store.prune_equity(now - timedelta(days=max(cfg.snapshot_retention_days, 90)))
+        self.store.set_state("snapshot_last_prune", now.isoformat())
     @staticmethod
     def _summarize_flow(snap: MarketSnapshot, report: dict[str, Any]) -> None:
         """Display-only unusual-turnover radar; a failure is reported but never affects trading."""
@@ -338,20 +595,20 @@ class TradingEngine:
         except Exception as exc:  # noqa: BLE001
             report["errors"].append(f"gex {snap.symbol}: {type(exc).__name__}")
 
-    def _record_snapshot(self, snap: MarketSnapshot, report: dict[str, Any]) -> None:
+    def _record_market_snapshot(self, snap: MarketSnapshot, report: dict[str, Any]) -> None:
         """Recording is best effort: a storage failure is reported but never blocks trading or exits."""
-        if not self._record:
+        if not self._record_market:
             return
         try:
-            self.store.record_snapshot(snap, recorded_at=self.clock())
+            self.store.record_market_snapshot(snap, recorded_at=self.clock())
         except Exception as exc:  # noqa: BLE001
             report["errors"].append(f"recorder {snap.symbol}: {type(exc).__name__}: {str(exc)[:100]}")
 
-    def _record_quotes(self, quotes: list, report: dict[str, Any]) -> None:
-        if not self._record:
+    def _record_market_quotes(self, quotes: list, report: dict[str, Any]) -> None:
+        if not self._record_market:
             return
         try:
-            self.store.record_quotes(quotes, fictional=self.provider.fictional, recorded_at=self.clock())
+            self.store.record_market_quotes(quotes, fictional=self.provider.fictional, recorded_at=self.clock())
         except Exception as exc:  # noqa: BLE001
             report["errors"].append(f"recorder quotes: {type(exc).__name__}: {str(exc)[:100]}")
 
@@ -378,7 +635,7 @@ class TradingEngine:
         if missing:
             try:
                 held = self.provider.quotes_for(missing)
-                self._record_quotes(held, report)
+                self._record_market_quotes(held, report)
                 for quote in held:
                     sim.set_quote(quote)
             except Exception as exc:  # noqa: BLE001
@@ -426,6 +683,15 @@ class TradingEngine:
                     item["result"] = "DEFERRED_MARKET_CLOSED"
                 else:
                     item.update(self._submit_exit(cfg, pos, quote, now))
+            if decision.action != "HOLD":  # holds are the quiet default and would drown the journal
+                self._journal(
+                    "EXIT", pos.contract.underlying, item.get("result") or decision.action, pos.contract,
+                    quote.bid if quote is not None else None,
+                    {"action": decision.action, "reason": decision.reason, "trigger": decision.trigger,
+                     "pnl_pct": decision.pnl_pct, "quantity": pos.quantity,
+                     "risk_failures": item.get("risk_failures", [])},
+                    order_id=item.get("order_id"),
+                )
             out.append(item)
         return out
 
@@ -493,9 +759,15 @@ class TradingEngine:
                 closed_at = self.manager.last_close_time(contract)
                 return closed_at is not None and now - closed_at < cooldown
 
-            proposals = [
-                p for p in self.strategy.propose(snap, now) if p.contract not in held and not cooling(p.contract)
-            ]
+            raw = self.strategy.propose(snap, now)
+            for p in raw[: self.JOURNAL_MAX_CANDIDATES]:
+                if p.contract in held:
+                    self._journal("ENTRY", symbol, "SKIPPED_HELD", p.contract, p.limit_price,
+                                  {"rationale": p.rationale, "score": p.score}, snap)
+                elif cooling(p.contract):
+                    self._journal("ENTRY", symbol, "SKIPPED_COOLDOWN", p.contract, p.limit_price,
+                                  {"rationale": p.rationale, "score": p.score}, snap)
+            proposals = [p for p in raw if p.contract not in held and not cooling(p.contract)]
             if not proposals:
                 item_np: dict[str, Any] = {"symbol": symbol, "result": "NO_PROPOSAL"}
                 explain = getattr(self.strategy, "explain_no_proposal", None)
@@ -522,16 +794,40 @@ class TradingEngine:
                     }
                 )
             account = self.manager.broker.get_account()
+            votes = self._committee_votes(cfg, symbol, snap, proposals, positions, account, now)
             chosen = None
+            declined = False
             for proposal in proposals:  # best first; take the first one that fits the size cap
                 quantity = size_quantity(account, self.manager.policy, proposal.limit_price)
-                if quantity >= 1:
-                    chosen = (proposal, quantity)
-                    break
+                if quantity < 1:
+                    continue
+                if cfg.committee_mode == "active":  # the committee may refuse, or take less. Never more than the cap
+                    d = votes.get(proposal.contract)
+                    if d is None or d.disposition != cmt.ENTER:
+                        declined = True
+                        continue
+                    quantity = min(quantity, d.quantity)
+                chosen = (proposal, quantity)
+                break
+            if chosen is None and declined:
+                report["entries"].append({"symbol": symbol, "result": "COMMITTEE_DECLINED"})
+                for p in proposals[: self.JOURNAL_MAX_CANDIDATES]:
+                    self._journal("ENTRY", symbol, "NOT_CHOSEN_COMMITTEE", p.contract, p.limit_price,
+                                  {"rationale": p.rationale, "score": p.score,
+                                   "why": "; ".join(votes[p.contract].reasons) if p.contract in votes else "not put to the committee: does not fit the size cap"}, snap)
+                continue
             if chosen is None:
+                for p in proposals[: self.JOURNAL_MAX_CANDIDATES]:
+                    self._journal("ENTRY", symbol, "NOT_CHOSEN_SIZE_CAP", p.contract, p.limit_price,
+                                  {"rationale": p.rationale, "score": p.score}, snap)
                 report["entries"].append({"symbol": symbol, "result": "NOTHING_AFFORDABLE_WITHIN_SIZE_CAP"})
                 continue
             proposal, quantity = chosen
+            for p in proposals[: self.JOURNAL_MAX_CANDIDATES]:
+                if p is not proposal:
+                    self._journal("ENTRY", symbol, "NOT_CHOSEN", p.contract, p.limit_price,
+                                  {"rationale": p.rationale, "score": p.score,
+                                   "why": "ranked below the chosen candidate or over the size cap"}, snap)
             bucket = int(now.timestamp() // cfg.order_ttl_s)
             intent = OrderIntent(
                 idempotency_key=f"e-{proposal.contract.occ_symbol.strip()}-{bucket}",
@@ -548,6 +844,9 @@ class TradingEngine:
                 "limit_price": proposal.limit_price,
                 "rationale": proposal.rationale,
             }
+            if proposal.contract in votes:
+                item["committee"] = {"decision": votes[proposal.contract].disposition, "mode": cfg.committee_mode,
+                                     "reasons": list(votes[proposal.contract].reasons)}
             try:  # display only: never let it affect trading
                 item["size_vs_liquidity"] = size_vs_liquidity(
                     quantity, proposal.rationale.get("volume"), proposal.rationale.get("open_interest")
@@ -559,11 +858,16 @@ class TradingEngine:
             except ValueError as exc:
                 item.update(result="KEY_CONFLICT", detail=str(exc)[:100])
                 report["entries"].append(item)
+                self._journal("ENTRY", symbol, "KEY_CONFLICT", proposal.contract, proposal.limit_price,
+                              {"rationale": proposal.rationale, "score": proposal.score, "quantity": quantity}, snap)
                 continue
             item.update(result=order.state.value, order_id=order.id)
             if order.risk_failures:
                 item["risk_failures"] = order.risk_failures
             report["entries"].append(item)
+            self._journal("ENTRY", symbol, order.state.value, proposal.contract, proposal.limit_price,
+                          {"rationale": proposal.rationale, "score": proposal.score, "quantity": quantity,
+                           "risk_failures": order.risk_failures}, snap, order.id)
             if order.state in (OrderState.SUBMITTED, OrderState.PARTIALLY_FILLED, OrderState.FILLED):
                 submitted += 1
         report["candidates"].sort(key=lambda c: (-c["score"], c["contract"]))
@@ -573,16 +877,18 @@ class TradingEngine:
 class Runner:
     """Runs engine cycles on a background thread at the configured interval."""
 
+    STALL_FACTOR = 3  # no successful cycle for this many intervals means the loop is stalled
+
     def __init__(self, engine: TradingEngine) -> None:
         self.engine = engine
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self.last_error: Optional[str] = None
+        self.started_at: Optional[datetime] = None
         self.last_success_at: Optional[datetime] = None
         self.last_failure_at: Optional[datetime] = None
         self.consecutive_failures = 0
-        self.started_at: Optional[datetime] = None
 
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive() and not self._stop.is_set()
@@ -592,7 +898,8 @@ class Runner:
             if self.running():
                 return
             self._stop.clear()
-            self.started_at = datetime.now(timezone.utc)
+            self.started_at = self.engine.clock()
+            self.last_success_at = None
             self._thread = threading.Thread(target=self._loop, name="optplat-runner", daemon=True)
             self._thread.start()
 
@@ -603,24 +910,34 @@ class Runner:
         if thread is not None:
             thread.join(timeout=5)
 
-    def status(self, now: Optional[datetime] = None) -> dict[str, Any]:
-        """Runner health. `stalled` is true when the loop claims to run but has had no
-        successful cycle for 3x the interval (measured from the last success, or from
-        start if none yet). Unknown timing is never reported as healthy."""
-        now = now or datetime.now(timezone.utc)
-        running = self.running()
-        interval = self.engine.config().interval_s
+    def seconds_since_success(self, now: Optional[datetime] = None) -> Optional[int]:
+        """Seconds since the last cycle that finished without raising (or since start, if none has yet)."""
         ref = self.last_success_at or self.started_at
-        since = (now - ref).total_seconds() if ref else None
-        stalled = bool(running and (since is None or since > 3 * interval))
+        if ref is None:
+            return None
+        return max(0, int(((now or self.engine.clock()) - ref).total_seconds()))
+
+    def stalled(self, now: Optional[datetime] = None) -> bool:
+        since = self.seconds_since_success(now)
+        return self.running() and since is not None and since > self.STALL_FACTOR * self.engine.config().interval_s
+
+    def status(self, now: Optional[datetime] = None) -> dict[str, Any]:
         return {
-            "running": running,
+            "running": self.running(),
             "last_error": self.last_error,
             "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
+            "seconds_since_success": self.seconds_since_success(now),
+            "stalled": self.stalled(now),
             "last_failure_at": self.last_failure_at.isoformat() if self.last_failure_at else None,
             "consecutive_failures": self.consecutive_failures,
-            "seconds_since_success": round(since, 1) if since is not None else None,
-            "stalled": stalled,
+        }
+
+    def health(self) -> dict[str, Any]:
+        """The part safe for the unauthenticated health endpoint: no error text."""
+        return {
+            "running": self.running(),
+            "stalled": self.stalled(),
+            "seconds_since_success": self.seconds_since_success(),
         }
 
     def _loop(self) -> None:
@@ -629,9 +946,13 @@ class Runner:
                 self.engine.run_cycle()
                 self.last_error = None
                 self.consecutive_failures = 0
-                self.last_success_at = datetime.now(timezone.utc)
+                self.last_success_at = self.engine.clock()
+                self.engine.maybe_scan()
+                self.engine.maybe_shortterm()
+                self.engine.maybe_swing()
+                self.engine.maybe_option_lanes()
             except Exception as exc:  # noqa: BLE001 - keep the loop alive; the error is surfaced in status
                 self.consecutive_failures += 1
-                self.last_failure_at = datetime.now(timezone.utc)
+                self.last_failure_at = self.engine.clock()
                 self.last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
             self._stop.wait(self.engine.config().interval_s)

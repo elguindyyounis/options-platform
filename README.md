@@ -27,8 +27,28 @@ demo market is fictional random data, so profit or loss there means nothing.
 | Exit rules | `src/optplat/exits.py` | Take profit, stop loss, expiry window, optional time stop. Unpriceable means UNOBSERVABLE |
 | Strategy | `src/optplat/strategy.py` | Strategy interface and a baseline liquid-trend strategy |
 | Market data | `src/optplat/marketdata.py` | Fictional demo market, static test provider, unofficial Yahoo provider |
+| Recorder | `src/optplat/store.py`, `engine.py` | Stores every market snapshot the engine sees (real and fictional kept apart), pruned by a retention setting |
+| Replay | `src/optplat/replay.py` | Runs the real engine over recorded snapshots with no look-ahead, in a throwaway store |
+| Evaluation | `src/optplat/evaluation.py` | In-sample vs out-of-sample report over recorded data. Labels results only above minimum trade counts |
+| Data quality | `src/optplat/dataquality.py` | Drops or rejects bad quotes and snapshots before anything uses them; logs every issue |
+| Decision journal | `src/optplat/journal.py` | Why each entry, exit or skipped candidate happened, and what skipped candidates did afterwards |
+| Research | `src/optplat/research.py` | Pre-registered challenger vs frozen baseline experiments; confirmatory results use only data recorded after registration |
+| Options signals | `src/optplat/signals.py` | Volume/OI, unusual activity, liquidity tiers, partial-chain GEX. All unvalidated; strategies cannot use them yet |
 | Market clock | `src/optplat/market_clock.py` | NYSE session table; fails closed for years it has no calendar for |
-| Dashboard | `src/optplat/static/` | Single page served at `/`: controls, positions, orders, last cycle, results |
+| Agents | `src/optplat/agents.py`, `committee.py` | Technical, volatility, sentiment, execution, exposure and skeptic agents; a committee that votes, sizes within the engine cap, and learns each agent's weight from outcomes |
+| Scanner | `src/optplat/scanner.py` | Most-active names and unusual option activity from a fixed universe (free delayed data; research only) |
+| Trades | `src/optplat/trades.py` | Every filled entry as a trade: exit, result, entry reasoning and the committee's votes |
+| Events | `src/optplat/events.py` | FOMC decision days (Fed calendar) and earnings dates (unofficial Yahoo); unknown fails closed |
+| Weekly report | `src/optplat/weekly.py` | `python -m optplat.weekly`: read-only summary of the week and questions worth a pre-registered test |
+| Swing lane | `src/optplat/swing.py` | Research-only pullback-in-an-uptrend experiment on daily bars. Simulated share trades with their own stop, target and time limit, earnings-aware, no orders, off by default |
+| Scanner v2 | `src/optplat/scanner.py`, `universe.py` | About 200 sector-mapped names, unusual option contracts (including open interest under 10), weekly expirations, buy/sell guess from the last print, next-day open-interest follow-up, sector heat map and sentiment. Delayed free data; every label is inference |
+| Alerter comparison | `docs/COMPARISON_ALERTER.md`, `docs/CHALLENGES.md`, `liquidity.py` | How this platform compares with the owner's options-alerter repo, the open challenges, and the daily agent's log. Liquidity tiers and a stressed-exit what-if feed the post-mortems |
+| 10x challenge | `src/optplat/challenge.py` | A separate $10,000 simulated account aiming for 10x in 30 days (deliberately unreasonable). Restarts automatically on target, ruin (down 90%) or the deadline, keeps every attempt in a history with the success rate across all of them, and a critic can refuse or shrink any trade and records its objections. Research only: no orders, the real account and its risk limits are untouched. Runs with the options lanes |
+| Tracker, rotation, research | `src/optplat/tracker.py`, `rotation.py`, `learning.py`, `alltrades.py` | The Tracker page marks every flagged unusual contract at 1, 3, 7 and 30 trading days and shows which features came first; Market, Sector rotation shows where trading is concentrating; Research summarises what was learned and whether the newer trades beat the older; Trades lists every lane's trades with an options or shares filter. All research, no orders |
+| Options lanes | `src/optplat/optionlanes.py`, `postmortem.py` | Five research-only lanes that buy simulated long calls and puts from real chain quotes (ask in, bid out, fees), with automatic post-mortems. Own ledger, no orders, off by default, `OPTPLAT_OPTION_LANES=1` turns them on in `run.sh` |
+| Swing replay | `src/optplat/swing_replay.py` | `python -m optplat.swing_replay --data yahoo --months 12` replays the swing rule over past daily bars of funds, one day at a time with no look-ahead, in a throwaway store. A history check, not evidence |
+| Short-term lane | `src/optplat/shortterm.py` | Research-only EMA9/VWAP experiment on 5-minute bars of a few liquid names. Simulated share trades in their own ledger, no orders, off by default |
+| Dashboard | `src/optplat/static/` | Single page served at `/` with six views: Desk (account, equity, positions, decisions), Trades (blotter plus a file per trade), Swing, Short-term, Market (most active names, unusual options activity), Agents, Research, Controls. Each panel states the question it answers |
 
 ## The MVP loop
 
@@ -46,12 +66,35 @@ Safety limits (see `risk.py`): 1% of equity per position, 10% total premium, 15%
 under 60 seconds old with a verified timestamp, 2 contracts per underlying and direction, 12
 positions, and a re-entry cooldown after selling a contract.
 
-## Run it
+## Quick start (one command)
+
+```bash
+./run.sh                 # fictional demo market, works at any hour
+./run.sh yahoo           # free, delayed Yahoo data (US market hours only)
+./run.sh yahoo --loop    # same, and start the cycle loop automatically
+./watch.sh               # same as ./run.sh yahoo --loop, and restarts itself when your branch gets new commits
+```
+
+`watch.sh` checks GitHub every minute; when your branch has new commits and your copy has no local edits it fast-forwards, restarts
+the platform and you just refresh the page. It keeps a stable dashboard token in `.venv/.optplat_token`, and the simulated account is rebuilt
+from the database on each start. Whatever is pushed to the branch it follows runs on your computer, so follow a branch you trust.
+
+`run.sh` finds Python 3.10+, creates `.venv`, installs what is needed (first run only), starts the
+server and opens the dashboard already connected. It needs Python 3.10 or newer; on a Mac install it
+from python.org or `brew install python@3.12` (the `python3` that ships with Apple's command line
+tools is 3.9, which is too old). The token is passed to the browser in the URL fragment, which is
+never sent to the server, and the dashboard removes it from the address bar after reading it. The
+terminal also prints the token as a fallback.
+
+`--loop` only starts the cycle loop. Automatic entries stay exactly as saved in the dashboard, and
+they are **off** until you turn them on.
+
+## Run it by hand
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest                                   # 140 tests
+pytest
 
 python -m optplat    # http://127.0.0.1:8800 (simulated broker). It prints a one-off token: paste it into the dashboard
 ```
@@ -89,7 +132,9 @@ subclass `BrokerConformance`, make the tests pass, then run it against a paper a
 
 `python -m optplat` serves a dashboard at http://127.0.0.1:8800. Paste your `OPTPLAT_API_TOKEN`, then
 **Run one cycle**. With the default demo market you can tick *Automatic entries* and *Save settings*
-to watch positions open and close. The token is kept in `sessionStorage` for the tab only.
+to watch positions open and close. The token is kept in `sessionStorage` for the tab only. Each panel is headed
+by the question it answers; the equity curve needs a few completed cycles, and below 30 closed trades the
+page says the results are not evidence.
 
 Environment variables (see `.env.example`):
 
@@ -97,9 +142,23 @@ Environment variables (see `.env.example`):
 |---|---|
 | `OPTPLAT_BROKER` | `sim` (default) or `ibkr_paper` |
 | `OPTPLAT_DATA` | `demo` (default with `sim`) or `yahoo` (needs `pip install -e ".[yahoo]"`) |
-| `OPTPLAT_ALLOW_UNVERIFIED_QUOTES` | `1` lets unofficial quotes through the risk gate. Research only |
+| `OPTPLAT_ALLOW_UNVERIFIED_QUOTES` | `1` lets unofficial quotes through the risk gate. Research only. `./run.sh yahoo` sets it |
+| `OPTPLAT_OPEN_BROWSER` | `1` opens the dashboard, already connected, when the server is ready. `./run.sh` sets it |
+| `OPTPLAT_AUTOSTART_LOOP` | `1` starts the cycle loop at launch. Does not change the saved entries setting |
+
+### Running beside the options-alerter
+
+The two apps use different ports (the alerter 8787, this platform 8800) and different databases, so both can run at once in
+separate Terminal windows. If another program is already on 8800 the platform picks the next free port and prints it. If the
+platform itself is already running it refuses to start a second copy, because two engines on one database would trade
+everything twice; open the page that is already running instead.
+
+The token changes every start. To keep one you can paste any time, put `export OPTPLAT_API_TOKEN=<16 or more random characters>`
+in your shell profile. A page opened without the launcher (a new tab or a bookmark) asks for it.
 
 ## Run with free online data (Yahoo)
+
+`./run.sh yahoo` does everything below for you. By hand:
 
 ```bash
 pip install -e ".[yahoo]"
@@ -122,6 +181,19 @@ This is **research-grade data, not market-grade**:
 
 If you want to use a different token each time, you can set `OPTPLAT_API_TOKEN` yourself (16+
 characters). The curl examples above need that variable set.
+
+## Evaluate over recorded data
+
+Once the recorder has collected real snapshots (leave the platform running during market hours):
+
+```bash
+python -m optplat.evaluate --entries                     # strict quote policy
+python -m optplat.evaluate --entries --allow-unverified  # recorded Yahoo data has no verified timestamps
+```
+
+It opens the database read-only and runs a simulation only. Until there are enough closed trades,
+including out of sample, it says `INSUFFICIENT_DATA` and the figures are descriptive. It never says a
+strategy has an edge.
 
 ## What is still missing
 

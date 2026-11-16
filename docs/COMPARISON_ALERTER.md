@@ -1,202 +1,93 @@
-# Platform vs. options-alerter
+# Comparison: options-platform and options-alerter
 
-Alerter reviewed up to commit `a7a2ca0`. The alerter is the owner's private research app; this
-platform is the safety-first execution skeleton. Notes are from code reading only; neither
-repo's real results are visible from here.
+Written 2026-11-12 against alerter commit `9210fd8`. The alerter is the ChatGPT-built private repo; this platform is the
+Claude-built one. This is a code-reading comparison, not a performance comparison: neither project has produced evidence
+of a trading edge, and nothing here should be read as saying one earns more than the other.
 
-| Area | options-alerter | options-platform |
-|---|---|---|
-| Fills | Modeled ask+friction buys, bid-friction sells (`strategy_performance.py`); marks itself `modeled_not_broker_fills` | Sim broker: ask+0.5% slippage, limit must cover it, never fills from a missing quote |
-| Result reporting | Per-lane closed-trade summary; win rate is `null` with zero trades; drawdown labelled "closed-trade only, NOT account max drawdown"; open equity is `null` if any mark is unusable | None before this change; now `/api/results` (see below) |
-| Competitor claims | Imported rival trades are labelled unverified; "winner" is always `None` | n/a |
-| Sizing | Confidence-scaled (owner decision 2026-11-15), conviction gates | Fixed risk limits; not to be changed by agents |
-| Research breadth | Lanes, session replay, GEX, sector rotation, $1K challenge account | One baseline strategy, recorder, no replay yet |
+**What was read:** the alerter's README, `PRODUCT_DECISION_ARCHITECTURE.md`, `CHANGELOG.md`, `RELIABILITY_AUDIT.md`,
+`gex.py`, `unusual_activity.py`, `entry_quality.py`, `liquidity.py`, `risk.py`, `sizing.py`, `strategy_lanes.py`,
+`intraday_strategy.py`, `exit_decisions.py`, `feedback.py`, `adaptive.py`, `agent_lab.py`, `research_foundations.py`,
+`daily_review.py`, two agent skill files and the CI workflow. **Not read at the first pass (`agents.py` and `core.py` read 2026-11-13, see the end of this file):** `storage.py`,
+`server.py`, `data_sources.py`, the other skill files, and its tests (none were run). Claims about those are not made.
 
-Also read (run 2): `day_limits.py`. Per-day entry limits (realized-loss cap counting the worst case
-of the new entry, max entries per day, ET entry window) that only ever add failures to an entry,
-are OFF until the owner sets them, and report `NOT_CHECKED_NO_CLOSED_LEDGER` instead of passing
-silently when they cannot be measured. Same fail-closed spirit as the platform; relevant to backlog 3.
+## Side by side
 
-Where the alerter is more honest: it labels every number's provenance and refuses to total
-separate virtual accounts. Where the platform is stricter: fail-closed risk, order state machine,
-PAPER-only enforcement, quote-time verification.
+| Area | options-alerter | options-platform | Who looks stronger, and why |
+| --- | --- | --- | --- |
+| Unusual option activity | Volume and OI thresholds, no aggressor, no open/close inference, no history | Same thresholds plus buy/sell inference from the last print against bid/ask, open/close inference from OI changes, a persistence history table, follow-up reads | Platform: it adds three kinds of evidence. All of it is still inference from delayed free data. |
+| Universe and breadth | Per-symbol scans; no market-wide heat map found | 200 names in 19 sectors, heat map, sentiment, sector caps | Platform |
+| Modeled gamma exposure (GEX) | Black-Scholes gamma, 0 to 45 DTE, refuses truncated or biased chains, dealer-sign convention stated as an assumption | None | Alerter. Port candidate (backlog). |
+| Entry quality gates | Strict: spread ≤15% of ask, volume ≥20, OI ≥100, size ≤10% of volume and OI, per-symbol and basket caps | Per-lane spread and OI limits; size recorded against volume and OI and tagged afterwards, not gated | Alerter is stricter. The platform's lanes are deliberately looser (owner asked for experiments), but they tag what the alerter would block. |
+| Liquidity tiers and exit stress | PREFERRED/WATCH/THIN, plus an extra exit concession for wide spreads and large size | Now ported (`liquidity.py`): tier and stressed exit in every post-mortem, plus an `EXIT_STRESS_FLIPS_RESULT` tag | Equal after this change |
+| Simulated trading that actually runs | Four lanes; three are shadow standby or data blocked with automatic orders off. The intraday study is a 3-minute stock proxy, not option P&L. Its own audit (2026-11-10) found 12 positions open and none closed | Five option lanes with automatic simulated entries and exits, fees, stops, targets, stacking | Platform runs more experiments. Whether any is profitable is unknown. |
+| Post-mortems on losses | Decision-feedback journal with drivers; a daily review | Rule-based tags per closed trade, a digest, and a minimum of 5 trades before a cause counts as a pattern | Roughly equal; different shape |
+| Counterfactuals (rejected and unselected contracts) | Yes: samples scored, rejected and unselected contracts and checks 1, 7 and 30 days later at ask in, bid out | None. Only taken trades are reviewed. | Alerter. Highest-value gap (backlog item 1). |
+| Learning from outcomes | Cohort calibration, capped at ±7 score points, off below 5 real trades, shrunk toward neutral, never trained on demo data | Digest only; nothing feeds back automatically | Alerter has a bounded feedback loop. Risk: a few trades can steer it, so keep the cap and the minimum. |
+| Exit research | Deterministic shadow exits, optional local model, hard stop/target/hold always win | Fixed premium stop/target/time rules per lane | Alerter explores more. Its shadow exits are hypotheses; none validated. |
+| Safety posture | Fail-closed risk engine, skeptic/CIO veto, atomic admission, refuses to buy without exits | Fail-closed `RiskPolicy`, order state machine, `OrderManager` refuses non-paper adapters; research lanes have no order path (AST-tested) | Both strong. Different designs. |
+| Research honesty | `research_foundations.py` records the source and validation status of each signal, cites overfitting papers | Limitations strings per lane, "paper proves nothing" throughout | Alerter documents signal provenance better. Port candidate (docs). |
+| Operations | launchd deployment with rollback, reliability audit, CI that runs a stock-proxy replay | CI on tests; run script | Alerter |
+| Remote and always-on | Mac only; says an offline Mac cannot report its own outage | Same limitation | Equal |
 
-Also read (run 3): `local_reports.py` and `liquidity.py`. The alerter writes write-once, 0600, dated
-session/weekend JSON archives beside its DB (so release swaps never erase history) and refuses to
-back-date an unobserved quote; its calendar is labelled "estimated". `liquidity.py` scores volume, OI,
-spread and size-vs-volume and labels exit estimates `SCENARIO_ONLY`. The platform has no liquidity or
-position-size-vs-volume check on entries (idea for a future run; it would be a risk change, so owner
-decision) and no durable dated archive beyond SQLite retention.
+## Where the platform may be wrong
 
-Also read (run 4): the alerter's `static/app.js`/`index.html`/`tests/ui_contract.cjs` redesign (#40).
-It puts a decision verdict first, keeps unmarkable accounts as "unknown" rather than zero, prioritises the
-emergency stop over partial API faults, labels partial/stale evidence, and tests this in a Node contract test.
-The platform dashboard is a flat single page with no such contract test (only an innerHTML ban); the new
-Results panel borrows the "unknown stays unknown" rule. A fuller decision-desk layout is future UX work.
+These are challenges raised by reading the alerter. None is proven.
 
-Also read (run 5): `gex.py`. Its header says plainly that open interest does not reveal dealer inventories and
-that the call-positive/put-negative sign convention is an INVENTED INVENTORY ASSUMPTION; it refuses a partial
-result when the row cap is hit and counts omitted rows. The platform's `ChainRow` already carries `iv` and
-open interest, so a net-GEX view is feasible here without new data (correcting the earlier note in
-CHALLENGES row 6); it must carry the same assumption label. Alerter unchanged since `a7a2ca0` this run.
+1. **Paper exits were too friendly.** Lanes sold at the bid with no allowance for size. The alerter charges extra when
+   the spread is wide or the size is large. With stacking and bigger sizes, this matters more here. *Addressed in this change
+   for the post-mortem view; the lane P&L itself still uses the bid, so headline results remain optimistic.*
+2. **Unusual-activity signals have no scoreboard.** The platform labels contracts but never checks later whether the
+   labelled ones did better than the unlabelled. The alerter's counterfactual journal is the pattern to copy.
+3. **Many lanes means many chances to look good by luck.** Five lanes with different settings, judged on small samples,
+   is the multiple-comparisons trap the alerter cites. The digest's 5-trade minimum is a floor, not a defence.
+4. **No frozen baseline.** Lanes are compared with each other, not with a rule that never changes.
+5. **Buy/sell and open/close labels are inferred** from one delayed print and a daily OI number. Treat them as hints.
 
-Also read (run 6): `market_breadth.py`. It ranks a broad list (up to 320 names, batches of 20) on one-day change and
-volume relative to the prior five days, labels the output "indicative daily bars, not live quotes" and says the rank is
-NEVER a win probability; tickers the provider fails on stay `DATA_UNAVAILABLE` / `INSUFFICIENT_HISTORY` rather than
-being dropped quietly. The platform's candidate score had no such label on the dashboard; the new Top candidates panel
-now states the score is a ranking heuristic, not a chance of profit. The platform has no breadth/discovery step: it
-only scans the owner's watchlist. Alerter unchanged since `a7a2ca0` this run.
+## Ported in this change
 
-Also read (run 7): `gex.py` again for implementation. Same formula now in `optplat/gex.py` (Black-Scholes gamma, r=4%, one-day floor
-for 0DTE, 45-day window, call+/put-). Difference: the alerter returns a per-strike table and heatmap and refuses to
-publish when its row cap is reached; the platform only returns a total and the largest +/- strike from whatever sample
-the provider gave, labelled partial. Alerter unchanged since `a7a2ca0`.
+* `src/optplat/liquidity.py`: tier and stressed-exit functions (fail-closed: missing data is THIN and costs the maximum).
+* Post-mortems now carry `liquidity_tier`, `stress_net_pct`, `stress_concession_pct` and the `EXIT_STRESS_FLIPS_RESULT` tag.
+* No risk limit, lane size or default was changed. Tests: `tests/test_liquidity.py`.
 
+## Not ported, and why
 
-## `sizing.py` (read 2026-11-15, run 8)
+* **Net GEX.** Needs gamma per contract and a dealer-positioning convention that is an assumption. Worth doing as a
+  display-only research field, in its own change.
+* **Counterfactual journal.** Needs a new table and a daily job that revisits contracts; too large for this change.
+* **Cohort calibration.** Would change which trades lanes take. Wait until there are enough closed trades to calibrate on.
+* **Strict entry gates.** Applying them would shrink the experiments the owner asked for. The post-mortem tags show what
+  they would have caught.
+* **Anything about the alerter's council, sizing or goal tracker.** Not read closely enough to judge.
 
-The alerter sizes from an ordinal evidence index (score, trend match, volume vs open interest, spread, IV), explicitly
-"not a win probability". It caps the index at 0.78 until 20 learning samples exist, caps the fraction until 10, shrinks
-size at 10% and 20% drawdown, and states that goals never raise risk. Lane policy (owner-chosen) maps the index to a
-percent-of-equity band. The platform uses a fixed 1% worst-case cost per order from `RiskPolicy`; any move toward
-confidence-scaled sizing is a risk-policy decision for the owner (CLAUDE.md), so it is not attempted here. Worth copying
-when the owner decides: the sample-count caps and the drawdown shrink, both of which make sizing more cautious when evidence is thin.
+## Addendum 2026-11-13: `agents.py` and `core.py` (alerter still at `9210fd8`; nothing new to review)
 
+* **Optional local model can only be stricter.** `agents.py` lets a local Ollama model add risks and raise a VETO in the Skeptic
+  role, but never pass or upgrade a deterministic rejection; if the Skeptic vetoes, the CIO verdict is forced to REJECT. It also
+  refuses any non-localhost endpoint so trading data is not sent out. The platform's committee has no model in it, so there is
+  nothing to port, but the "may only tighten" rule is the same shape as the platform's flow agent.
+* **Hard veto list is tighter than the platform's lanes by design.** `core.research_case` vetoes: under 7 days to expiry, missing or
+  crossed quote, spread over 35%, zero volume, unknown data source. The platform's aggressive lanes deliberately trade closer to
+  expiry and thinner contracts (owner's choice); the post-mortem tags show what these gates would have caught. No change made.
+* **Scores are labelled as rankings.** `core.py` states agent scores "rank research opportunities, not calibrated likelihoods", and
+  the sizing agent is told never to turn an evidence index into a win probability. The platform's Research page does the same with
+  its "too few" labels; worth keeping that wording in any future scoring.
+* **Thin contracts are capped, not just penalised.** `candidate_score` caps the score at 52 below 5 volume, 55 below 20 open
+  interest and 56 above 20% spread, so a tiny denominator cannot rank high on volume/OI ratio. The platform's tracker groups flagged
+  contracts by what was known at the flag, but does not yet show whether the ratio is dominated by tiny open interest.
+  Logged as challenge 7.
+* **Still not read:** `storage.py`, `server.py`, `data_sources.py`, other skill files, the alerter's tests.
 
-## `unusual_activity.py` (read 2026-11-15, run 9; alerter now at `80672a6`)
+## Addendum 2026-11-13 (later): `storage.py` and `data_sources.py` (alerter still at `9210fd8`)
 
-A Mac-only "turnover radar" over the Yahoo chain: volume >= 150 and volume/OI >= 3, or volume >= 500 when OI is zero or
-missing. It never turns zero/missing OI into an infinite ratio, labels OI state (`REPORTED`, `REPORTED_ZERO`, `MISSING`),
-states that ask x volume is a proxy and not traded premium, and says a high rank never bypasses the entry-quality veto.
-Extreme rows (ratio >= 20, volume >= 5000) are kept as a per-day high-water mark, never summed across scans. Platform
-difference: `strategy.py` treated a missing volume/OI as 0 silently (fail-closed, right), but the skip reason lumped it
-in with "too low". Run 9 separates the two in the explanation and shows volume and OI (or "not reported") per candidate.
-The platform has no turnover/anomaly radar and no per-day history; that needs recorded chains (backlog) and is not faked.
-
-## `strategy_performance.py` (read 2026-11-16, run 10; alerter still at `80672a6`)
-
-Mac-only per-strategy-account report (`performance_report`). What it does that the platform does not yet:
-
-* Every account carries `paper_equity_usd` that is `null` when any option mark is missing, stale or unusable, plus a count of
-  `unreliable_option_marks`. The platform's `/api/results` already does the same for unrealized P&L (run 2).
-* The report states its fill model in a field (`order_execution`: modeled ask plus friction on buys, bid minus friction on
-  sells) and sets `source_quote_timestamp_verified` to false. The platform's results payload does not yet say how fills are
-  modeled; its limitations list is free text. Challenge row 7.
-* A closed-trade equity curve (last 90 points) next to a drawdown labelled "closed-trade-only, NOT account max drawdown".
-  The platform has the closed-only drawdown but no curve.
-* Partial exits and "principal recovered" are tracked per position; the platform has single full exits only.
-* A competitor comparison that refuses to name a winner: only user-supplied, explicitly dated trades, matched by contract and
-  entry day, labelled unverified. Worth copying in spirit: never compare against another system's headline numbers.
-* Scope notes say balances of separate virtual accounts must never be summed as real capital.
-
-
-## `entry_quality.py` (read 2026-11-16, run 11)
-
-Strict new-entry gate for real-source paper options ("observation is not authorization"; no score may waive it).
-
-* Spread limit is a share of the ASK (15%); the platform measures spread against its own configured limit. Compare the
-  denominators before comparing numbers.
-* Zero bid fails the entry ("exit price not observable"). The platform's `propose` rejects invalid quotes, but a test pinning a
-  zero-bid case would be worth checking (not done this run).
-* Volume and open interest minimums (20 / 100), missing counts as failure, same as the platform (run 9 pinned it).
-* Per-side concentration caps (same symbol 2, market ETFs 3, growth tech 4). The platform has a same-underlying concentration limit, but no
-  group caps (market ETFs, growth tech). Needs an owner decision (risk policy), logged in CHALLENGES.
-* Strike-distance screen by horizon and a 7-730 DTE window; the platform has a single DTE window.
-* Every failure is a plain-language reason list, which is the pattern the platform's `explain_no_proposal` copies.
-
-## `day_limits.py` (read 2026-11-16, run 12; alerter still at `80672a6`)
-
-* Per-day entry limits ported from an MIT-licensed day-trader risk manager: `daily_loss_limit_usd`, `max_entries_per_day`,
-  `entry_window_et`. All OFF until set; they only ever add failures to a new entry, never close or resize anything.
-* Loss check counts realized loss so far today plus the most the new entry could lose (premium, or the modeled stop percent when
-  auto-exits are on, and says that is modeled). "Today" is the New York date.
-* Honest about gaps: strategy-lane accounts have no closed ledger in this view, so the result is `NOT_CHECKED_NO_CLOSED_LEDGER`
-  instead of a pass. The platform has no daily loss halt at all yet (backlog 3; the default value is a risk decision for the owner).
-* Platform difference: it fails closed on missing data but has no per-day counters.
-
-## `daily_review.py` (read 2026-11-16, run 13; alerter still at `80672a6`)
-
-* A once-per-day, proposals-only report stored in `daily_platform_reviews`: 24h audit counts, skip/reject reason tallies, liquidity tier mix, and
-  findings. It states in its header that a report cannot authorise trades, change risk settings or promote skills.
-* Operational problems come first: unreliable held-option marks are an `OPERATIONAL_BLOCKER` and the fallback equity is called non-executable.
-  GEX and unusual-activity findings are only counted when fresh (24h) and from a scan that did not error; partial expiry coverage is flagged.
-* Honest about gaps: "zero completed paper exits despite open positions; outcome-based learning is not yet validated".
-* Platform difference: no daily report and no per-day audit tally of skip reasons (only the last cycle's `explain_no_proposal`). A daily
-  rollup of skip reasons is a possible later step; it needs recorded cycle reports, which the platform does not yet persist.
-
-## `exit_decisions.py` (read 2026-11-16, run 14; alerter still at `80672a6`)
-
-* Local-only exit research: a deterministic "shadow" rule set (adverse trend, expiry within 14 days, early profit/loss tests) that only
-  proposes EXIT/HOLD; hard stop/target/holding rules keep precedence. The optional Ollama model path accepts loopback endpoints only
-  and is labelled a paper simulation, "not an observed edge".
-* Honest about gaps: insufficient trend evidence returns HOLD with that reason, and stale quotes or missing contracts never create fills.
-* Platform difference: exits are fixed take-profit/stop-loss only (backlog 5 trailing stop); there is no shadow-exit research log.
-
-## `session_replay.py` (read 2026-11-16, run 15)
-
-Opening-range breakout replay on the underlying's 5-minute bars ("Time Machine", ported from an MIT day-trader skill). It says
-in its header that results are stock-direction odds, NOT option P&L, that nothing sizes or authorizes a trade, and that a
-simulation from ~60 sessions is not a prediction. Seeded (reproducible), checks stop before target inside a bar (conservative),
-drops malformed bars instead of repairing them, and reports "no conclusion" below 30 historical triggers. The platform has no
-replay yet (backlog 1) and no intraday-bar strategy; when it gets one, copy the conservative intrabar rule, the seed and the
-30-trigger gate.
-
-## `strategy_postmortems.py` (read 2026-11-16, run 16; alerter still at `80672a6`)
-
-* Per lane it predeclares a hypothesis, a falsification rule, a baseline and exit rules, then writes a daily postmortem. It never
-  applies a change automatically (`auto_apply: False`, `promotion_recommended: False`) and lists `evidence_missing` (matched holdout and
-  no-entry baseline, timestamped quotes and real fills, enough non-overlapping closed trades). Cohort readiness needs 40 forward trades.
-* Honest about gaps: an empty ledger is called "a missing-evidence diagnosis, not a claim that the strategy was evaluated".
-* Platform difference: the strategy has no predeclared falsification rule or baseline. Run 16 copied the evidence-missing list into
-  `/api/results.promotion`; the written hypothesis/falsification step is a possible later docs item for the owner.
-
-## `risk.py` (read 2026-11-16, run 17; alerter still at `80672a6`)
-
-* One fail-closed `evaluate()` gate: kill switch, seven agent reviews must match the current quote snapshot, skeptic PASS, sizing proposal
-  cap, single-leg only, 7-730 DTE, two-sided quote with spread <= 35%, fetch time within 30 minutes, cash, per-position, per-symbol and
-  portfolio premium caps, drawdown stop, plus entry-quality and day limits. Unknown quote source is a rejection.
-* Honest about gaps: warns on every unofficial delayed chain and missing exchange timestamp; pauses new entries when held options lack
-  reliable bid marks.
-* Platform difference: the platform's equivalent lives in `risk.py`/`orders.py` and is similar in spirit; it has no review-matches-snapshot
-  step (single strategy) and no spread cap in the risk gate (the strategy filters spread).
-
-## `liquidity.py` (read 2026-11-16, run 18; alerter still at `80672a6`)
-
-* Scores volume, OI, spread and premium turnover into a 0-100 score and a PREFERRED/WATCH/THIN tier, and warns when quantity
-  exceeds 10% of reported volume or OI. Status is always `SCENARIO_ONLY`; it says OI/volume are not live depth.
-* `exit_stress` models bid liquidation with extra concession (base, thin, stressed) that grows with spread and participation.
-* Platform: floor on volume/OI and spread only. Run 18 added the 10% participation note (display only). No exit stress yet.
-
-## `goal_sprint.py` (read 2026-11-16, run 19; alerter still at `80672a6`)
-
-* Deadline-aware goal math for the $1K challenge: counts remaining US option sessions (approximate, `calendar_verified: false`), the
-  compound return needed per session, and refuses a precise gap when equity is `UNVERIFIABLE_EQUITY` (stale/missing marks).
-* States that a target shortfall is never turned into extra risk, and that a premium budget is max exposed principal, not a stop
-  (contracts can gap to zero). Shows an illustrative three-full-premium-losses stress per policy.
-* Platform gap: the dashboard showed open premium but never said "this much can be lost outright". Run 19 added a glance line for it.
-  The platform has no goal or required-return math (and should not: a stretch target must not drive risk).
-
-## `whale_thesis.py` + `GEX_CONFLUENCE_POLICY.md` (read 2026-11-16, run 20; alerter at `30c64d7`)
-
-* For a high volume/OI anomaly it builds a bounded research dossier from the whole sampled chain: nearby strikes, opposite side, later expiries,
-  modeled GEX between spot and strike, ATR/20-day reachability, and seven deterministic "reviewer" events. Sizing returns NO_TRADE; it is not a
-  candidate or a wallet. States repeatedly that volume is unsigned, OI lags, and GEX walls are not dealer positioning or support/resistance.
-* Honest points the platform can copy: freeze the entry-time GEX snapshot and never use later gamma to justify an earlier entry; keep vetoed and
-  unselected candidates with future marks for a baseline; record chain truncation. Platform gap: its flow radar has no cross-strike context, and
-  no point-in-time GEX record. Not copied this run (data lives in the alerter on the Mac).
-
-## market_clock.py (read run 22)
-
-The alerter keeps the same NYSE-published 2026-2028 holiday and early-close table (read 2026-11-15) but adds rule-based fallbacks outside those years (platform fails closed instead, which is safer) and a conservative session window of 09:35-15:55 ET (12:55 on early closes). The platform opens at 09:30 and runs to 16:00 exactly. Both say they are not live exchange status. Takeaway: the alerter's buffers avoid the least reliable quotes at the open and close; adopting them is an owner decision.
-
-## data_sources.py (read run 23)
-
-The alerter's free-chain mapping drops crossed, zero-ask and non-finite rows and nulls absurd IV, exactly as the platform's `rows_from_records` does. Differences: it also records `lastTradeDate` per contract (the platform now shows it, run 23), tags the underlying reference as `DAILY_HISTORY_CLOSE_NOT_INTRADAY_TAPE`, sets `exchange_quote_time_verified=False`, and marks earnings dates `UNCONFIRMED` (a pattern the platform should copy if it ever adds an earnings source). It also drops zero-volume contracts unless pinned; the platform leaves that to strategy filters.
-
-## technical_confluence.py (read run 24)
-
-Closed-bar daily OHLCV only: today's New York candle is always excluded (no provider bar-final flag), malformed or crossed bars are dropped, duplicate dates keep the first row, and history older than 8 days returns `STALE_CHART_HISTORY` instead of a signal. Its output hard-codes `order_authorized: false`, `independent_data_sources: 1`, `source_times_verified: false`, and says that EMA, RSI, volume and FVG are correlated evidence from one source, so its `confluence_count` is "not a probability or entry gate". Honest points the platform can copy: name how many independent sources back a score, and refuse a stale-history reading rather than show it. The platform has no chart indicators at all (not copied; needs a free daily-bar source, which is unreachable from the cloud runner).
-
-## feedback.py (read run 25)
-
-Paper-only decision journal that also records rejected and missed setups, with 1/7/30-day counterfactuals explicitly labelled "indicative ask-to-bid marks, NEVER actual fills". Each case carries an evidence snapshot where every field has a `why` and a `limitation` (e.g. "unofficial source lacks verified exchange quote timestamps", "OI is lagged"). It accepts only yfinance, non-demo, 100-multiplier quotes with sane bid/ask. The platform records decisions and skips but never follows skipped ideas forward, so it cannot say whether its filters help or hurt (needs the replay provider, backlog 1). Not copied.
+* **Paper buys re-check everything inside one transaction.** `paper_buy_atomic` re-reads the candidate, rejects a changed quote,
+  a stale real-source quote (older than 30 min or more than 2 min in the future), a duplicate idempotency key, an open position
+  on the same contract, the kill switch, and re-runs entry quality, so a competing scan cannot slip an order past a limit.
+* **Limits use the more conservative equity.** For real-source quotes the drawdown and exposure checks use cash plus the lower of
+  cost and the bid mark of open holdings, and entries pause if any held contract has a stale, crossed or over-35% spread quote.
+  The platform's lanes mark open positions for display; whether any limit uses a pessimistic mark was not checked here.
+* **Fills are ask plus slippage** (default 0.5%, capped 3%), validated against the saved quote.
+* **Data honesty.** `data_sources.py` states that download time is not market time and tags activity rows
+  `opening_trade_verified: False` and `trade_aggressor_verified: False`. The platform's inferred side and open/close labels are
+  the same kind of guess and are labelled as inferences.
+* **Refuses biased GEX.** Over the row cap, or with missing call/put sides, the scan declines to publish a partial net exposure.
+* **Still not read:** `server.py`, other skill files, the alerter's tests.

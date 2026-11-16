@@ -1,205 +1,149 @@
+import sqlite3
 from datetime import timedelta
 
 import pytest
-from fastapi.testclient import TestClient
 
-from helpers import CONTRACT, NOW, make_intent
-from optplat.api import create_app
-from optplat.broker import SimBroker
-from optplat.evaluation import closed_trade_pnl, split_half_check, summarize_closed_trades
-from optplat.models import Order, OrderState, Side
-from optplat.orders import OrderManager
+from helpers import NOW
+from optplat.evaluate import main as evaluate_cli
+from optplat.evaluation import evaluate, format_report
+from optplat.marketdata import snapshot_to_dict
+from optplat.risk import RiskPolicy
 from optplat.store import Store
+from test_replay import row
+
+ENTRIES = {"auto_entries": True, "reentry_cooldown_s": 0}
+STEP = timedelta(seconds=1000)  # one order-ttl bucket apart, so each step may place a fresh order
 
 
-def sell(i, fill, basis, qty=1, state=OrderState.FILLED):
-    o = Order.new(make_intent(f"sell-key-{i:05d}", qty=qty, side=Side.SELL_TO_CLOSE), NOW + timedelta(minutes=i))
-    o.state, o.avg_fill_price, o.cost_basis, o.filled_qty = state, fill, basis, qty
-    o.updated_at = NOW + timedelta(minutes=i)
-    return o
+def alternating_rows(n_steps, fictional=False, up_bid=7.5, up_ask=7.7):
+    """Even steps: cheap quote (entry). Odd steps: quote 50% higher (take-profit exit)."""
+    out = []
+    for i in range(n_steps):
+        at = NOW + STEP * i
+        bid, ask = (4.90, 5.10) if i % 2 == 0 else (up_bid, up_ask)
+        out.append(row(at=at, bid=bid, ask=ask, fictional=fictional, rid=i + 1))
+    return out
 
 
-def test_no_trades_has_no_fabricated_win_rate():
-    s = summarize_closed_trades([])
-    assert s["status"] == "NO_CLOSED_TRADES"
-    assert s["win_rate_pct"] is None and s["average_pnl_usd"] is None and s["closed_trade_max_drawdown_pct"] is None
-    assert s["limitations"]
+def test_few_trades_are_reported_as_insufficient_data_not_as_a_result():
+    result = evaluate(alternating_rows(8), config=ENTRIES)
+    assert result["status"] == "INSUFFICIENT_DATA"
+    assert any("closed trades in total" in r for r in result["reasons"])
+    assert "descriptive only" in format_report(result)
 
 
-def test_pnl_uses_multiplier_and_ignores_unfilled_or_unpriced():
-    assert closed_trade_pnl(sell(1, 3.0, 2.0, qty=2)) == pytest.approx(200.0)
-    assert closed_trade_pnl(sell(1, 3.0, 2.0, state=OrderState.CANCELLED)) is None
-    assert closed_trade_pnl(sell(1, 3.0, None)) is None
-    buy = Order.new(make_intent("buy-key-00001"), NOW)
-    assert closed_trade_pnl(buy) is None
-    s = summarize_closed_trades([sell(1, 3.0, None), buy])
-    assert s["closed_trades"] == 0 and s["unpriced_exits"] == 1
+def test_enough_trades_are_measured_but_never_called_an_edge():
+    result = evaluate(alternating_rows(12), config=ENTRIES, min_trades=2, min_oos_trades=1)
+    assert result["status"] == "MEASURED" and result["reasons"] == []
+    text = format_report(result).lower()
+    assert "edge" in text and "not proof of an edge" in text and "no commissions" in text
+    assert "has an edge" not in text and "profitable strategy" not in text
 
 
-def test_small_sample_is_not_called_a_result():
-    s = summarize_closed_trades([sell(i, 3.0, 2.0) for i in range(5)])
-    assert s["status"] == "INSUFFICIENT_SAMPLE" and s["win_rate_pct"] == 100.0
-    big = summarize_closed_trades([sell(i, 3.0, 2.0) for i in range(30)])
-    assert big["status"] == "SAMPLE_SIZE_MET_NOT_PROOF_OF_EDGE"
+def test_the_split_is_chronological_and_each_segment_is_replayed_on_its_own_data():
+    result = evaluate(alternating_rows(12), config=ENTRIES, min_trades=2, min_oos_trades=1)
+    early, late = result["segments"]
+    assert early["name"] == "in_sample" and late["name"] == "out_of_sample"
+    assert early["to"] < late["from"]  # no overlap, no peeking across the boundary
+    assert early["steps"] + late["steps"] == 12 and late["steps"] >= 2
+    assert early["closed_trades"] >= 1 and early["realized_pnl"] > 0  # +50% quote moves are take-profits
 
 
-def test_concentration_and_drawdown():
-    orders = [sell(1, 12.0, 2.0), sell(2, 1.0, 2.0), sell(3, 1.0, 2.0)]  # +1000, -100, -100
-    s = summarize_closed_trades(orders, starting_equity=10_000)
-    assert s["realized_pnl_usd"] == 800.0
-    assert s["pnl_without_best_trade_usd"] == -200.0
-    assert s["best_trade_share_of_gross_wins_pct"] == 100.0
-    assert s["profit_factor"] == 5.0
-    assert s["closed_trade_max_drawdown_pct"] == pytest.approx(200 / 11000 * 100, abs=0.001)
+def test_out_of_sample_threshold_alone_can_block_a_measured_status():
+    result = evaluate(alternating_rows(12), config=ENTRIES, min_trades=2, min_oos_trades=50)
+    assert result["status"] == "INSUFFICIENT_DATA"
+    assert any("out of sample" in r for r in result["reasons"])
 
 
-def test_order_of_input_does_not_change_drawdown():
-    a = [sell(1, 1.0, 2.0), sell(2, 12.0, 2.0)]
-    assert summarize_closed_trades(a, starting_equity=1000) == summarize_closed_trades(a[::-1], starting_equity=1000)
+def test_fictional_data_is_always_labelled_meaningless():
+    result = evaluate(alternating_rows(12, fictional=True), config=ENTRIES, min_trades=1, min_oos_trades=1)
+    assert result["status"] == "FICTIONAL_DATA"
+    assert "fictional" in result["reasons"][0].lower()
 
 
-def test_results_endpoint_requires_token_and_works():
-    c = TestClient(create_app(OrderManager(SimBroker(), Store(":memory:")), "t" * 24))
-    assert c.get("/api/results").status_code == 401
-    body = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()
-    assert body["status"] == "NO_CLOSED_TRADES"
+def test_no_entries_means_no_trades_and_do_nothing_is_the_baseline():
+    result = evaluate(alternating_rows(8))
+    assert all(s["closed_trades"] == 0 and s["return_pct"] == 0 for s in result["segments"])
+    assert result["do_nothing"] == {"return_pct": 0.0, "max_drawdown_pct": 0.0, "closed_trades": 0}
 
 
-# ---- open-position marks (challenge 4) ----
-from helpers import make_quote  # noqa: E402
-from optplat.broker.base import QuoteUnavailable  # noqa: E402
-from optplat.evaluation import summarize_open_positions  # noqa: E402
-from optplat.models import Position  # noqa: E402
+def test_drawdown_is_measured_from_the_equity_peak():
+    # entry at the ask, then the quote collapses: the position is marked at the bid and equity falls
+    rows = [row(at=NOW + STEP * i, bid=b, ask=a, rid=i + 1)
+            for i, (b, a) in enumerate([(4.9, 5.1), (4.9, 5.1), (3.9, 4.1), (3.5, 3.7), (3.4, 3.6), (3.4, 3.6)])]
+    result = evaluate(rows, config=ENTRIES, min_trades=1, min_oos_trades=0)
+    assert max(s["max_drawdown_pct"] for s in result["segments"]) > 0
 
 
-def _marks(quote_or_exc, **kw):
-    def get_quote(_c):
-        if isinstance(quote_or_exc, Exception):
-            raise quote_or_exc
-        return quote_or_exc
-    return summarize_open_positions([Position(CONTRACT, 2, 2.0)], get_quote, NOW, **kw)
+def test_underlying_buy_and_hold_is_reported_for_context_per_symbol():
+    result = evaluate(alternating_rows(8))
+    assert result["underlying_buy_and_hold_pct"] == {"AAA": 0.0}  # the helper snapshots all have the same spot
 
 
-def test_open_position_marked_to_bid_not_mid_or_ask():
-    s = _marks(make_quote(bid=1.50, ask=2.50))
-    assert s["unrealized_pnl_usd"] == pytest.approx(-100.0)  # (1.50-2.00)*2*100
-    assert s["marked"][0]["bid"] == 1.50 and not s["unmarked"]
+def test_the_strict_quote_policy_applies_unless_explicitly_relaxed():
+    rows = [row(at=NOW + STEP * i, verified=False, bid=(4.9 if i % 2 == 0 else 7.5),
+                ask=(5.1 if i % 2 == 0 else 7.7), rid=i + 1) for i in range(8)]
+    strict = evaluate(rows, config=ENTRIES, min_trades=1, min_oos_trades=0)
+    relaxed = evaluate(rows, config=ENTRIES, min_trades=1, min_oos_trades=0,
+                       policy=RiskPolicy(require_verified_quote_time=False))
+    assert sum(s["closed_trades"] for s in strict["segments"]) == 0
+    assert sum(s["closed_trades"] for s in relaxed["segments"]) >= 1
 
 
-def test_unmarkable_positions_make_total_null_never_zero():
-    for q, why in [
-        (QuoteUnavailable("x"), "no_quote"),
-        (RuntimeError("boom"), "quote_error"),
-        (make_quote(verified=False), "quote_time_unverified"),
-        (make_quote(as_of=NOW - timedelta(hours=1)), "stale_quote"),
-        (make_quote(bid=3.0, ask=2.0), "invalid_quote"),
-    ]:
-        s = _marks(q)
-        assert s["unrealized_pnl_usd"] is None and s["unmarked"][0]["reason"] == why
+def test_bad_inputs_are_errors():
+    with pytest.raises(ValueError, match="No recorded"):
+        evaluate([])
+    with pytest.raises(ValueError, match="at least 4"):
+        evaluate(alternating_rows(3))
+    with pytest.raises(ValueError, match="oos_fraction"):
+        evaluate(alternating_rows(8), oos_fraction=0.9)
 
 
-def test_partial_marks_do_not_hide_unmarked_losses():
-    other = CONTRACT.__class__("QQQ", CONTRACT.expiry, CONTRACT.right, 500.0)
-    def gq(c):
-        if c == CONTRACT:
-            return make_quote(bid=3.0, ask=3.1)
-        raise QuoteUnavailable("none")
-    s = summarize_open_positions([Position(CONTRACT, 1, 2.0), Position(other, 1, 2.0)], gq, NOW)
-    assert s["unrealized_pnl_usd"] is None and len(s["marked"]) == 1 and len(s["unmarked"]) == 1
+# ------------------------------------------------------------ read-only store and CLI
+def seed_db(path, rows):
+    store = Store(str(path))
+    from datetime import datetime
+
+    for r in rows:
+        store.record_snapshot(r["symbol"], datetime.fromisoformat(r["recorded_at"]),
+                              datetime.fromisoformat(r["payload"]["as_of"]), "test", r["fictional"],
+                              r["payload"]["timestamp_verified"], r["payload"])
 
 
-def test_no_positions_is_zero_and_results_endpoint_includes_section():
-    assert summarize_open_positions([], lambda c: None, NOW)["unrealized_pnl_usd"] == 0.0
-    c = TestClient(create_app(OrderManager(SimBroker(), Store(":memory:")), "t" * 24))
-    body = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()
-    assert body["open_positions"]["unrealized_pnl_usd"] == 0.0
+def test_read_only_store_reads_but_cannot_write(tmp_path):
+    db = tmp_path / "rec.db"
+    seed_db(db, alternating_rows(4))
+    ro = Store(str(db), read_only=True)
+    assert len(ro.list_snapshots()) == 4
+    with pytest.raises(sqlite3.OperationalError):
+        ro.set_state("x", "y")
 
 
-def test_split_half_withheld_below_min_trades():
-    r = split_half_check([5.0] * 29)
-    assert r["status"] == "INSUFFICIENT_SAMPLE" and r["consistent"] is None and r["first_half_pnl_usd"] is None
-    assert summarize_closed_trades([sell(i, 3.0, 2.0) for i in range(5)])["split_half"]["consistent"] is None
+def test_cli_reports_without_modifying_the_database(tmp_path, capsys):
+    db = tmp_path / "rec.db"
+    seed_db(db, alternating_rows(12))
+    before = db.read_bytes()
+    code = evaluate_cli(["--db", str(db), "--entries"])
+    out = capsys.readouterr().out
+    assert code == 0 and "STATUS: INSUFFICIENT_DATA" in out and "Caveats" in out
+    assert db.read_bytes() == before
 
 
-def test_split_half_flags_unstable_and_stable_results():
-    unstable = split_half_check([10.0] * 15 + [-4.0] * 15)
-    assert unstable["status"] == "CHECKED" and unstable["consistent"] is False
-    flip = split_half_check([10.0] * 15 + [-20.0] * 15)
-    assert flip["first_half_pnl_usd"] == 150.0 and flip["second_half_pnl_usd"] == -300.0
-    assert flip["consistent"] is False
-    assert split_half_check([1.0] * 30)["consistent"] is True
-    assert split_half_check([0.0] * 30)["consistent"] is False
+def test_cli_explains_when_entries_are_off_and_when_there_is_no_data(tmp_path, capsys):
+    db = tmp_path / "rec.db"
+    seed_db(db, alternating_rows(8))
+    assert evaluate_cli(["--db", str(db)]) == 0
+    assert "--entries" in capsys.readouterr().out
+    empty = tmp_path / "empty.db"
+    Store(str(empty))
+    assert evaluate_cli(["--db", str(empty)]) == 1
+    assert "No recorded snapshots" in capsys.readouterr().out
+    assert evaluate_cli(["--db", str(tmp_path / "missing.db")]) == 1
 
 
-def test_split_half_uses_time_order_in_summary():
-    orders = [sell(i, 3.0, 2.0) for i in range(15)] + [sell(i, 1.0, 2.0) for i in range(15, 30)]
-    s = summarize_closed_trades(list(reversed(orders)))
-    assert s["split_half"]["first_half_pnl_usd"] > 0 > s["split_half"]["second_half_pnl_usd"]
-    assert s["split_half"]["consistent"] is False
-
-
-# ---- fill-model label (challenge 7) ----
-def test_results_endpoint_names_the_fill_model_and_says_fees_are_not_modeled():
-    c = TestClient(create_app(OrderManager(SimBroker(slippage_pct=0.5), Store(":memory:")), "t" * 24))
-    fm = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()["fill_model"]
-    assert fm["buys"] == "ask plus slippage" and fm["sells"] == "bid minus slippage"
-    assert fm["slippage_pct"] == 0.5 and fm["commissions_modeled"] is False
-
-
-def test_unknown_broker_fill_model_is_reported_unknown_not_conservative():
-    from optplat.evaluation import describe_fill_model
-
-    fm = describe_fill_model(object())
-    assert fm["buys"] == "unknown" and fm["slippage_pct"] is None and fm["commissions_modeled"] is False
-
-
-def test_cumulative_curve_and_losing_streak_follow_time_order():
-    orders = [sell(3, 2.0, 3.0), sell(1, 3.0, 2.0), sell(2, 2.0, 3.0), sell(4, 2.0, 3.0)]  # +100,-100,-100,-100 by time
-    s = summarize_closed_trades(orders)
-    assert s["cumulative_pnl_recent_usd"] == [100.0, 0.0, -100.0, -200.0]
-    assert s["longest_losing_streak"] == 3 and s["cumulative_pnl_points_total"] == 4
-
-
-def test_curve_is_capped_and_empty_has_no_streak():
-    s = summarize_closed_trades([sell(i, 3.0, 2.0) for i in range(30)])
-    assert len(s["cumulative_pnl_recent_usd"]) == 20 and s["cumulative_pnl_recent_usd"][-1] == 3000.0
-    assert s["longest_losing_streak"] == 0
-    e = summarize_closed_trades([])
-    assert e["longest_losing_streak"] is None and e["cumulative_pnl_recent_usd"] == []
-
-
-def test_promotion_is_never_recommended_and_lists_missing_evidence():
-    from optplat.evaluation import promotion_readiness
-    few = promotion_readiness(5)
-    assert few["promotion_recommended"] is False and few["evidence_missing"][0].startswith("Enough closed trades (5 of 30)")
-    many = promotion_readiness(500)  # a big sample still lacks holdout, baseline, fees and real fills
-    assert many["promotion_recommended"] is False and len(many["evidence_missing"]) == 4
-    assert not any(m.startswith("Enough closed trades") for m in many["evidence_missing"])
-
-
-def test_results_endpoint_and_dashboard_show_promotion_block():
-    c = TestClient(create_app(OrderManager(SimBroker(), Store(":memory:")), "t" * 24))
-    body = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()
-    assert body["promotion"]["promotion_recommended"] is False
-    js = open("src/optplat/static/app.js").read()
-    assert "promotionText" in js and "Ready to promote beyond paper?" in js and "innerHTML" not in js
-
-
-def test_breakeven_fee_per_contract_is_derived_not_assumed():
-    s = summarize_closed_trades([sell(1, 3.0, 2.0), sell(2, 3.0, 2.0)])  # +100 each, one contract each
-    assert s["contracts_closed"] == 2 and s["breakeven_fee_per_contract_usd"] == 100.0 and s["breakeven_fee_per_contract_usd"] == round(s["realized_pnl_usd"] / s["contracts_closed"], 4)
-    assert summarize_closed_trades([sell(1, 2.0, 3.0)])["breakeven_fee_per_contract_usd"] is None  # a loss has no headroom
-    assert summarize_closed_trades([])["breakeven_fee_per_contract_usd"] is None
-    js = open("src/optplat/static/app.js").read()
-    assert "feeHeadroomText" in js and "innerHTML" not in js
-
-
-def test_multiple_testing_note_names_variants_and_unsplit_totals():
-    from optplat.evaluation import STRATEGY_VARIANTS
-    from optplat.strategy import FlowFollowStrategy, LiquidTrendStrategy
-    assert set(STRATEGY_VARIANTS) == {LiquidTrendStrategy().name, FlowFollowStrategy(mode="flagged").name, FlowFollowStrategy(mode="nearer").name}
-    c = TestClient(create_app(OrderManager(SimBroker(), Store(":memory:")), "t" * 24))
-    m = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()["multiple_testing"]
-    assert m["results_split_by_strategy"] is False and len(m["strategy_variants_selectable"]) == 3 and "overstated" in m["note"]
-    js = open("src/optplat/static/app.js").read()
-    assert "multipleTestingText" in js and "Several strategies, one total?" in js and "innerHTML" not in js
+def test_cli_leaves_fictional_data_out_unless_asked(tmp_path, capsys):
+    db = tmp_path / "rec.db"
+    seed_db(db, alternating_rows(8, fictional=True))
+    assert evaluate_cli(["--db", str(db), "--entries"]) == 1  # nothing real recorded
+    assert evaluate_cli(["--db", str(db), "--entries", "--fictional"]) == 0
+    assert "FICTIONAL_DATA" in capsys.readouterr().out

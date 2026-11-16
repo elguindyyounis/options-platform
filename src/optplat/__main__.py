@@ -2,8 +2,14 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
+import socket
 import sys
+import threading
+import time
+import urllib.request
+import webbrowser
 
 import uvicorn
 
@@ -17,7 +23,74 @@ from .store import Store
 from .strategy import FlowFollowStrategy, LiquidTrendStrategy
 
 
+_FRAGMENT_SAFE_TOKEN = re.compile(r"[A-Za-z0-9_-]{16,200}")
+
+
+def _open_when_ready(url: str, port: int, timeout_s: float = 15.0) -> None:
+    """Open the dashboard once the server accepts connections (best effort, never raises)."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                break
+        except OSError:
+            time.sleep(0.2)
+    else:
+        return
+    try:
+        webbrowser.open(url)
+    except Exception:  # noqa: BLE001 - a missing browser must not stop the server
+        pass
+
+
+def _start_browser_opener(url: str, port: int) -> None:
+    threading.Thread(target=_open_when_ready, args=(url, port), name="optplat-open-browser", daemon=True).start()
+
+
+def _port_is_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+def _is_this_dashboard(port: int) -> bool:
+    """True when whatever owns the port serves this platform's dashboard page."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1.5) as response:  # noqa: S310 - fixed localhost URL
+            return b"<title>options-platform</title>" in response.read(8192)
+    except Exception:  # noqa: BLE001 - anything else on the port is simply "not this"
+        return False
+
+
+def choose_port(preferred: int, search: int = 20) -> int:
+    """Pick the port to serve on, so this platform can run beside other local apps (the options-alerter uses 8787).
+
+    * free: use it;
+    * already serving this dashboard: stop with a clear message, because a second engine on the same database would
+      place every simulated trade twice;
+    * taken by something else: use the next free port and say so."""
+    if _port_is_free(preferred):
+        return preferred
+    if _is_this_dashboard(preferred):
+        sys.exit(f"The platform is already running at http://127.0.0.1:{preferred}. Open that page instead (its token is in the "
+                 "terminal that started it), or stop it first. Not starting a second copy: two engines on one database "
+                 "would trade everything twice.")
+    for candidate in range(preferred + 1, preferred + search + 1):
+        if _port_is_free(candidate):
+            print(f"Port {preferred} is used by another program, so the dashboard will be on port {candidate} instead.", flush=True)
+            return candidate
+    sys.exit(f"Ports {preferred} to {preferred + search} are all busy. Set OPTPLAT_PORT to a free port.")
+
+
 def main() -> None:
+    try:
+        port = choose_port(int(os.environ.get("OPTPLAT_PORT", "8800")))
+    except ValueError:
+        sys.exit("OPTPLAT_PORT must be a number")
     token = os.environ.get("OPTPLAT_API_TOKEN", "")
     if not token:
         # Show the one-off token in the terminal that started the server, so it can be pasted into the dashboard.
@@ -55,8 +128,19 @@ def main() -> None:
 
     store = Store(os.environ.get("OPTPLAT_DB", "optplat.db"))
     manager = OrderManager(broker, store, policy)
+    if isinstance(broker, SimBroker):
+        # The simulated broker lives in memory. Replay the saved fills so a restart does not forget open positions
+        # or reset cash (which would hide real simulated losses).
+        restored = broker.restore(store.list_orders(limit=1_000_000))
+        store.audit("broker_restore", None, restored)
+        print(f"Restored simulated account from {restored['orders_replayed']} filled orders: "
+              f"{restored['open_positions']} open positions, cash ${restored['cash']:,.2f}.", flush=True)
+        for w in restored["warnings"]:
+            print(f"WARNING (restore): {w}", flush=True)
     # The demo market is fictional and runs at any hour, so market-hours enforcement is off by default there.
     default_cfg = EngineConfig(enforce_market_hours=(data != "demo"))
+    from .events import EventCalendar, yahoo_earnings_dates
+
     which_strategy = os.environ.get("OPTPLAT_STRATEGY", "liquid-trend")
     strategies = {
         "liquid-trend": LiquidTrendStrategy,
@@ -67,14 +151,42 @@ def main() -> None:
         sys.exit("OPTPLAT_STRATEGY must be one of: " + ", ".join(strategies))
     strategy = strategies[which_strategy]()
     print(f"Strategy: {strategy.name} (paper research, no demonstrated edge)", flush=True)
-    engine = TradingEngine(manager, provider, strategy, default_config=default_cfg)
+    calendar = EventCalendar(earnings_source=yahoo_earnings_dates if data == "yahoo" else None)
+    engine = TradingEngine(manager, provider, strategy, default_config=default_cfg, calendar=calendar)
+    scan_every = os.environ.get("OPTPLAT_SCAN_EVERY_S", "")
+    if scan_every:
+        try:
+            engine.set_config({"scan_interval_s": int(scan_every)})
+        except ValueError:
+            sys.exit("OPTPLAT_SCAN_EVERY_S must be 0 or a number of seconds from 600 to 86400")
+    if os.environ.get("OPTPLAT_SHORTTERM", "") == "1":
+        engine.set_config({"shortterm_enabled": True})  # research lane only: simulated share trades, no orders
+    if os.environ.get("OPTPLAT_SWING", "") == "1":
+        engine.set_config({"swing_enabled": True})  # research lane only: simulated share trades, no orders
+    if os.environ.get("OPTPLAT_OPTION_LANES", "") == "1":
+        engine.set_config({"option_lanes_enabled": True})  # research lanes only: simulated long calls and puts, no orders
+    mode = os.environ.get("OPTPLAT_COMMITTEE", "")
+    if mode:
+        if mode not in ("off", "shadow", "active"):
+            sys.exit("OPTPLAT_COMMITTEE must be off, shadow or active")
+        engine.set_config({"committee_mode": mode})  # saved with the other settings; the dashboard can change it later
     runner = Runner(engine)
-    port = int(os.environ.get("OPTPLAT_PORT", "8800"))
-    print(f"Dashboard: http://127.0.0.1:{port}   broker={which}   data={data}", flush=True)
+    dashboard = f"http://127.0.0.1:{port}"
+    print(f"Dashboard: {dashboard}   broker={which}   data={data}", flush=True)
     if data == "demo":
         print("NOTE: demo data is FICTIONAL random prices. Profit or loss here means nothing.", flush=True)
     if allow_unverified:
         print("WARNING: unverified, delayed quotes are allowed through the risk gate. Research only.", flush=True)
+    if os.environ.get("OPTPLAT_AUTOSTART_LOOP") == "1":
+        # Starts the cycle loop only. Automatic entries stay exactly as saved (off unless the owner turned them on).
+        runner.start()
+        entries = "ON" if engine.config().auto_entries else "off"
+        print(f"Loop started automatically. Automatic entries: {entries} (saved setting).", flush=True)
+    if os.environ.get("OPTPLAT_OPEN_BROWSER") == "1":
+        # The token travels in the URL fragment, which browsers never send to the server. The dashboard reads it
+        # once and removes it from the address bar. Tokens with unusual characters are not put in a URL.
+        url = f"{dashboard}/#token={token}" if _FRAGMENT_SAFE_TOKEN.fullmatch(token) else dashboard
+        _start_browser_opener(url, port)
     # Bound to localhost only. Do not expose this server to the internet.
     uvicorn.run(create_app(manager, token, engine, runner), host="127.0.0.1", port=port)
 

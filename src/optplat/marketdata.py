@@ -24,6 +24,7 @@ class ChainRow:
     volume: Optional[int] = None
     open_interest: Optional[int] = None
     iv: Optional[float] = None
+    last: Optional[float] = None  # last traded price, when the feed has it
     last_trade_at: Optional[datetime] = None  # display only: when the contract last traded (stale-quote hint)
 
     def to_quote(self, as_of: datetime, source: str, verified: bool) -> Quote:
@@ -42,6 +43,83 @@ class MarketSnapshot:
     fictional: bool = False
 
 
+def snapshot_to_dict(snap: MarketSnapshot) -> dict[str, Any]:
+    """JSON-safe form of a snapshot, for the recorder and for replay."""
+    return {
+        "symbol": snap.symbol,
+        "underlying": snap.underlying,
+        "closes": list(snap.closes),
+        "as_of": snap.as_of.isoformat(),
+        "source": snap.source,
+        "timestamp_verified": snap.timestamp_verified,
+        "fictional": snap.fictional,
+        "rows": [
+            {
+                "contract": r.contract.to_dict(),
+                "bid": r.bid,
+                "ask": r.ask,
+                "volume": r.volume,
+                "open_interest": r.open_interest,
+                "iv": r.iv,
+                "last": r.last,
+            }
+            for r in snap.rows
+        ],
+    }
+
+
+def snapshot_from_dict(d: dict[str, Any]) -> MarketSnapshot:
+    return MarketSnapshot(
+        symbol=d["symbol"],
+        underlying=float(d["underlying"]),
+        closes=tuple(float(c) for c in d["closes"]),
+        rows=tuple(
+            ChainRow(
+                OptionContract.from_dict(r["contract"]),
+                float(r["bid"]),
+                float(r["ask"]),
+                r.get("volume"),
+                r.get("open_interest"),
+                r.get("iv"),
+                r.get("last"),
+            )
+            for r in d["rows"]
+        ),
+        as_of=datetime.fromisoformat(d["as_of"]),
+        source=d["source"],
+        timestamp_verified=bool(d["timestamp_verified"]),
+        fictional=bool(d.get("fictional", False)),
+    )
+
+
+@dataclass(frozen=True)
+class Bar:
+    """One daily bar: enough to rank names by activity. Volume is shares, close is the unadjusted last price."""
+    day: date
+    close: float
+    volume: float
+
+
+@dataclass(frozen=True)
+class IntradayBar:
+    """One intraday bar. ``ts`` is the bar START in UTC; volume is shares."""
+    ts: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+
+
+def yahoo_period(months: int) -> str:
+    """A period string Yahoo is documented to accept. Up to six months the 'Nmo' form is used (it is what the scanner
+    already ran on); longer spans use the documented year forms, which round up rather than guess at '12mo'."""
+    m = max(1, min(int(months), 24))
+    if m <= 6:
+        return f"{m}mo"
+    return "1y" if m <= 12 else "2y"
+
+
 class MarketDataProvider(ABC):
     name: str = "abstract"
     fictional: bool = False
@@ -53,6 +131,20 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def quotes_for(self, contracts: Sequence[OptionContract]) -> list[Quote]:
         """Current quotes for specific contracts (used to keep held positions marked)."""
+
+    def snapshot_window(self, symbol: str, min_dte: int, max_dte: int, max_expiries: int = 4) -> MarketSnapshot:
+        """Like ``snapshot`` but for the nearest ``max_expiries`` expirations between ``min_dte`` and ``max_dte`` days out.
+        Used by the research lanes and the scanner, which need weekly expirations the trading snapshot skips.
+        A provider that cannot do this falls back to its normal snapshot."""
+        return self.snapshot(symbol)
+
+    def daily_bars(self, symbols: Sequence[str], months: int = 2) -> dict[str, list[Bar]]:
+        """Daily bars per symbol (about two months by default, more for swing research). Optional: raise if unsupported."""
+        raise NotImplementedError(f"{self.name} cannot supply daily bars")
+
+    def intraday_bars(self, symbol: str) -> list["IntradayBar"]:
+        """Today's 5-minute bars for the underlying. Optional: raise if unsupported."""
+        raise NotImplementedError(f"{self.name} cannot supply intraday bars")
 
 
 # ---------------------------------------------------------------- Black-Scholes (demo only)
@@ -108,6 +200,55 @@ class DemoDataProvider(MarketDataProvider):
             self._state[symbol] = closes
         return self._state[symbol]
 
+    def daily_bars(self, symbols: Sequence[str], months: int = 2) -> dict[str, list[Bar]]:
+        """Fictional bars with made-up volume, for exercising the scanner. Deterministic per symbol."""
+        today = self._clock().date()
+        days: list[date] = []
+        d = today
+        want = 30 if months <= 2 else 21 * months
+        while len(days) < want:
+            if d.weekday() < 5:
+                days.append(d)
+            d -= timedelta(days=1)
+        days.reverse()
+        out: dict[str, list[Bar]] = {}
+        for sym in symbols:
+            rng = random.Random(f"{self._seed}:{sym}:bars")
+            price = 50.0 + (sum(map(ord, sym)) % 450)
+            base = 1_000_000 * (1 + sum(map(ord, sym)) % 40)
+            bars = []
+            for i, day in enumerate(days):
+                price *= math.exp(0.012 * rng.gauss(0, 1))
+                surge = 3.0 if (i == len(days) - 1 and sum(map(ord, sym)) % 7 == 0) else 1.0
+                bars.append(Bar(day, round(price, 2), round(base * surge * (0.7 + 0.6 * rng.random()))))
+            out[sym] = bars
+        return out
+
+    def intraday_bars(self, symbol: str) -> list[IntradayBar]:
+        """Fictional 5-minute bars for the current session up to now. Deterministic per symbol and day."""
+        from .market_clock import NY
+
+        now = self._clock()
+        local = now.astimezone(NY)
+        day = local.date()
+        while day.weekday() >= 5:
+            day -= timedelta(days=1)
+        open_ts = datetime(day.year, day.month, day.day, 9, 30, tzinfo=NY).astimezone(timezone.utc)
+        rng = random.Random(f"{self._seed}:{symbol}:{day.isoformat()}:intraday")
+        price = 50.0 + (sum(map(ord, symbol)) % 450)
+        drift = 0.0
+        bars: list[IntradayBar] = []
+        for i in range(78):  # 9:30 to 16:00 in 5-minute steps
+            ts = open_ts + timedelta(minutes=5 * i)
+            if ts + timedelta(minutes=5) > now:
+                break
+            drift = 0.8 * drift + 0.0006 * rng.gauss(0, 1)  # some persistence, so trends and crossings happen
+            o = price
+            price *= math.exp(drift + 0.0012 * rng.gauss(0, 1))
+            hi, lo = max(o, price) * 1.0003, min(o, price) * 0.9997
+            bars.append(IntradayBar(ts, round(o, 2), round(hi, 2), round(lo, 2), round(price, 2), float(round(20000 * (0.5 + rng.random())))))
+        return bars
+
     def advance(self) -> None:
         """Move every known underlying one random step (call once per engine cycle)."""
         for closes in self._state.values():
@@ -132,18 +273,31 @@ class DemoDataProvider(MarketDataProvider):
         m = abs(strike / spot - 1)
         volume = int(1500 * math.exp(-((m / 0.04) ** 2))) + 5
         oi = int(4000 * math.exp(-((m / 0.06) ** 2))) + 120
-        return ChainRow(OptionContract(symbol, expiry, right, strike), bid, ask, volume, oi, self._vol)
+        h = sum(map(ord, f"{symbol}{expiry}{right.value}{strike}"))
+        if m > 0.08 and h % 9 == 0:  # fictional fresh wing positioning, so the unusual scanner has low-OI cases to show
+            volume, oi = 220 + (h * 7) % 400, h % 8
+        # a fictional last trade near the ask, near the bid, or mid, so the buy/sell inference has all three to show
+        last = (ask, bid, round((bid + ask) / 2, 2))[h % 3]
+        return ChainRow(OptionContract(symbol, expiry, right, strike), bid, ask, volume, oi, self._vol, last)
 
     def snapshot(self, symbol: str) -> MarketSnapshot:
+        return self._build(symbol, [e for e in self._expiries() if (e - self._clock().date()).days >= 7])
+
+    def snapshot_window(self, symbol: str, min_dte: int, max_dte: int, max_expiries: int = 4) -> MarketSnapshot:
+        """Fictional weekly (Friday) expirations inside the window, plus today when the window starts at zero."""
+        today = self._clock().date()
+        days = [today + timedelta(days=n) for n in range(max(0, min_dte), max_dte + 1)]
+        picks = [d for d in days if d.weekday() == 4 or (d == today and min_dte <= 0)]
+        return self._build(symbol, picks[:max_expiries])
+
+    def _build(self, symbol: str, expiries: Sequence[date]) -> MarketSnapshot:
         closes = self._closes(symbol)
         spot = closes[-1]
         now = self._clock()
         step = 5.0 if spot > 100 else 1.0
         base = round(spot / step) * step
         rows: list[ChainRow] = []
-        for expiry in self._expiries():
-            if (expiry - now.date()).days < 7:
-                continue
+        for expiry in expiries:
             for k in range(-6, 7):
                 for right in (Right.CALL, Right.PUT):
                     row = self._row(symbol, spot, expiry, right, base + k * step)
@@ -223,6 +377,7 @@ def rows_from_records(records: Iterable[dict[str, Any]], symbol: str, expiry: da
         if strike is None or strike <= 0 or bid is None or ask is None or ask <= 0 or bid < 0 or bid > ask:
             continue
         volume, oi, iv = _num(r.get("volume")), _num(r.get("openInterest")), _num(r.get("impliedVolatility"))
+        last = _num(r.get("lastPrice"))
         if iv is not None and not 0 < iv < 10:
             iv = None
         rows.append(
@@ -233,6 +388,7 @@ def rows_from_records(records: Iterable[dict[str, Any]], symbol: str, expiry: da
                 int(volume) if volume is not None else None,
                 int(oi) if oi is not None else None,
                 iv,
+                last if last is not None and last > 0 else None,
                 _parse_time(r.get("lastTradeDate")),
             )
         )
@@ -255,6 +411,12 @@ class YahooDataProvider(MarketDataProvider):
         )
 
     def snapshot(self, symbol: str) -> MarketSnapshot:
+        return self._read(symbol, 14, 180, self._max)
+
+    def snapshot_window(self, symbol: str, min_dte: int, max_dte: int, max_expiries: int = 4) -> MarketSnapshot:
+        return self._read(symbol, min_dte, max_dte, max_expiries)
+
+    def _read(self, symbol: str, min_dte: int, max_dte: int, max_expiries: int) -> MarketSnapshot:
         import yfinance as yf  # optional dependency: pip install -e ".[yahoo]"
 
         ticker = yf.Ticker(symbol)
@@ -266,12 +428,53 @@ class YahooDataProvider(MarketDataProvider):
         expiries = []
         for e in ticker.options or []:
             d = date.fromisoformat(e)
-            if 14 <= (d - today).days <= 180:
+            if min_dte <= (d - today).days <= max_dte:
                 expiries.append(d)
         rows: list[ChainRow] = []
-        for d in expiries[: self._max]:
+        for d in expiries[:max_expiries]:
             rows.extend(self._chain_rows(ticker, symbol, d))
         return MarketSnapshot(symbol, closes[-1], tuple(closes[-120:]), tuple(rows), self._clock(), self.name, False)
+
+    def daily_bars(self, symbols: Sequence[str], months: int = 2) -> dict[str, list[Bar]]:
+        import yfinance as yf
+
+        frame = yf.download(list(symbols), period=yahoo_period(months), interval="1d", group_by="ticker", auto_adjust=False,
+                            progress=False, threads=True)
+        out: dict[str, list[Bar]] = {}
+        for sym in symbols:
+            try:
+                sub = frame[sym] if len(symbols) > 1 else frame
+                bars = []
+                for ts, close, vol in zip(sub.index, sub["Close"].tolist(), sub["Volume"].tolist()):
+                    c, v = _num(close), _num(vol)
+                    if c and c > 0 and v is not None and v >= 0:
+                        bars.append(Bar(ts.date(), c, v))
+                if bars:
+                    out[sym] = bars
+            except Exception:  # noqa: BLE001 - one symbol failing must not hide the others
+                continue
+        if not out:
+            raise RuntimeError("Yahoo returned no usable daily bars")
+        return out
+
+    def intraday_bars(self, symbol: str) -> list[IntradayBar]:
+        import yfinance as yf
+
+        frame = yf.download(symbol, period="1d", interval="5m", auto_adjust=False, progress=False)
+        if getattr(frame.columns, "nlevels", 1) > 1:
+            frame.columns = frame.columns.get_level_values(0)
+        out: list[IntradayBar] = []
+        for ts, o, h, l, c, v in zip(frame.index, frame["Open"].tolist(), frame["High"].tolist(), frame["Low"].tolist(),
+                                     frame["Close"].tolist(), frame["Volume"].tolist()):
+            vals = [_num(x) for x in (o, h, l, c, v)]
+            if any(x is None for x in vals) or vals[3] <= 0 or vals[4] < 0:
+                continue
+            dt = ts.to_pydatetime()
+            dt = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+            out.append(IntradayBar(dt, vals[0], vals[1], vals[2], vals[3], vals[4]))
+        if not out:
+            raise RuntimeError(f"Yahoo returned no usable intraday bars for {symbol}")
+        return out
 
     def quotes_for(self, contracts: Sequence[OptionContract]) -> list[Quote]:
         import yfinance as yf

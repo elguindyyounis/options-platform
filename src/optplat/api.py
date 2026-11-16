@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import re
 from datetime import date
 from typing import Any
 
@@ -14,7 +15,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .broker.sim import SimBroker
-from .evaluation import describe_fill_model, summarize_closed_trades, summarize_open_positions
+from .closed_trades import describe_fill_model, summarize_closed_trades, summarize_open_positions
 from .engine import Runner, TradingEngine
 from .models import OptionContract, OrderIntent, Quote, Right, Side, utcnow
 from .orders import InvalidTransition, LiveTradingDisabled, OrderManager
@@ -56,6 +57,13 @@ class EngineConfigBody(BaseModel):
     max_days_held: Optional[int] = None
     min_dte_to_hold: Optional[int] = None
     reentry_cooldown_s: Optional[int] = None
+    record_snapshots: Optional[bool] = None
+    snapshot_retention_days: Optional[int] = None
+    committee_mode: Optional[str] = None
+    scan_interval_s: Optional[int] = None
+    shortterm_enabled: Optional[bool] = None
+    swing_enabled: Optional[bool] = None
+    option_lanes_enabled: Optional[bool] = None
 
 
 class KillSwitchBody(BaseModel):
@@ -110,7 +118,19 @@ def create_app(
             broker = manager.broker.healthcheck()
         except Exception as exc:  # noqa: BLE001
             broker = {"connected": False, "error": type(exc).__name__}
-        return {"ok": True, "mode": manager.broker.mode.value, "broker": broker}
+        from .deploy import build_id
+
+        body: dict[str, Any] = {"ok": True, "mode": manager.broker.mode.value, "broker": broker, "build_id": build_id()}
+        if runner is not None:
+            body["runner"] = runner.health()  # counts and flags only; error text stays behind the token
+        return body
+
+    @app.post("/api/deployment/check-on-refresh", dependencies=[Depends(auth)])
+    def check_on_refresh() -> dict[str, Any]:
+        """The dashboard calls this once per page load. It takes no input, so it cannot pick a branch or run a command."""
+        from .deploy import request_update
+
+        return request_update()
 
     @app.get("/api/portfolio", dependencies=[Depends(auth)])
     def portfolio() -> dict[str, Any]:
@@ -193,6 +213,169 @@ def create_app(
         @app.get("/api/engine/status", dependencies=[Depends(auth)])
         def engine_status() -> dict[str, Any]:
             return {**engine.status(), "runner": runner.status() if runner else {"running": False}}
+
+        @app.get("/api/journal", dependencies=[Depends(auth)])
+        def journal(limit: int = 50, kind: Optional[str] = None) -> list[dict[str, Any]]:
+            if kind is not None and not re.fullmatch(r"[A-Z_]{1,24}", kind):
+                raise HTTPException(status_code=422, detail="kind must be upper-case letters and underscores")
+            return engine.store.list_decisions(kind=kind, limit=max(1, min(limit, 500)))
+
+        @app.get("/api/journal/summary", dependencies=[Depends(auth)])
+        def journal_report() -> dict[str, Any]:
+            from .journal import journal_summary
+
+            return journal_summary(engine.store, engine.clock())
+
+        @app.get("/api/equity", dependencies=[Depends(auth)])
+        def equity(limit: int = 500) -> dict[str, Any]:
+            from .evaluation import equity_summary
+
+            fictional = engine.provider.fictional  # never mix a made-up curve with a real one
+            points = engine.store.list_equity(limit=max(2, min(limit, 2000)), fictional=fictional)
+            return {"fictional": fictional, "points": [{"ts": p["ts"], "equity": p["equity"]} for p in points],
+                    "summary": equity_summary(points)}
+
+        @app.get("/api/scan", dependencies=[Depends(auth)])
+        def scan_latest() -> dict[str, Any]:
+            return {"status": engine.scanner.status(), "result": engine.scanner.latest(),
+                    "interval_s": engine.config().scan_interval_s}
+
+        @app.get("/api/tracker", dependencies=[Depends(auth)])
+        def tracker_report() -> dict[str, Any]:
+            from . import tracker
+            from .scanner import session_day, unusual_criteria
+
+            now = engine.clock()
+            return tracker.report(engine.store, engine.provider.fictional, now, session_day(now), unusual_criteria())
+
+        @app.get("/api/rotation", dependencies=[Depends(auth)])
+        def sector_rotation() -> dict[str, Any]:
+            from . import rotation
+
+            return rotation.build(engine.store.scan_history(engine.provider.fictional), engine.provider.fictional)
+
+        @app.post("/api/scan/run", dependencies=[Depends(auth)])
+        def scan_run() -> dict[str, Any]:
+            started = engine.scanner.start()
+            return {"started": started, **engine.scanner.status()}
+
+        @app.get("/api/shortterm", dependencies=[Depends(auth)])
+        def shortterm_report() -> dict[str, Any]:
+            from .shortterm import build_report
+
+            return {**build_report(engine.store, engine.provider.fictional, engine.clock()),
+                    "enabled": engine.config().shortterm_enabled}
+
+        @app.post("/api/shortterm/step", dependencies=[Depends(auth)])
+        def shortterm_step() -> dict[str, Any]:
+            cfg = engine.config()
+            if not cfg.shortterm_enabled:
+                raise HTTPException(status_code=409, detail="The short-term lane is switched off. Turn it on in Controls first.")
+            return engine.maybe_shortterm() or {"note": "Market closed or no data: nothing evaluated"}
+
+        @app.get("/api/swing", dependencies=[Depends(auth)])
+        def swing_report() -> dict[str, Any]:
+            from .swing import build_report
+
+            return {**build_report(engine.store, engine.provider.fictional, engine.clock()),
+                    "enabled": engine.config().swing_enabled}
+
+        @app.post("/api/swing/step", dependencies=[Depends(auth)])
+        def swing_step() -> dict[str, Any]:
+            if not engine.config().swing_enabled:
+                raise HTTPException(status_code=409, detail="The swing lane is switched off. Turn it on in Controls first.")
+            return engine.maybe_swing(force=True) or {"note": "Nothing evaluated"}
+
+        @app.get("/api/optlanes", dependencies=[Depends(auth)])
+        def optlanes_report() -> dict[str, Any]:
+            return {**engine.option_lanes.reports(engine.clock()), "enabled": engine.config().option_lanes_enabled}
+
+        @app.get("/api/challenge", dependencies=[Depends(auth)])
+        def challenge_report() -> dict[str, Any]:
+            return {**engine.option_lanes.challenge.report(engine.clock()), "enabled": engine.config().option_lanes_enabled}
+
+        @app.post("/api/challenge/restart", dependencies=[Depends(auth)])
+        def challenge_restart() -> dict[str, Any]:
+            return engine.option_lanes.challenge.restart(engine.clock())
+
+        @app.post("/api/optlanes/step", dependencies=[Depends(auth)])
+        def optlanes_step() -> dict[str, Any]:
+            if not engine.config().option_lanes_enabled:
+                raise HTTPException(status_code=409, detail="The options lanes are switched off. Turn them on in Controls first.")
+            res = engine.maybe_option_lanes(force=True)
+            return {"lanes": res} if res is not None else {"note": "Market closed or no data: nothing evaluated"}
+
+        @app.get("/api/trades", dependencies=[Depends(auth)])
+        def trades_list(limit: int = 300) -> dict[str, Any]:
+            from .trades import build_trades
+
+            return {**build_trades(manager, limit), "fictional": engine.provider.fictional}
+
+        @app.get("/api/alltrades", dependencies=[Depends(auth)])
+        def all_trades() -> dict[str, Any]:
+            from .alltrades import build_all
+
+            return build_all(manager, engine.store, engine.provider.fictional, engine.clock(), engine.option_lanes)
+
+        @app.get("/api/trades/{trade_id}", dependencies=[Depends(auth)])
+        def trades_one(trade_id: str) -> dict[str, Any]:
+            from .trades import trade_detail
+
+            found = trade_detail(manager, trade_id)
+            if found is None:
+                raise HTTPException(status_code=404, detail="Trade not found")
+            return found
+
+        @app.get("/api/committee", dependencies=[Depends(auth)])
+        def committee_review() -> dict[str, Any]:
+            from . import committee
+
+            fictional = engine.provider.fictional
+            return {"mode": engine.config().committee_mode, "fictional": fictional,
+                    **committee.scorecard(engine.store, engine.clock(), fictional)}
+
+        @app.get("/api/learning", dependencies=[Depends(auth)])
+        def learning_report() -> dict[str, Any]:
+            from . import committee, learning, tracker
+            from .alltrades import build_all
+            from .scanner import session_day, unusual_criteria
+
+            now, fictional = engine.clock(), engine.provider.fictional
+            rows = build_all(manager, engine.store, fictional, now, engine.option_lanes)["trades"]
+            digest = engine.option_lanes.reports(now).get("digest", {})
+            hyps = [{"id": h["id"], "statement": h["payload"]["statement"],
+                     "status": (engine.store.hypothesis_results(h["id"]) or [{"status": "NOT_EVALUATED"}])[-1]["status"]} for h in engine.store.list_hypotheses()]
+            return learning.build(
+                rows, engine.store.list_agent_weights(fictional, limit=60), committee.scorecard(engine.store, now, fictional), digest,
+                tracker.report(engine.store, fictional, now, session_day(now), unusual_criteria()), engine.option_lanes.challenge.report(now), hyps, fictional, now.isoformat())
+
+        @app.get("/api/research/hypotheses", dependencies=[Depends(auth)])
+        def hypotheses() -> list[dict[str, Any]]:
+            from .research import verify
+
+            out = []
+            for h in engine.store.list_hypotheses():
+                results = engine.store.hypothesis_results(h["id"])
+                out.append({
+                    "id": h["id"], "registered_at": h["registered_at"], "statement": h["payload"]["statement"],
+                    "challenger": h["payload"]["challenger"], "criteria": h["payload"]["criteria"],
+                    "intact": verify(h), "status": results[-1]["status"] if results else "NOT_EVALUATED",
+                    "evaluations": len(results),
+                })
+            return out
+
+        @app.get("/api/signals/{symbol}", dependencies=[Depends(auth)])
+        def signals(symbol: str) -> dict[str, Any]:
+            from datetime import datetime as _dt
+
+            from .marketdata import snapshot_from_dict
+            from .signals import compute_signals
+
+            rows = engine.store.list_snapshots(symbol=symbol.upper(), include_fictional=engine.provider.fictional, limit=100_000)
+            if not rows:
+                raise HTTPException(status_code=404, detail="No recorded snapshot for that symbol yet")
+            last = rows[-1]
+            return compute_signals(snapshot_from_dict(last["payload"]), _dt.fromisoformat(last["recorded_at"]))
 
         @app.put("/api/engine/config", dependencies=[Depends(auth)])
         def engine_config(body: EngineConfigBody) -> dict[str, Any]:

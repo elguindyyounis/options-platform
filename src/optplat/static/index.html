@@ -3,109 +3,606 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <title>options-platform</title>
 <style>
-  :root { color-scheme: light dark; --bg:#fff; --fg:#1b1b1f; --mut:#6b6b76; --line:#dcdce2; --card:#f6f6f9;
-          --ok:#13763a; --bad:#b42318; --warn:#9a5b00; --accent:#2457d6; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#111114; --fg:#ececf1; --mut:#9b9ba6; --line:#2b2b33; --card:#19191e;
-            --ok:#4cc17a; --bad:#ff7b72; --warn:#e3b341; --accent:#7aa2ff; }
+  /* Ink and paper: a dark ledger by default, a cool paper theme when the system asks for light. */
+  :root {
+    color-scheme: dark;
+    --bg:#10151c; --surface:#161d27; --raised:#1d2733; --line:#2a3646; --line-soft:#212c3a;
+    --fg:#e8e6df; --mut:#98a2b0; --accent:#6aa6f0; --series-1:#3987e5;
+    --gain:#4cc38a; --loss:#ef7a63; --warn:#e6b04b; --gain-bg:rgba(76,195,138,.13); --loss-bg:rgba(239,122,99,.13);
+    --warn-bg:rgba(230,176,75,.14); --info-bg:rgba(106,166,240,.14);
+    --serif:ui-serif,"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
-  * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.45 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--fg); }
-  header { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-  h1 { font-size:16px; margin:0 12px 0 0; }
-  main { padding:16px; max-width:1100px; margin:0 auto; display:grid; gap:14px; }
-  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:0 0 8px; }
-  .pill { display:inline-block; padding:2px 9px; border-radius:99px; border:1px solid var(--line); font-size:12px; }
-  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
-  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  button { font:inherit; padding:5px 11px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer; }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  button.danger { border-color:var(--bad); color:var(--bad); }
-  input[type=text], input[type=password] { font:inherit; padding:5px 8px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); min-width:220px; }
-  table { border-collapse:collapse; width:100%; }
-  th, td { text-align:left; padding:4px 8px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; vertical-align:top; }
-  th { color:var(--mut); font-weight:600; font-size:12px; }
-  .scroll { overflow-x:auto; }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg:#f3f5f8; --surface:#ffffff; --raised:#eef1f5; --line:#d5dce6; --line-soft:#e4e9f0;
+      --fg:#17202b; --mut:#5a6676; --accent:#1f5fbf; --series-1:#2a78d6;
+      --gain:#167a4a; --loss:#c4452d; --warn:#9a6a00; --gain-bg:rgba(22,122,74,.10); --loss-bg:rgba(196,69,45,.10);
+      --warn-bg:rgba(154,106,0,.12); --info-bg:rgba(31,95,191,.10);
+    }
+  }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; font:14px/1.5 var(--sans); background:var(--bg); color:var(--fg); }
+  [hidden] { display:none !important; }
+  h1, h2, h3, p { margin:0; }
+  a { color:var(--accent); }
+  button, input, select { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+
+  /* shell */
+  .shell { display:grid; grid-template-columns:208px minmax(0,1fr); min-height:100vh; }
+  .rail { position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:2px; padding:18px 12px; border-right:1px solid var(--line); background:var(--surface); }
+  .brand { padding:2px 10px 18px; }
+  .brand b { display:block; font:600 16px var(--serif); letter-spacing:.01em; }
+  .brand small { color:var(--mut); font-size:12px; }
+  .rail a.nav { display:block; padding:9px 12px; border-radius:6px; color:var(--mut); text-decoration:none; border-left:3px solid transparent; font-weight:500; }
+  .rail a.nav:hover { background:var(--raised); color:var(--fg); }
+  .rail a.nav[aria-current="page"] { color:var(--fg); background:var(--raised); border-left-color:var(--series-1); }
+  .rail-foot { margin-top:auto; padding:12px 10px 0; border-top:1px solid var(--line-soft); color:var(--mut); font-size:12px; }
+  .main { min-width:0; }
+  .strip { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 24px; background:var(--bg); border-bottom:1px solid var(--line-soft); }
+  .strip .grow { flex:1; }
+  .content { width:100%; max-width:1180px; margin:0 auto; padding:26px 24px 64px; }
+  .content > section { display:grid; gap:20px; min-width:0; }
+
+  /* type */
+  h1 { font:600 26px/1.25 var(--serif); letter-spacing:.005em; }
+  h1.headline { font-size:clamp(22px,3.2vw,32px); line-height:1.3; max-width:30em; }
+  h2 { font:600 15px var(--sans); }
+  .lede { color:var(--mut); max-width:46em; font-size:14.5px; line-height:1.6; }
+  .q { color:var(--mut); font-size:12.5px; margin:2px 0 10px; }
   .muted { color:var(--mut); }
+  .num { font-variant-numeric:tabular-nums; }
+  .serif { font-family:var(--serif); }
+  .mono { font-family:var(--mono); font-size:12.5px; }
+  .gain { color:var(--gain); } .loss { color:var(--loss); } .warn { color:var(--warn); }
+
+  /* surfaces */
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:16px 18px; min-width:0; }
+  .grid2 { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr); gap:20px; }
+  .verdict { padding:10px 14px; border-radius:6px; border:1px solid var(--line); background:var(--raised); font-size:13.5px; }
+  .verdict.ok { background:var(--gain-bg); border-color:transparent; } .verdict.warn { background:var(--warn-bg); border-color:transparent; }
+  .verdict.bad { background:var(--loss-bg); border-color:transparent; }
   #msg { min-height:1.4em; }
+
+  /* figures: plain label under a serif value, not a card per number */
+  .figures { display:grid; grid-template-columns:repeat(auto-fit,minmax(138px,1fr)); gap:18px 22px; }
+  .fig .v { font:600 22px/1.2 var(--serif); font-variant-numeric:tabular-nums; }
+  .fig .l { color:var(--mut); font-size:12.5px; margin-top:2px; }
+  .fig .s { color:var(--mut); font-size:12px; }
+  dl.facts { display:grid; grid-template-columns:max-content 1fr; gap:6px 18px; margin:0; }
+  dl.facts dt { color:var(--mut); } dl.facts dd { margin:0; overflow-wrap:anywhere; }
+
+  /* controls */
+  .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .btn { padding:7px 13px; border-radius:6px; border:1px solid var(--line); background:var(--raised); font-weight:500; }
+  .btn:hover { border-color:var(--mut); }
+  .btn.primary { background:var(--series-1); border-color:var(--series-1); color:#fff; }
+  .btn.danger { border-color:var(--loss); color:var(--loss); background:transparent; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .linkbtn { border:none; background:none; color:var(--accent); padding:0; margin-top:8px; text-decoration:underline; text-underline-offset:3px; }
+  input[type=text], input[type=password], select { padding:7px 10px; border-radius:6px; border:1px solid var(--line); background:var(--bg); min-width:0; }
+  input[type=text], input[type=password] { min-width:230px; }
+  label.check { display:inline-flex; align-items:center; gap:7px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { padding:5px 11px; border-radius:99px; border:1px solid var(--line); background:transparent; color:var(--mut); font-size:13px; }
+  .chip[aria-pressed="true"], .chip[aria-selected="true"] { background:var(--info-bg); border-color:var(--series-1); color:var(--fg); }
+
+
+  /* desk */
+  .acct { padding:11px 0; border-bottom:1px solid var(--line-soft); display:grid; gap:3px; } .acct:last-child { border-bottom:none; }
+  .acct-top { display:flex; justify-content:space-between; gap:10px; align-items:baseline; } .acct-nums { display:flex; gap:18px; flex-wrap:wrap; font-weight:600; }
+  #view-desk > * { min-width:0; }
+  .hero { padding:22px 24px 16px; display:grid; gap:14px; }
+  .hero-top { display:flex; flex-wrap:wrap; gap:18px 44px; align-items:flex-end; justify-content:space-between; }
+  .hero-label { color:var(--mut); font-size:13px; }
+  .hero-value { font:600 clamp(34px,6vw,54px)/1.05 var(--sans); letter-spacing:-.02em; margin-top:4px; }
+  .hero-change { font-size:15px; margin-top:6px; font-variant-numeric:tabular-nums; }
+  .hero-stats { display:flex; flex-wrap:wrap; gap:14px 34px; }
+  .hero-stats .fig .v { font:600 18px/1.2 var(--sans); }
+  .hero-line { font-size:14.5px; } 
+  h2.sect { font:600 17px var(--serif); }
+  .pos-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:14px; }
+  .pos { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px 16px; display:grid; gap:10px; }
+  .pos-top { display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .pos-pnl { display:flex; align-items:baseline; gap:10px; }
+  .pos-pnl .big { font:600 26px/1.1 var(--sans); font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+  .ladder { position:relative; height:26px; margin:2px 4px 0; }
+  .ladder .track { position:absolute; left:0; right:0; top:11px; height:4px; border-radius:2px; background:linear-gradient(90deg,var(--loss-bg),var(--raised) 45%,var(--gain-bg)); border:1px solid var(--line-soft); }
+  .ladder .cost { position:absolute; top:6px; width:2px; height:14px; background:var(--mut); margin-left:-1px; }
+  .ladder .now { position:absolute; top:3px; width:0; height:0; margin-left:-6px; border-left:6px solid transparent; border-right:6px solid transparent; border-top:9px solid var(--fg); }
+  .ladder-keys { display:flex; justify-content:space-between; font-size:12px; color:var(--mut); font-variant-numeric:tabular-nums; }
+  .ladder-keys b { color:var(--fg); font-weight:600; }
+  .feed { display:grid; }
+  .feed-item { display:grid; grid-template-columns:78px 1fr auto; gap:6px 14px; align-items:baseline; padding:11px 0; border-bottom:1px solid var(--line-soft); }
+  .feed-item:last-child { border-bottom:none; }
+  .feed-time { color:var(--mut); font-size:12.5px; font-variant-numeric:tabular-nums; }
+  .feed-why { grid-column:2 / 4; color:var(--mut); font-size:13px; line-height:1.5; }
+  details.health > summary { cursor:pointer; font-weight:600; }
+  @media (max-width:560px) { .feed-item { grid-template-columns:1fr auto; } .feed-time { grid-column:1 / 3; } .feed-why { grid-column:1 / 3; } .hero { padding:18px 16px 12px; } }
+
+  /* status pills and tags */
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:99px; border:1px solid var(--line); font-size:12.5px; color:var(--mut); background:var(--surface); }
+  .pill.ok { color:var(--gain); } .pill.bad { color:var(--loss); border-color:var(--loss); } .pill.warn { color:var(--warn); }
+  .tag { display:inline-block; padding:1px 8px; border-radius:4px; font-size:12px; font-weight:600; background:var(--raised); color:var(--mut); white-space:nowrap; }
+  .tag.gain { background:var(--gain-bg); color:var(--gain); } .tag.loss { background:var(--loss-bg); color:var(--loss); }
+  .tag.warn { background:var(--warn-bg); color:var(--warn); } .tag.info { background:var(--info-bg); color:var(--accent); }
+
+  /* tables */
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line-soft); vertical-align:middle; font-variant-numeric:tabular-nums; }
+  th { color:var(--mut); font-weight:500; font-size:12.5px; white-space:nowrap; position:sticky; top:0; background:var(--surface); }
+  th button { background:none; border:none; padding:0; color:inherit; font-weight:inherit; }
+  td.r, th.r { text-align:right; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:var(--raised); }
+  .scroll { overflow-x:auto; }
+  .empty { padding:22px 8px; color:var(--mut); }
+  .empty b { display:block; color:var(--fg); font-weight:600; margin-bottom:2px; }
+  .ticket { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+  td .ticket { flex-wrap:nowrap; white-space:nowrap; }
+  .ticket .sym { font:600 14px var(--mono); }
+  .ticket .leg { font-size:13px; } .ticket .leg.call { color:var(--gain); } .ticket .leg.put { color:var(--loss); }
+  .marks { display:flex; gap:12px; flex-wrap:wrap; } .mark { white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .bar { display:inline-block; width:56px; height:6px; background:var(--raised); border-radius:3px; position:relative; vertical-align:middle; margin-left:8px; }
+  .bar i { position:absolute; top:0; bottom:0; border-radius:3px; }
+  .bar i.up { left:50%; background:var(--gain); } .bar i.down { right:50%; background:var(--loss); }
+  .bar::after { content:""; position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:var(--mut); opacity:.6; }
+
+  /* trade cards on phones */
+  .tcard { display:grid; gap:6px; padding:14px 12px; border-bottom:1px solid var(--line-soft); cursor:pointer; }
+  .tcard:last-child { border-bottom:0; }
+  .tcard:active { background:var(--raised); }
+  .tc-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .tc-mid { display:flex; align-items:baseline; gap:12px; }
+  .tc-pnl { font:600 22px/1.2 var(--serif); }
+  #trade-table select { margin:8px 8px 4px; }
+
+  /* heat map and expandable trades */
+  .sector { border-top:1px solid var(--line-soft); padding:12px 0 4px; }
+  .sector:first-child { border-top:0; padding-top:0; }
+  .sector > header { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; margin-bottom:8px; }
+  .sector > header b { font-weight:600; }
+  .tiles { display:flex; flex-wrap:wrap; gap:6px; }
+  .tile { min-width:74px; padding:5px 8px; border-radius:6px; border:1px solid var(--line-soft); background:var(--raised); font-size:12.5px; line-height:1.3; font-variant-numeric:tabular-nums; }
+  .tile b { display:block; font-weight:600; }
+  .tile small { color:var(--mut); font-size:11.5px; }
+  .tile.up { background:color-mix(in srgb, var(--gain) var(--k, 10%), var(--raised)); }
+  .tile.down { background:color-mix(in srgb, var(--loss) var(--k, 10%), var(--raised)); }
+  .inline-file { background:var(--bg); } .inline-file > td { padding:4px 8px 14px; } .inline-file .pm-body { padding:6px 8px; display:grid; gap:12px; }
+  details.pm { border-bottom:1px solid var(--line-soft); }
+  details.pm:last-child { border-bottom:0; }
+  details.pm > summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; padding:11px 4px; cursor:pointer; list-style:none; }
+  details.pm > summary::-webkit-details-marker { display:none; }
+  details.pm > summary::before { content:"+"; color:var(--mut); width:12px; font-family:var(--mono); }
+  details.pm[open] > summary::before { content:"-"; }
+  details.pm .pm-body { padding:2px 4px 16px 28px; display:grid; gap:12px; }
+  details.pm .pm-money { margin-left:auto; font:600 15px var(--serif); font-variant-numeric:tabular-nums; }
+
+  /* chart */
+  .viz { position:relative; }
+  .viz svg { display:block; width:100%; height:auto; overflow:visible; touch-action:pan-y; }
+  .viz svg:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+  .viz .grid { stroke:var(--line-soft); stroke-width:1; }
+  .viz .ref { stroke:var(--mut); stroke-width:1; opacity:.55; }
+  .viz .line { fill:none; stroke:var(--series-1); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+  .viz .area { fill:var(--series-1); opacity:.10; }
+  .viz .dot { fill:var(--series-1); stroke:var(--surface); stroke-width:2; }
+  .viz .cross { stroke:var(--mut); stroke-width:1; }
+  .viz text { fill:var(--mut); font-size:11px; font-variant-numeric:tabular-nums; font-family:var(--sans); }
+  .viz text.end { fill:var(--fg); font-weight:600; }
+  .viz .tip { position:absolute; pointer-events:none; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12px; white-space:nowrap; z-index:2; }
+  .viz .tip strong { display:block; font:600 15px var(--serif); font-variant-numeric:tabular-nums; }
+  .viz .tip span { color:var(--mut); }
+
+  /* agents */
+  .votes { display:flex; flex-wrap:wrap; gap:5px; }
+  .vote { display:inline-flex; align-items:center; gap:4px; padding:1px 8px; border-radius:4px; font-size:12px; background:var(--raised); color:var(--mut); }
+  .vote.s { background:var(--gain-bg); color:var(--gain); } .vote.o { background:var(--loss-bg); color:var(--loss); }
+  ul.plain { margin:0; padding-left:18px; } ul.plain li { margin:3px 0; }
+  details.notes { color:var(--mut); } details.notes summary { cursor:pointer; color:var(--fg); }
+
+  /* trade file drawer */
+  #scrim { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:20; }
+  .drawer { position:fixed; top:0; right:0; bottom:0; width:min(560px,100vw); z-index:21; background:var(--surface); border-left:1px solid var(--line); overflow-y:auto; box-shadow:-12px 0 32px rgba(0,0,0,.28); }
+  .drawer > header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:20px 22px 14px; position:sticky; top:0; background:var(--surface); border-bottom:1px solid var(--line-soft); }
+  .drawer .body { padding:18px 22px 40px; display:grid; gap:22px; }
+  .drawer h3 { font:600 14px var(--sans); margin-bottom:8px; }
+  .result { font:600 34px/1.1 var(--serif); font-variant-numeric:tabular-nums; }
+  .timeline { list-style:none; margin:0; padding:0; border-left:2px solid var(--line); }
+  .timeline li { position:relative; padding:0 0 12px 16px; }
+  .timeline li::before { content:""; position:absolute; left:-6px; top:6px; width:10px; height:10px; border-radius:50%; background:var(--series-1); border:2px solid var(--surface); }
+  .timeline time { color:var(--mut); font-size:12px; display:block; }
+
+  /* phones: the rail becomes a bottom bar */
+  @media (max-width:860px) {
+    .shell { display:block; }
+    .rail { position:fixed; top:auto; bottom:0; left:0; right:0; height:auto; z-index:10; flex-direction:row; justify-content:flex-start; overflow-x:auto; padding:6px 4px calc(6px + env(safe-area-inset-bottom)); border-right:0; border-top:1px solid var(--line); }
+    .brand, .rail-foot { display:none; }
+    .rail a.nav { flex:0 0 auto; text-align:center; padding:9px 12px; font-size:12.5px; border-left:0; border-top:3px solid transparent; }
+    .rail a.nav[aria-current="page"] { border-top-color:var(--series-1); border-left-color:transparent; }
+    .strip { padding:8px 14px; }
+    .content { padding:18px 14px 96px; }
+    .grid2 { grid-template-columns:1fr; }
+    input[type=text], input[type=password] { min-width:0; flex:1; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>options-platform</h1>
-  <span id="mode" class="pill">not connected</span>
-  <span id="data" class="pill"></span>
-  <span id="market" class="pill"></span>
-  <span id="kill" class="pill"></span>
-</header>
-<main>
-  <section id="connect">
-    <h2>Connect</h2>
-    <div class="row">
-      <input id="token" type="password" placeholder="API token (OPTPLAT_API_TOKEN)" autocomplete="off">
-      <button id="btn-connect" class="primary">Connect</button>
-    </div>
-    <div id="msg" class="muted"></div>
-  </section>
+<div class="shell">
+  <nav class="rail" aria-label="Sections">
+    <div class="brand"><b>options-platform</b><small>Paper trading desk</small></div>
+    <a class="nav" href="#/desk" data-page="desk">Desk</a>
+    <a class="nav" href="#/trades" data-page="trades">Trades</a>
+    <a class="nav" href="#/options" data-page="options">Options</a>
+    <a class="nav" href="#/swing" data-page="swing">Swing</a>
+    <a class="nav" href="#/shortterm" data-page="shortterm">Short-term</a>
+    <a class="nav" href="#/market" data-page="market">Market</a>
+    <a class="nav" href="#/tracker" data-page="tracker">Tracker</a>
+    <a class="nav" href="#/agents" data-page="agents">Agents</a>
+    <a class="nav" href="#/research" data-page="research">Research</a>
+    <a class="nav" href="#/system" data-page="system">Controls</a>
+    <div class="rail-foot">Paper trading only. No live orders exist in this app.</div>
+  </nav>
 
-  <section>
-    <h2>At a glance: is it safe, what is it doing, what needs you</h2>
-    <div id="glance" class="muted">Connect to see the summary.</div>
-  </section>
-
-  <section>
-    <h2>Controls</h2>
-    <div class="row">
-      <button id="btn-cycle" class="primary">Run one cycle</button>
-      <button id="btn-start">Start loop</button>
-      <button id="btn-stop">Stop loop</button>
+  <div class="main">
+    <header class="strip">
+      <span id="mode" class="pill">connecting</span>
+      <span id="data" class="pill"></span>
+      <span id="market" class="pill"></span>
+      <span id="kill" class="pill"></span>
       <span id="runner" class="pill"></span>
-      <button id="btn-kill" class="danger">Toggle kill switch</button>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <label><input id="cfg-entries" type="checkbox"> Automatic entries</label>
-      <label><input id="cfg-exits" type="checkbox"> Automatic exits</label>
-      <label><input id="cfg-hours" type="checkbox"> Enforce market hours</label>
-      <input id="cfg-watch" type="text" placeholder="Watchlist: SPY, QQQ">
-      <button id="btn-save">Save settings</button>
-    </div>
-    <p class="muted" style="margin:8px 0 0">Entries cannot be enabled without exits. Everything here is paper trading.</p>
-  </section>
+      <span class="grow"></span>
+      <span id="updated" class="muted"></span>
+    </header>
 
-  <section><h2>Account and results</h2><div id="account"></div><div id="report" class="muted"></div></section>
-  <section>
-    <h2>Results check (research, not proof of an edge)</h2>
-    <div id="results-status"></div>
-    <div class="scroll" id="results-table"></div>
-    <div id="results-limits" class="muted"></div>
-  </section>
-  <section>
-    <h2>Why trades were taken or skipped (last cycle)</h2>
-    <div id="decisions-note" class="muted"></div>
-    <div class="scroll" id="decisions-table"></div>
-  </section>
-  <section>
-    <h2>Top candidates (last cycle, ranking heuristic only)</h2>
-    <div id="candidates-note" class="muted"></div>
-    <div class="scroll" id="candidates-table"></div>
-  </section>
-  <section>
-    <h2>Unusual options turnover (research radar, not a signal)</h2>
-    <div id="flow-note" class="muted"></div>
-    <div class="scroll" id="flow-table"></div>
-  </section>
-  <section>
-    <h2>Modeled net GEX (assumption, research only)</h2>
-    <div id="gex-note" class="muted"></div>
-    <div class="scroll" id="gex-table"></div>
-  </section>
-  <section><h2>Open positions and when they would be sold</h2><div id="positions-note" class="muted"></div><div class="scroll" id="positions"></div></section>
-  <section><h2>Last cycle</h2><div id="cycle" class="muted"></div><div class="scroll" id="cycle-table"></div></section>
-  <section><h2>Orders</h2><div class="scroll" id="orders"></div></section>
-</main>
+    <main class="content">
+      <section id="view-connect" data-plumbing="Connection to the local server" hidden>
+        <h1>Connect</h1>
+        <p class="lede">The launcher opens this page already connected. If you started the server yourself, paste the token it printed in the terminal.</p>
+        <div class="toolbar">
+          <input id="token" type="password" placeholder="Token from the terminal" autocomplete="off" aria-label="API token">
+          <button id="btn-connect" class="btn primary">Connect</button>
+        </div>
+        <div id="msg" class="muted" role="status"></div>
+      </section>
+
+      <section id="view-desk" data-page="desk" data-question="How is the paper account doing, and can I trust the numbers?" hidden>
+        <div id="trust-verdict" class="verdict"></div>
+        <div class="panel"><h2 class="sect">At a glance: is it safe, what is it doing, what needs you</h2><div id="glance" class="muted">Connect to see the summary.</div></div>
+        <div class="panel hero">
+          <div class="hero-top">
+            <div>
+              <div class="hero-label">Paper account value</div>
+              <div id="desk-value" class="hero-value num">Loading</div>
+              <div id="desk-change" class="hero-change"></div>
+            </div>
+            <div class="hero-stats" id="tiles"></div>
+          </div>
+          <div class="viz" id="equity-chart"></div>
+          <button class="linkbtn" id="btn-table" type="button">Show as table</button>
+          <div class="scroll" id="equity-table" hidden></div>
+          <p id="desk-headline" class="hero-line"></p>
+          <details class="notes"><summary>About these numbers</summary>
+            <p id="desk-sub" class="muted" style="margin-top:8px"></p>
+            <p id="sample" class="muted"></p>
+          </details>
+        </div>
+        <div>
+          <h2 class="sect">All accounts and lanes</h2>
+          <p class="q">The paper account and every research lane side by side. Choose a name to see its trades.</p>
+          <div class="panel" style="padding:6px 16px 10px;min-width:0;overflow:hidden"><div class="scroll" id="all-accounts"></div></div>
+          <p class="muted" id="all-accounts-note" style="margin-top:8px"></p>
+        </div>
+        <div>
+          <h2 class="sect">Open positions</h2>
+          <p class="q">What is held, how it is doing, and where each position would exit.</p>
+          <div id="positions"></div>
+        </div>
+        <div>
+          <h2 class="sect">Latest decisions</h2>
+          <p class="q">Why it acted, or didn't. Includes candidates it passed on.</p>
+          <div class="panel" style="padding:4px 16px"><div id="decisions"></div></div>
+        </div>
+        <details class="panel" open>
+          <summary>Results check (research, not proof of an edge)</summary>
+          <div id="results-status"></div>
+          <div class="scroll" id="results-table"></div>
+          <div id="results-limits" class="muted"></div>
+        </details>
+        <details class="panel">
+          <summary>Why trades were taken or skipped (last cycle)</summary>
+          <div id="decisions-note" class="muted"></div>
+          <div class="scroll" id="decisions-table"></div>
+        </details>
+        <details class="panel">
+          <summary>Top candidates (last cycle, ranking heuristic only)</summary>
+          <div id="candidates-note" class="muted"></div>
+          <div class="scroll" id="candidates-table"></div>
+        </details>
+        <details class="panel">
+          <summary>Unusual options turnover (research radar, not a signal)</summary>
+          <div id="flow-note" class="muted"></div>
+          <div class="scroll" id="flow-table"></div>
+        </details>
+        <details class="panel">
+          <summary>Modeled net GEX (assumption, research only)</summary>
+          <div id="gex-note" class="muted"></div>
+          <div class="scroll" id="gex-table"></div>
+        </details>
+        <details class="panel health">
+          <summary>System health</summary>
+          <p class="q" style="margin-top:8px">Loop, data source, last cycle and data quality.</p>
+          <dl class="facts" id="trust"></dl>
+        </details>
+      </section>
+
+      <section id="view-trades" data-page="trades" data-question="What did the platform trade, in options or shares, in which lane, and how did each trade end?" hidden>
+        <div>
+          <h1>Trades</h1>
+          <p id="trade-lede" class="lede"></p>
+        </div>
+        <div class="figures" id="trade-summary"></div>
+        <div class="toolbar">
+          <div class="chips" id="trade-kind" role="group" aria-label="Options or shares"></div>
+          <select id="trade-source" aria-label="Which account or lane"></select>
+          <div class="chips" id="trade-filters" role="group" aria-label="Filter trades"></div>
+          <input id="trade-search" type="text" placeholder="Search by symbol" aria-label="Search trades by symbol">
+        </div>
+        <div class="panel" style="padding:6px 8px"><div class="scroll" id="trade-table"></div></div>
+        <div class="panel">
+          <h2>By account and lane</h2>
+          <p class="q">Which account or experiment is producing these trades, and how are they doing?</p>
+          <div class="scroll" id="trade-sources"></div>
+        </div>
+      </section>
+
+      <section id="view-options" data-page="options" data-question="Do simulated option trades beat shares on the same ideas, and what do the losses teach?" hidden>
+        <div>
+          <h1>Options lanes</h1>
+          <p id="op-lede" class="lede"></p>
+        </div>
+        <div class="toolbar">
+          <button id="btn-op-step" class="btn primary">Check now</button>
+          <span id="op-status" class="muted"></span>
+        </div>
+        <div class="panel" id="ch-panel">
+          <h2>10x challenge</h2>
+          <p class="q" id="ch-lede"></p>
+          <div class="figures" id="ch-figures" style="margin-top:12px"></div>
+          <p id="ch-pace" class="lede" style="margin-top:12px"></p>
+          <div class="toolbar"><button id="btn-ch-restart" class="btn">End this attempt and start over</button><span class="muted" id="ch-honesty"></span></div>
+          <h3 style="margin-top:16px">Every attempt so far</h3>
+          <div class="scroll" id="ch-history"></div>
+          <h3 style="margin-top:16px">This attempt's trades</h3>
+          <div id="ch-trades"></div>
+          <details style="margin-top:12px"><summary>Rules, the critic and limits</summary><ul class="plain" id="ch-rules" style="margin-top:10px"></ul><ul class="plain" id="ch-limits"></ul></details>
+        </div>
+        <div class="panel"><h2>Which version is working?</h2><p class="q">Every lane on the same terms. The two share lanes are the benchmark for the same ideas.</p><div class="scroll" id="op-compare"></div></div>
+        <div class="panel">
+          <div class="chips" id="op-tabs" role="tablist" aria-label="Options lanes"></div>
+          <p id="op-why" class="lede" style="margin-top:12px"></p>
+          <div class="figures" id="op-summary" style="margin-top:14px"></div>
+        </div>
+        <div class="panel"><h2>Simulated trades</h2><p class="q">Open a trade to see why it entered and, once it has closed, what the post-mortem found.</p><div id="op-trades"></div></div>
+        <div class="panel"><h2>What the trades keep teaching</h2><p class="q">Causes tagged on every closed trade across the six lanes. A cause is only a pattern once it has enough trades behind it.</p><div class="scroll" id="op-digest"></div><p id="op-digest-note" class="muted" style="margin-top:10px"></p></div>
+        <div class="panel"><h2>Last check</h2><p class="q">What this lane did the last time it looked, including why it did not trade.</p><ul class="plain" id="op-last" style="margin-top:10px"></ul></div>
+        <div class="grid2">
+          <div class="panel"><h2>The rules of this lane</h2><ul class="plain" id="op-rules" style="margin-top:10px"></ul></div>
+          <div class="panel"><h2>What this cannot tell you</h2><ul class="plain" id="op-limits" style="margin-top:10px"></ul></div>
+        </div>
+      </section>
+
+      <section id="view-swing" data-page="swing" data-question="What is the swing-trading experiment doing, and is it worth anything yet?" hidden>
+        <div>
+          <h1>Swing lane</h1>
+          <p id="sw-lede" class="lede"></p>
+        </div>
+        <div class="toolbar">
+          <button id="btn-sw-step" class="btn primary">Check now</button>
+          <span id="sw-status" class="muted"></span>
+        </div>
+        <div class="figures" id="sw-summary"></div>
+        <div class="panel"><h2>Simulated trades</h2><p class="q">Which shares did the rule buy, and how did each end?</p><div class="scroll" id="sw-table"></div></div>
+        <div class="grid2">
+          <div class="panel"><h2>The rule</h2><ul class="plain" id="sw-rules" style="margin-top:10px"></ul></div>
+          <div class="panel"><h2>What this cannot tell you</h2><ul class="plain" id="sw-limits" style="margin-top:10px"></ul></div>
+        </div>
+      </section>
+
+      <section id="view-shortterm" data-page="shortterm" data-question="What is the short-term day-trading experiment doing, and is it worth anything yet?" hidden>
+        <div>
+          <h1>Short-term lane</h1>
+          <p id="st-lede" class="lede"></p>
+        </div>
+        <div class="toolbar">
+          <button id="btn-st-step" class="btn primary">Check now</button>
+          <span id="st-status" class="muted"></span>
+        </div>
+        <div class="figures" id="st-summary"></div>
+        <div class="panel"><h2>Simulated trades</h2><p class="q">Which shares did the rule buy, and how did each end?</p><div class="scroll" id="st-table"></div></div>
+        <div class="grid2">
+          <div class="panel"><h2>The rule</h2><ul class="plain" id="st-rules" style="margin-top:10px"></ul></div>
+          <div class="panel"><h2>What this cannot tell you</h2><ul class="plain" id="st-limits" style="margin-top:10px"></ul></div>
+        </div>
+      </section>
+
+      <section id="view-market" data-page="market" data-question="Where is the activity today, and is any of it tradable?" hidden>
+        <div>
+          <h1>Market activity</h1>
+          <p id="scan-lede" class="lede"></p>
+        </div>
+        <div class="toolbar">
+          <button id="btn-scan" class="btn primary">Scan now</button>
+          <span id="scan-status" class="muted"></span>
+        </div>
+        <div class="figures" id="scan-sentiment"></div>
+        <div class="chips" id="market-tabs" role="tablist" aria-label="Market views"></div>
+        <div class="panel" id="scan-heat-panel" hidden><h2>Sector heat map</h2><p class="q">Latest completed day against the one before. Arrows and signs carry the direction; the shading only adds weight.</p><div id="scan-heat"></div></div>
+        <div class="panel" id="scan-rotation-panel" hidden><h2>Where trading is moving between sectors</h2><p class="q">Each sector's share of the dollar volume traded across the ranked names, from the daily scans the platform has stored.</p><ul class="plain" id="scan-rotation-notes" style="margin:10px 0"></ul><div class="scroll" id="scan-rotation"></div></div>
+        <div class="panel" id="scan-follow-panel" hidden><h2>Did yesterday's unusual contracts stick?</h2><p class="q">Open interest is reported once a day. If it rose by about the volume that traded, the trades mostly opened positions.</p><div class="scroll" id="scan-follow"></div></div>
+        <div class="panel" id="scan-active-panel"><div class="scroll" id="scan-active"></div></div>
+        <div class="panel" id="scan-unusual-panel" hidden>
+          <div class="chips" id="scan-filters" role="group" aria-label="Filter unusual activity" style="margin-bottom:12px"></div>
+          <div class="scroll" id="scan-unusual"></div>
+        </div>
+        <div class="panel" id="scan-options-panel" hidden><div class="scroll" id="scan-options"></div></div>
+        <details class="notes panel">
+          <summary>What this can and cannot tell you</summary>
+          <ul class="plain" id="scan-notes" style="margin-top:10px"></ul>
+        </details>
+      </section>
+
+      <section id="view-tracker" data-page="tracker" data-question="What makes an option contract unusual, and does being flagged tell us anything about what happens next?" hidden>
+        <div>
+          <h1>Options tracker</h1>
+          <p id="tk-lede" class="lede"></p>
+        </div>
+        <div class="figures" id="tk-figures"></div>
+        <div class="panel">
+          <h2>What the tracker has found</h2>
+          <p class="q">Features known when a contract was flagged that came before a better or worse result than the average flagged contract. Only groups with enough marks appear.</p>
+          <ul class="plain" id="tk-findings" style="margin-top:10px"></ul>
+        </div>
+        <div class="panel">
+          <h2>What happened after contracts were flagged</h2>
+          <p class="q">Each flagged contract is bought at its ask on the flag day and sold at its bid on the mark day, so the spread is already paid and losing on average is the expected starting point. The underlying's move counts in the direction that helps the contract: up for a call, down for a put.</p>
+          <div class="scroll" id="tk-horizons"></div>
+        </div>
+        <div class="panel">
+          <h2>Which features came first</h2>
+          <p class="q">Each row is a group of flagged contracts that shared one feature, compared with all flagged contracts at the same mark.</p>
+          <div class="chips" id="tk-horizon-tabs" role="group" aria-label="Days after the flag" style="margin-bottom:12px"></div>
+          <div class="scroll" id="tk-groups"></div>
+        </div>
+        <div class="panel">
+          <h2>Contracts being watched</h2>
+          <p class="q">Flagged in the last 12 days. Marks fill in as later scans read each contract again.</p>
+          <div class="scroll" id="tk-watching"></div>
+        </div>
+        <div class="panel">
+          <h2>What counts as unusual</h2>
+          <p class="q">The rules the scanner applies today. They are experiment settings; this page is how they get tested.</p>
+          <div class="scroll" id="tk-criteria"></div>
+        </div>
+        <div class="panel">
+          <h2>How the agents use this</h2>
+          <p id="tk-agent" class="muted"></p>
+        </div>
+        <details class="notes panel">
+          <summary>What this can and cannot tell you</summary>
+          <ul class="plain" id="tk-notes" style="margin-top:10px"></ul>
+        </details>
+      </section>
+
+      <section id="view-agents" data-page="agents" data-question="Are the agents learning, and which of them is actually right?" hidden>
+        <div>
+          <h1>Agents</h1>
+          <p id="committee-summary" class="lede"></p>
+        </div>
+        <div class="panel">
+          <h2>Record by agent</h2>
+          <p class="q">What happened after each agent said support or oppose?</p>
+          <div class="scroll" id="committee-agents"></div>
+        </div>
+        <div class="panel">
+          <h2>Latest votes</h2>
+          <p class="q">What did each agent say about the newest candidates?</p>
+          <div class="scroll" id="committee-votes"></div>
+        </div>
+        <div class="grid2">
+          <div class="panel"><h2>Lessons from mistakes</h2><ul class="plain" id="committee-lessons" style="margin-top:10px"></ul></div>
+          <div class="panel"><h2>Recent weight changes</h2><div class="scroll" id="committee-history" style="margin-top:10px"></div></div>
+        </div>
+      </section>
+
+      <section id="view-research" data-page="research" data-question="What has the platform learned so far, and is it actually getting better?" hidden>
+        <div>
+          <h1>Research</h1>
+          <p id="rs-lede" class="lede"></p>
+        </div>
+        <div class="figures" id="rs-figures"></div>
+        <div class="panel">
+          <h2>Is it getting better?</h2>
+          <p class="q">The closed trades from every account and lane, split into an older and a newer half.</p>
+          <p id="rs-verdict" style="margin:10px 0"></p>
+          <div class="scroll" id="rs-halves"></div>
+        </div>
+        <div class="panel">
+          <h2>What it has learned</h2>
+          <p class="q">Each lesson says where it came from and how much evidence stands behind it. An anecdote is one or two trades; a pattern needs more.</p>
+          <div class="scroll" id="rs-lessons" style="margin-top:10px"></div>
+        </div>
+        <div class="grid2">
+          <div class="panel"><h2>How the agents have changed</h2><p class="q">Learned trust in each agent, from how its votes turned out.</p><div class="scroll" id="rs-agents" style="margin-top:10px"></div></div>
+          <div class="panel"><h2>Over time</h2><p class="q">Milestones, weight changes and challenge attempts, newest first.</p><ol class="timeline" id="rs-timeline" style="margin-top:10px"></ol></div>
+        </div>
+        <div class="panel"><h2>Registered experiments</h2><p class="q">A challenger only counts if its hypothesis and pass criteria were written down before its results existed. The baseline strategy is frozen.</p><div class="scroll" id="research" style="margin-top:10px"></div></div>
+        <details class="notes panel"><summary>What this can and cannot tell you</summary><p id="rs-caveat" class="muted" style="margin-top:10px"></p></details>
+      </section>
+
+      <section id="view-system" data-page="system" data-question="Is it running, and what is it allowed to do?" hidden>
+        <div>
+          <h1>Controls</h1>
+          <p class="lede">Entries cannot be switched on without exits. Everything here is paper trading, and the kill switch stops all new entries.</p>
+        </div>
+        <div class="panel">
+          <h2>Run</h2>
+          <div class="toolbar" style="margin-top:12px">
+            <button id="btn-cycle" class="btn primary">Run one cycle</button>
+            <button id="btn-start" class="btn">Start loop</button>
+            <button id="btn-stop" class="btn">Stop loop</button>
+            <button id="btn-kill" class="btn danger">Toggle kill switch</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Settings</h2>
+          <div class="toolbar" style="margin-top:12px">
+            <label class="check"><input id="cfg-entries" type="checkbox"> Automatic entries</label>
+            <label class="check"><input id="cfg-exits" type="checkbox"> Automatic exits</label>
+            <label class="check"><input id="cfg-hours" type="checkbox"> Enforce market hours</label>
+            <label class="check"><input id="cfg-swing" type="checkbox"> Swing research lane (shares)</label>
+            <label class="check"><input id="cfg-optlanes" type="checkbox"> Options research lanes</label>
+            <label class="check"><input id="cfg-shortterm" type="checkbox"> Short-term research lane (shares)</label>
+          </div>
+          <div class="toolbar" style="margin-top:12px">
+            <label class="check">Agent committee
+              <select id="cfg-committee"><option value="off">off</option><option value="shadow">shadow (records only)</option><option value="active">active</option></select>
+            </label>
+            <label class="check">Market scan
+              <select id="cfg-scan"><option value="0">off</option><option value="900">every 15 minutes</option><option value="1800">every 30 minutes</option><option value="3600">every hour</option></select>
+            </label>
+            <input id="cfg-watch" type="text" placeholder="Watchlist: SPY, QQQ" aria-label="Watchlist">
+            <select id="cfg-sector" aria-label="Add the most traded names from a sector"></select>
+            <button id="btn-sector" class="btn" type="button">Add to watchlist</button>
+            <button id="btn-save" class="btn">Save settings</button>
+          </div>
+          <p class="muted" id="cfg-watch-note" style="margin-top:10px">The watchlist holds up to 20 names. SPY and QQQ are index funds; single stocks add earnings dates (the events agent opposes entries around them), wider spreads (the risk limits may refuse more of them) and one option chain read per name each cycle. "Add to watchlist" fills the box with the sector's most traded names from the latest scan; nothing changes until you choose Save settings. Risk limits are not affected.</p>
+        </div>
+        <div class="panel">
+          <h2>Orders</h2>
+          <p class="q">What did the broker actually do with the orders sent?</p>
+          <div class="scroll" id="orders"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="scrim" hidden></div>
+<aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
+  <header>
+    <div><h2 id="drawer-title" style="font:600 18px var(--serif)"></h2><div id="drawer-sub" class="muted"></div></div>
+    <button id="btn-drawer-close" class="btn" type="button">Close</button>
+  </header>
+  <div class="body" id="drawer-body"></div>
+</aside>
 <script src="/static/app.js"></script>
 </body>
 </html>

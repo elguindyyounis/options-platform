@@ -40,6 +40,11 @@ def test_dashboard_never_assigns_html_from_api_data(client):
     assert "innerHTML" not in src and "outerHTML" not in src and "insertAdjacentHTML" not in src
 
 
+def test_dashboard_reads_a_launcher_token_from_the_fragment_and_scrubs_it(client):
+    src = client.get("/static/app.js").text
+    assert "location.hash" in src and "history.replaceState" in src
+
+
 def test_unexpected_host_header_is_rejected(client):
     assert client.get("/api/health", headers={"Host": "evil.example"}).status_code == 400
 
@@ -100,6 +105,25 @@ def test_selling_without_a_position_is_rejected_not_errored(client):
     assert r.status_code == 200 and r.json()["state"] == "RISK_REJECTED"
 
 
+def test_status_exposes_recorder_counts_and_config_accepts_retention(client):
+    r = client.get("/api/engine/status", headers=H).json()
+    assert r["recorder"]["total"] == 0 and r["config"]["record_snapshots"] is True
+    ok = client.put("/api/engine/config", json={"snapshot_retention_days": 7}, headers=H)
+    assert ok.status_code == 200 and ok.json()["snapshot_retention_days"] == 7
+    bad = client.put("/api/engine/config", json={"snapshot_retention_days": 0}, headers=H)
+    assert bad.status_code == 422 or bad.status_code == 400
+
+
+def test_health_shows_runner_flags_but_never_error_text_and_status_shows_the_detail(client):
+    body = client.get("/api/health").json()
+    assert set(body["runner"]) == {"running", "stalled", "seconds_since_success"}
+    detail = client.get("/api/engine/status", headers=H).json()["runner"]
+    assert {"last_error", "last_success_at", "stalled"} <= set(detail)
+
+
+def test_dashboard_warns_when_the_loop_is_stalled(client):
+    src = client.get("/static/app.js").text
+    assert "LOOP STALLED" in src and "rn.stalled" in src
 def test_dashboard_has_results_panel_that_uses_the_results_api():
     """UX: results (sample gate, split-half, unrealized) are visible on first sight, text only."""
     from pathlib import Path
@@ -123,8 +147,10 @@ def test_glance_summary_is_text_only_and_flags_unsafe_states():
     js = (root / "app.js").read_text()
     assert "innerHTML" not in js and 'id="glance"' in (root / "index.html").read_text()
     harness = """
-global.document={getElementById:()=>({addEventListener(){}}),createElement:()=>({})};
-global.window={};global.sessionStorage={getItem:()=>''};global.fetch=()=>{};global.setInterval=()=>0;
+const stub=()=>new Proxy(function(){},{get:(t,k)=>k==='matches'?false:(k==='style'||k==='classList'||k==='dataset')?stub():stub(),set:()=>true,apply:()=>stub()});
+global.document={getElementById:()=>stub(),createElement:()=>stub(),querySelectorAll:()=>[],addEventListener(){},createTextNode:()=>stub()};
+global.window={matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(){}};global.location={hash:''};global.history={replaceState(){}};
+global.sessionStorage={getItem:()=>'',setItem(){},removeItem(){}};global.fetch=()=>new Promise(()=>{});global.setInterval=()=>0;global.setTimeout=()=>0;
 require(process.argv[1]);
 const g=window.optplatGlance;
 const st={data_source:{name:'x',fictional:true},config:{auto_entries:true,auto_exits:false},last_cycle:{errors:['boom'],entries:[],exits:[]},runner:{running:false}};

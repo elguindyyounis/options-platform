@@ -1,232 +1,166 @@
-"""Honest closed-trade summary for paper results.
+"""Strategy evaluation over recorded data: measurements, never a verdict.
 
-Research display only: it reads filled SELL_TO_CLOSE orders and never changes what is traded. A
-number here is a description of simulated fills, not evidence of an edge. The summary refuses to
-call anything a "result" below ``min_trades`` closed trades, never reports a 0% win rate for zero
-trades, and says what it leaves out (commissions, open-position losses, quote-time verification).
+Runs the real engine over recorded snapshots (see ``replay``) in two independent time segments, an earlier
+in-sample part and a later out-of-sample part, each from a fresh paper account. Nothing is tuned here, so the
+split is a stability check: a result that exists only in one half deserves suspicion.
+
+Numbers are only labelled MEASURED when there are enough closed trades in total and in the out-of-sample
+part. Otherwise they are descriptive and the status says INSUFFICIENT_DATA. Fictional data is always labelled
+meaningless. Nothing here says a strategy has an edge.
 """
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Callable, Iterable
+from typing import Any, Optional, Sequence
 
-from .broker.base import QuoteUnavailable
-from .models import Order, OrderState, Position, Quote, Side
+from .replay import ReplayResult, run_replay
+from .risk import RiskPolicy
+from .strategy import Strategy
 
-DEFAULT_MIN_TRADES = 30
-CURVE_POINTS = 20  # most recent closed trades shown in the cumulative P&L line
+MIN_TRADES = 30
+MIN_OOS_TRADES = 10
+OOS_FRACTION = 0.3
 
-LIMITATIONS = (
-    "Simulated fills only; no commissions or exchange fees are modeled, so real costs would be higher.",
-    "Closed-trade figures exclude open positions; see open_positions for marks (bid-based, never guessed).",
-    "Max drawdown is measured on the closed-trade equity curve only and understates account drawdown.",
-    "Trades are grouped per fill, not per independent idea; correlated trades overstate the sample.",
-    "Not evidence of an edge. Synthetic or unverified-quote runs prove nothing about real markets.",
-)
-
-
-def describe_fill_model(broker: Any) -> dict[str, Any]:
-    """Name how fills are simulated, from the broker itself; unknown stays unknown (display only)."""
-    mode = getattr(getattr(broker, "mode", None), "value", None) or str(getattr(broker, "mode", "unknown"))
-    slip = getattr(broker, "slippage_pct", None)
-    if not isinstance(slip, (int, float)) or isinstance(slip, bool):
-        return {"mode": mode, "buys": "unknown", "sells": "unknown", "slippage_pct": None,
-                "commissions_modeled": False,
-                "note": "Fill model not reported by this broker; do not assume it is conservative."}
-    return {"mode": mode, "buys": "ask plus slippage", "sells": "bid minus slippage", "slippage_pct": float(slip),
-            "commissions_modeled": False,
-            "note": "Immediate simulated fills at the quoted ask/bid; no queue position, partial fills or market impact."}
+CAVEATS = [
+    "Paper results on simulated fills (buys at ask plus slippage, sells at bid minus slippage). Real fills differ.",
+    "Recorded free data is delayed and unofficial, and the recorded period is one market regime.",
+    "No commissions, fees or taxes are modelled.",
+    "Each segment starts from a fresh account, so a position open at the split is not carried across.",
+    "These are measurements, not proof of an edge. Past paper results predict nothing by themselves.",
+]
 
 
-EVIDENCE_ALWAYS_MISSING = (
-    "Out-of-sample holdout (later dates, nothing tuned on them)",
-    "Comparison against a do-nothing baseline (backlog item 2)",
-    "Commission and fee model (needs an owner-chosen cost assumption)",
-    "Exchange-timestamped option quotes and real broker fills",
-)
+def _max_drawdown_pct(equity: Sequence[float], start: float) -> float:
+    peak, worst = start, 0.0
+    for e in equity:
+        peak = max(peak, e)
+        if peak > 0:
+            worst = max(worst, (peak - e) / peak * 100)
+    return round(worst, 2)
 
 
-def promotion_readiness(closed_trades: int, min_trades: int = DEFAULT_MIN_TRADES) -> dict[str, Any]:
-    """What is still missing before the owner could even consider a strategy beyond paper experiments.
-
-    Display only. ``promotion_recommended`` is always False: the platform has no test that could justify
-    it, and promotion is an owner decision (CLAUDE.md). Mirrors the alerter's ``evidence_missing`` list.
-    """
-    missing = list(EVIDENCE_ALWAYS_MISSING)
-    if closed_trades < min_trades:
-        missing.insert(0, f"Enough closed trades ({closed_trades} of {min_trades})")
-    return {"promotion_recommended": False, "evidence_missing": missing,
-            "note": "No strategy is recommended for anything beyond paper experiments; that is the owner's decision."}
-
-
-STRATEGY_VARIANTS = ("liquid-trend", "flow-otm", "flow-near")  # keep in step with OPTPLAT_STRATEGY choices in __main__
-
-
-def multiple_testing_note() -> dict[str, Any]:
-    """Display-only warning that several strategies can be tried and the results are not split per strategy.
-
-    Challenge 3: with more than one variant, picking whichever looks best afterwards overstates it. The
-    closed-trade orders do not record which strategy placed the buy, so the totals may mix variants.
-    """
-    n = len(STRATEGY_VARIANTS)
+def equity_summary(points: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Peak, drawdowns and change from the first point, for the equity chart's headline numbers."""
+    values = [float(p["equity"]) for p in points]
+    if not values:
+        return {"points": 0, "start": None, "last": None, "change_pct": None, "peak": None,
+                "current_drawdown_pct": None, "max_drawdown_pct": None}
+    peak = max(values)
     return {
-        "strategy_variants_selectable": list(STRATEGY_VARIANTS),
-        "results_split_by_strategy": False,
-        "note": (f"{n} strategies can be selected. Totals here are not split by strategy, so they may mix variants. "
-                 "If several are tried and the best-looking one is kept, its result is overstated by that choice; "
-                 "judge each variant only on trades made after it was fixed, against the same baseline."),
+        "points": len(values), "start": values[0], "last": values[-1],
+        "change_pct": round((values[-1] - values[0]) / values[0] * 100, 3) if values[0] else None,
+        "peak": peak, "current_drawdown_pct": round((peak - values[-1]) / peak * 100, 2) if peak > 0 else None,
+        "max_drawdown_pct": _max_drawdown_pct(values, values[0]),
     }
 
 
-def breakeven_fee_per_contract(total_pnl: float, contracts: int) -> float | None:
-    """Round-trip fee per contract that would erase the realised P&L (display only, no fee is assumed).
-
-    Paper fills carry no commissions (challenge 1). Rather than invent a fee, show how much headroom the
-    simulated profit has: None when nothing closed or the total is already zero or negative.
-    """
-    if contracts <= 0 or total_pnl <= 0:
-        return None
-    return round(total_pnl / contracts, 4)
-
-
-def closed_trade_pnl(order: Order) -> float | None:
-    """Realised P&L in dollars for one fully filled sell-to-close, or None if it cannot be computed."""
-    if order.intent.side is not Side.SELL_TO_CLOSE or order.state is not OrderState.FILLED:
-        return None
-    if order.cost_basis is None or order.avg_fill_price is None or order.filled_qty <= 0:
-        return None
-    return (order.avg_fill_price - order.cost_basis) * order.filled_qty * order.intent.contract.multiplier
-
-
-def split_half_check(pnls: list[float], *, min_trades: int = DEFAULT_MIN_TRADES) -> dict[str, Any]:
-    """Compare the earlier and later half of closed trades (chronological, no tuning, no peeking).
-
-    This is a stability check, not an out-of-sample test: nothing was fit on the first half. It only
-    says whether the sign of the result survives into the later trades. Below ``min_trades`` it
-    reports no numbers at all.
-    """
-    n = len(pnls)
-    if n < min_trades:
-        return {"status": "INSUFFICIENT_SAMPLE", "first_half_pnl_usd": None, "second_half_pnl_usd": None,
-                "consistent": None}
-    first, second = sum(pnls[: n // 2]), sum(pnls[n // 2:])
-    consistent = (first > 0) == (second > 0) and first != 0 and second != 0
-    return {"status": "CHECKED", "trades_per_half": [n // 2, n - n // 2],
-            "first_half_pnl_usd": round(first, 2), "second_half_pnl_usd": round(second, 2),
-            "consistent": consistent,
-            "note": "Same-sign halves are necessary, not sufficient; opposite signs mean the total is unstable."}
+def _segment(name: str, rows: Sequence[dict[str, Any]], **replay_kwargs: Any) -> dict[str, Any]:
+    result: ReplayResult = run_replay(rows, **replay_kwargs)
+    rep = result.report
+    closed = rep["closed_trades"]
+    start_equity = 100_000.0  # the simulated broker's starting account
+    end_equity = result.equity[-1] if result.equity else start_equity
+    return {
+        "name": name,
+        "from": result.trace[0][0],
+        "to": result.trace[-1][0],
+        "steps": result.steps,
+        "closed_trades": closed,
+        "win_rate_pct": rep["win_rate_pct"],
+        "realized_pnl": rep["realized_pnl"],
+        "expectancy_per_trade": round(rep["realized_pnl"] / closed, 2) if closed else None,
+        "open_positions_at_end": len(rep["open"]),
+        "return_pct": round((end_equity - start_equity) / start_equity * 100, 3),
+        "max_drawdown_pct": _max_drawdown_pct(result.equity, start_equity),
+        "fictional": result.fictional,
+    }
 
 
-def summarize_closed_trades(
-    orders: Iterable[Order], *, min_trades: int = DEFAULT_MIN_TRADES, starting_equity: float = 100_000.0
+def _buy_and_hold(rows: Sequence[dict[str, Any]]) -> dict[str, float]:
+    """Percent move of each underlying between its first and last recorded snapshot (context only)."""
+    first: dict[str, tuple[str, float]] = {}
+    last: dict[str, tuple[str, float]] = {}
+    for r in rows:
+        at, px = r["recorded_at"], float(r["payload"]["underlying"])
+        sym = r["symbol"]
+        if sym not in first or at < first[sym][0]:
+            first[sym] = (at, px)
+        if sym not in last or at >= last[sym][0]:
+            last[sym] = (at, px)
+    return {s: round((last[s][1] - first[s][1]) / first[s][1] * 100, 2) for s in sorted(first) if first[s][1] > 0}
+
+
+def evaluate(
+    rows: Sequence[dict[str, Any]],
+    *,
+    strategy: Optional[Strategy] = None,
+    config: Optional[dict[str, Any]] = None,
+    policy: Optional[RiskPolicy] = None,
+    min_trades: int = MIN_TRADES,
+    min_oos_trades: int = MIN_OOS_TRADES,
+    oos_fraction: float = OOS_FRACTION,
 ) -> dict[str, Any]:
-    rows = []
-    unpriced = 0
-    contracts = 0
-    for o in orders:
-        if o.intent.side is Side.SELL_TO_CLOSE and o.state is OrderState.FILLED:
-            pnl = closed_trade_pnl(o)
-            if pnl is None:
-                unpriced += 1  # filled exit without a recorded cost basis: counted, never guessed
-            else:
-                rows.append((o.updated_at, o.id, pnl))
-                contracts += int(o.filled_qty)
-    rows.sort()
-    pnls = [r[2] for r in rows]
-    n = len(pnls)
-    wins = sum(p > 0 for p in pnls)
-    gross_win = sum(p for p in pnls if p > 0)
-    gross_loss = -sum(p for p in pnls if p < 0)
-    equity = peak = float(starting_equity)
-    max_dd = 0.0
-    for p in pnls:
-        equity += p
-        peak = max(peak, equity)
-        if peak > 0:
-            max_dd = max(max_dd, 100.0 * (peak - equity) / peak)
-    total = sum(pnls)
-    cumulative, running = [], 0.0
-    longest = current = 0
-    for p in pnls:
-        running += p
-        cumulative.append(round(running, 2))
-        current = current + 1 if p < 0 else 0
-        longest = max(longest, current)
-    if n == 0:
-        status = "NO_CLOSED_TRADES"
-    elif n < min_trades:
-        status = "INSUFFICIENT_SAMPLE"
+    if not rows:
+        raise ValueError("No recorded snapshots to evaluate")
+    if not 0.1 <= oos_fraction <= 0.5:
+        raise ValueError("oos_fraction must be between 0.1 and 0.5")
+    moments = sorted({r["recorded_at"] for r in rows}, key=datetime.fromisoformat)
+    if len(moments) < 4:
+        raise ValueError("Need at least 4 recorded moments to split into in-sample and out-of-sample")
+    cut = moments[max(2, min(len(moments) - 2, int(len(moments) * (1 - oos_fraction))))]
+    key = datetime.fromisoformat
+    early = [r for r in rows if key(r["recorded_at"]) < key(cut)]
+    late = [r for r in rows if key(r["recorded_at"]) >= key(cut)]
+
+    kwargs = {"strategy": strategy, "config": config, "policy": policy}
+    segments = [_segment("in_sample", early, **kwargs), _segment("out_of_sample", late, **kwargs)]
+    total = sum(s["closed_trades"] for s in segments)
+    oos = segments[1]["closed_trades"]
+    fictional = any(bool(r["fictional"]) for r in rows)
+
+    reasons: list[str] = []
+    if total < min_trades:
+        reasons.append(f"{total} closed trades in total; at least {min_trades} are needed")
+    if oos < min_oos_trades:
+        reasons.append(f"{oos} closed trades out of sample; at least {min_oos_trades} are needed")
+    if fictional:
+        status, reasons = "FICTIONAL_DATA", ["The data is fictional, so the numbers mean nothing"] + reasons
+    elif reasons:
+        status = "INSUFFICIENT_DATA"
     else:
-        status = "SAMPLE_SIZE_MET_NOT_PROOF_OF_EDGE"
+        status = "MEASURED"
     return {
         "status": status,
-        "closed_trades": n,
-        "min_trades_required": min_trades,
-        "unpriced_exits": unpriced,
-        "wins": wins,
-        "losses": sum(p < 0 for p in pnls),
-        "win_rate_pct": round(100.0 * wins / n, 2) if n else None,
-        "realized_pnl_usd": round(total, 2),
-        "average_pnl_usd": round(total / n, 2) if n else None,
-        "profit_factor": round(gross_win / gross_loss, 3) if gross_loss > 0 else None,
-        "best_trade_share_of_gross_wins_pct": round(100.0 * max(pnls) / gross_win, 1) if gross_win > 0 else None,
-        "pnl_without_best_trade_usd": round(total - max(pnls), 2) if n else None,
-        "closed_trade_max_drawdown_pct": round(max_dd, 3) if n else None,
-        "contracts_closed": contracts,
-        "breakeven_fee_per_contract_usd": breakeven_fee_per_contract(total, contracts),
-        "split_half": split_half_check(pnls, min_trades=min_trades),
-        "longest_losing_streak": longest if n else None,
-        "cumulative_pnl_recent_usd": cumulative[-CURVE_POINTS:],
-        "cumulative_pnl_points_total": n,
-        "promotion": promotion_readiness(n, min_trades),
-        "multiple_testing": multiple_testing_note(),
-        "limitations": list(LIMITATIONS),
+        "reasons": reasons,
+        "segments": segments,
+        "do_nothing": {"return_pct": 0.0, "max_drawdown_pct": 0.0, "closed_trades": 0},
+        "underlying_buy_and_hold_pct": _buy_and_hold(rows),
+        "recorded_moments": len(moments),
+        "caveats": CAVEATS,
     }
 
 
-def summarize_open_positions(
-    positions: Iterable[Position],
-    get_quote: Callable[..., Quote],
-    now: datetime,
-    *,
-    max_age_seconds: float = 120.0,
-) -> dict[str, Any]:
-    """Mark open long options to the BID (what a sell would get), conservatively.
+def _pct(value: Optional[float]) -> str:
+    return "n/a" if value is None else f"{value}%"
 
-    A position is marked only with a valid, venue-timestamped, fresh quote. Anything else is listed
-    as unmarked and the total is ``None``: a partial total would hide the losses we could not see.
-    """
-    marked: list[dict[str, Any]] = []
-    unmarked: list[dict[str, Any]] = []
-    total = 0.0
-    for pos in positions:
-        label = pos.contract.to_dict()
-        reason = None
-        quote = None
-        try:
-            quote = get_quote(pos.contract)
-        except QuoteUnavailable:
-            reason = "no_quote"
-        except Exception:  # fail closed: any broker error means "cannot mark"
-            reason = "quote_error"
-        if quote is not None:
-            if not quote.is_valid():
-                reason = "invalid_quote"
-            elif not quote.timestamp_verified:
-                reason = "quote_time_unverified"
-            elif not 0 <= quote.age_seconds(now) <= max_age_seconds:
-                reason = "stale_quote"
-        if reason or quote is None:
-            unmarked.append({"contract": label, "quantity": pos.quantity, "reason": reason})
-            continue
-        pnl = (quote.bid - pos.avg_cost) * pos.quantity * pos.contract.multiplier
-        total += pnl
-        marked.append({"contract": label, "quantity": pos.quantity, "avg_cost": pos.avg_cost,
-                       "bid": quote.bid, "unrealized_pnl_usd": round(pnl, 2)})
-    return {
-        "open_positions": len(marked) + len(unmarked),
-        "marked": marked,
-        "unmarked": unmarked,
-        "unrealized_pnl_usd": None if unmarked else round(total, 2),
-        "basis": "bid, verified fresh quotes only; total is null if any position cannot be marked",
-    }
+
+def format_report(result: dict[str, Any]) -> str:
+    lines = [f"STATUS: {result['status']}"]
+    lines += [f"  - {r}" for r in result["reasons"]]
+    if result["status"] != "MEASURED":
+        lines.append("  The figures below are descriptive only. Do not treat them as a result.")
+    lines.append(f"Recorded moments replayed: {result['recorded_moments']}")
+    for seg in result["segments"]:
+        lines.append(
+            f"\n{seg['name']}  ({seg['from'][:19]} -> {seg['to'][:19]}, {seg['steps']} steps)\n"
+            f"  closed trades {seg['closed_trades']}, win rate {_pct(seg['win_rate_pct'])}, realized P&L {seg['realized_pnl']},"
+            f" per trade {seg['expectancy_per_trade'] if seg['expectancy_per_trade'] is not None else 'n/a'}\n"
+            f"  return {seg['return_pct']}%, max drawdown {seg['max_drawdown_pct']}%,"
+            f" positions still open {seg['open_positions_at_end']}"
+        )
+    lines.append("\nDo nothing: return 0.0%, drawdown 0.0%, no trades.")
+    hold = ", ".join(f"{s} {p:+.2f}%" for s, p in result["underlying_buy_and_hold_pct"].items())
+    lines.append(f"Underlying buy-and-hold over the whole period (context only): {hold}")
+    lines.append("\nCaveats:")
+    lines += [f"  * {c}" for c in result["caveats"]]
+    return "\n".join(lines)
