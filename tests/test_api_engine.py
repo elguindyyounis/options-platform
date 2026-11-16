@@ -124,3 +124,95 @@ def test_health_shows_runner_flags_but_never_error_text_and_status_shows_the_det
 def test_dashboard_warns_when_the_loop_is_stalled(client):
     src = client.get("/static/app.js").text
     assert "LOOP STALLED" in src and "rn.stalled" in src
+def test_dashboard_has_results_panel_that_uses_the_results_api():
+    """UX: results (sample gate, split-half, unrealized) are visible on first sight, text only."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "src" / "optplat" / "static"
+    html, js = (root / "index.html").read_text(), (root / "app.js").read_text()
+    assert 'id="results-status"' in html and "not proof of an edge" in html
+    assert '"/api/results"' in js and "renderResults" in js
+    assert "How fills are simulated" in js and "NOT modeled" in js
+    assert "innerHTML" not in js
+
+
+def test_glance_summary_is_text_only_and_flags_unsafe_states():
+    """Runs the dashboard's buildGlance under node with a stub DOM (skips if node is missing)."""
+    import json, shutil, subprocess
+    from pathlib import Path
+    node = shutil.which("node")
+    if not node:
+        import pytest
+        pytest.skip("node not installed")
+    root = Path(__file__).resolve().parents[1] / "src" / "optplat" / "static"
+    js = (root / "app.js").read_text()
+    assert "innerHTML" not in js and 'id="glance"' in (root / "index.html").read_text()
+    harness = """
+const stub=()=>new Proxy(function(){},{get:(t,k)=>k==='matches'?false:(k==='style'||k==='classList'||k==='dataset')?stub():stub(),set:()=>true,apply:()=>stub()});
+global.document={getElementById:()=>stub(),createElement:()=>stub(),querySelectorAll:()=>[],addEventListener(){},createTextNode:()=>stub()};
+global.window={matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(){}};global.location={hash:''};global.history={replaceState(){}};
+global.sessionStorage={getItem:()=>'',setItem(){},removeItem(){}};global.fetch=()=>new Promise(()=>{});global.setInterval=()=>0;global.setTimeout=()=>0;
+require(process.argv[1]);
+const g=window.optplatGlance;
+const st={data_source:{name:'x',fictional:true},config:{auto_entries:true,auto_exits:false},last_cycle:{errors:['boom'],entries:[],exits:[]},runner:{running:false}};
+const bad=g({mode:'LIVE'},st,{kill_switch:true},{status:'INSUFFICIENT_SAMPLE',closed_trades:2,open_positions:{unrealized_pnl_usd:null}},{max_position_pct:1,max_total_premium_pct:10,max_open_positions:12});
+const none=g({mode:'PAPER'},{config:{}},null,null,null);
+const now=Date.parse('2026-11-16T12:00:00Z');
+const st2={data_source:{name:'x',fictional:false},market:{open:false,reason:'Weekend'},config:{auto_entries:false,auto_exits:true,enforce_market_hours:false,interval_s:300},runner:{running:true},last_cycle:{errors:[],entries:[],exits:[],started_at:'2026-11-16T11:00:00Z'}};
+const stale=g({mode:'PAPER'},st2,{kill_switch:false},null,null,now);
+const fresh=g({mode:'PAPER'},{...st2,market:{open:true,reason:'Regular session'},config:{...st2.config,enforce_market_hours:true},last_cycle:{...st2.last_cycle,started_at:'2026-11-16T11:58:00Z'}},{kill_switch:false},null,null,now);
+const srvStalled=g({mode:'PAPER'},{...st2,runner:{running:true,stalled:true,seconds_since_success:1200,consecutive_failures:0}},{kill_switch:false},null,null,now);
+const srvFail=g({mode:'PAPER'},{...st2,runner:{running:true,stalled:false,consecutive_failures:3,last_error:'RuntimeError: x'}},{kill_switch:false},null,null,now);
+const srvOk=g({mode:'PAPER'},{...st2,last_cycle:{...st2.last_cycle,started_at:'2026-11-16T10:00:00Z'},runner:{running:true,stalled:false,consecutive_failures:0}},{kill_switch:false},null,null,now);
+const mk=(a)=>g({mode:'PAPER'},{config:{}},{kill_switch:false,account:a},null,null,now);
+const riskLow=mk({equity:1000,open_premium:100});const riskHigh=mk({equity:1000,open_premium:600});const riskMissing=mk({equity:0});
+const strat=g({mode:'PAPER'},{config:{},strategy:{name:'flow-otm',version:'1.0'}},{kill_switch:false},null,null,now);
+const cal=g({mode:'PAPER'},{config:{},market:{open:false,reason:'x',upcoming:[{date:'2026-11-26',kind:'closed'},{date:'2026-11-27',kind:'early_close'}]}},{kill_switch:false},null,null,now);
+const ordered=window.optplatGlanceOrder(bad).map(i=>i.level);const stable=window.optplatGlanceOrder([{level:'ok',text:'a'},{level:'warn',text:'b'},{level:'ok',text:'c'},{level:'bad',text:'d'},{level:'warn',text:'e'}]).map(i=>i.text);
+const halt=g({mode:'PAPER'},{config:{auto_entries:true,auto_exits:true}},{kill_switch:false},null,null,now);
+console.log(JSON.stringify({halt,ordered,stable,cal,strat,riskLow,riskHigh,riskMissing,bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
+"""
+    out = subprocess.run([node, "-e", harness, str(root / "app.js")], capture_output=True, text=True, check=True).stdout
+    r = json.loads(out)
+    text = " ".join(i["text"] for i in r["bad"])
+    assert any(i["level"] == "bad" and "not PAPER" in i["text"] for i in r["bad"])
+    assert "Kill switch is ON" in text and "FICTIONAL" in text and "boom" in text and "loop is stopped" in text
+    assert "too few to judge" in text and "cannot be fully measured" in text
+    # missing data must never read as fine
+    assert any("unknown" in i["text"] and i["level"] == "warn" for i in r["none"])
+    assert not any("Kill switch is off" in i["text"] for i in r["none"])
+
+    # most urgent first, stable inside a level (UX run 24); original list is not mutated
+    rank = {"bad": 0, "warn": 1, "ok": 2}
+    assert r["ordered"] == sorted(r["ordered"], key=rank.get) and r["ordered"][0] == "bad"
+    assert r["stable"] == ["d", "b", "e", "a", "c"]
+
+    # market session, hours-check and stale-loop lines
+    stale = " ".join(i["text"] for i in r["stale"])
+    assert "Market is closed (Weekend)" in stale and "Market-hours check is OFF" in stale and "may be stalled" in stale
+    assert any(i["level"] == "warn" and "may be stalled" in i["text"] for i in r["stale"])
+    fresh = " ".join(i["text"] for i in r["fresh"])
+    assert "Market is open" in fresh and "stalled" not in fresh and "check is OFF" not in fresh
+    assert any("Market session unknown" in i["text"] and i["level"] == "warn" for i in r["none"])
+
+    # server-reported runner health wins over the client-side age guess
+    assert any("reports the loop as stalled" in i["text"] and i["level"] == "warn" for i in r["srvStalled"])
+    assert any("failed 3 cycle(s) in a row" in i["text"] and i["level"] == "bad" for i in r["srvFail"])
+    assert not any("stalled" in i["text"] for i in r["srvOk"])
+    # no daily loss halt exists: say so when automatic entries are on, and only then
+    assert any("no daily loss halt" in i["text"] and i["level"] == "warn" for i in r["halt"])
+    assert not any("daily loss halt" in i["text"] for i in r["srvOk"])
+    # worst-case money line: shown from account data, warns when most of equity is in open premium, unknown when missing
+    low = [i for i in r["riskLow"] if "Worst case" in i["text"]]
+    assert low and low[0]["level"] == "ok" and "10.0% of equity" in low[0]["text"]
+    high = [i for i in r["riskHigh"] if "Worst case" in i["text"]]
+    assert high and high[0]["level"] == "warn" and "60.0% of equity" in high[0]["text"]
+    assert any("Money at risk unknown" in i["text"] and i["level"] == "warn" for i in r["riskMissing"])
+    assert not any("Worst case" in i["text"] or "Money at risk" in i["text"] for i in r["none"])
+    # calendar line: lists known closures from the exchange table only; absent data adds no line
+    c = " ".join(i["text"] for i in r["cal"])
+    assert "2026-11-26 market closed" in c and "2026-11-27 early close" in c and "not earnings or news" in c
+    assert not any("Coming up" in i["text"] for i in r["none"])
+    # strategy line: names the running strategy and warns that results are not split; unknown reads as a warning
+    s = [i for i in r["strat"] if "Strategy in use" in i["text"]]
+    assert s and "flow-otm 1.0" in s[0]["text"] and "not split by strategy" in s[0]["text"] and "no demonstrated edge" in s[0]["text"]
+    assert any("strategy is running is unknown" in i["text"] and i["level"] == "warn" for i in r["none"])

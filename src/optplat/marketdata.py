@@ -25,6 +25,7 @@ class ChainRow:
     open_interest: Optional[int] = None
     iv: Optional[float] = None
     last: Optional[float] = None  # last traded price, when the feed has it
+    last_trade_at: Optional[datetime] = None  # display only: when the contract last traded (stale-quote hint)
 
     def to_quote(self, as_of: datetime, source: str, verified: bool) -> Quote:
         return Quote(self.contract, self.bid, self.ask, as_of, source, timestamp_verified=verified)
@@ -352,6 +353,22 @@ def _num(value: Any) -> Optional[float]:
     return v if math.isfinite(v) else None
 
 
+def _parse_time(value: Any) -> Optional[datetime]:
+    """Best-effort timezone-aware UTC time from a pandas Timestamp, datetime or ISO string; unknown -> None."""
+    try:
+        if value is None:
+            return None
+        if hasattr(value, "to_pydatetime"):
+            value = value.to_pydatetime()
+        if isinstance(value, str):
+            value = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if not isinstance(value, datetime):
+            return None
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
 def rows_from_records(records: Iterable[dict[str, Any]], symbol: str, expiry: date, right: Right) -> list[ChainRow]:
     """Map raw chain records (e.g. DataFrame.to_dict('records')) to rows. Bad rows are dropped, not repaired."""
     rows: list[ChainRow] = []
@@ -372,6 +389,7 @@ def rows_from_records(records: Iterable[dict[str, Any]], symbol: str, expiry: da
                 int(oi) if oi is not None else None,
                 iv,
                 last if last is not None and last > 0 else None,
+                _parse_time(r.get("lastTradeDate")),
             )
         )
     return rows

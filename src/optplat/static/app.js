@@ -363,7 +363,7 @@
 
   // One card per open position: the contract in words, how it is doing, and a ladder from the stop to the target
   // with a tick at what was paid and a marker at the current bid, so "how close is this to exiting" reads at a glance.
-  function renderPositions(report, cfg) {
+  function renderPositions(report, cfg, plans) {
     const host = $("positions"), now = new Date();
     if (!report.open.length) { host.replaceChildren(); const box = el("div", null, "panel"); host.appendChild(box); empty(box, "No open positions", "When an entry fills it appears here with the prices that would close it."); return; }
     host.replaceChildren();
@@ -393,9 +393,14 @@
         [["stop", stop.toFixed(2)], ["paid", String(r.avg_cost)], ["target", goal.toFixed(2)]].forEach((k) => { const s2 = el("span"); s2.appendChild(document.createTextNode(k[0] + " ")); s2.appendChild(el("b", k[1])); keys.appendChild(s2); });
         kids(card, [lad, keys]);
       } else card.appendChild(el("div", "Automatic exits are off, so nothing will close this on its own.", "muted"));
+      card.appendChild(el("div", "Take-profit when bid reaches " + planFor(plans, r.contract, "take_profit_bid") + "; stop when bid falls to " +
+        planFor(plans, r.contract, "stop_loss_bid") + "; leaves for expiry by " + expiryExit(plans, r.contract) + ".", "muted"));
       grid.appendChild(card);
     });
     host.appendChild(grid);
+    host.appendChild(el("p", cfg.auto_exits
+      ? "Automatic exits are ON: the loop sells at these levels using the bid, if a fresh quote exists. No fresh quote means no exit and a warning, never a guess. Levels are rules, not predictions."
+      : "Automatic exits are OFF: nothing sells by itself. The levels shown are what the rules would use if you turned exits on.", "muted"));
   }
 
   function whyOf(d) {
@@ -1316,13 +1321,250 @@
     }, 10000);
   }
 
+  const pctPlain = (n) => (n === null || n === undefined ? "n/a" : n + "%");
+  const STATUS_TEXT = {
+    NO_CLOSED_TRADES: "No closed trades yet: nothing to judge.",
+    INSUFFICIENT_SAMPLE: "Too few closed trades to say anything. Treat every number below as noise.",
+    SAMPLE_SIZE_MET_NOT_PROOF_OF_EDGE: "Sample size met, but this is still not proof of an edge.",
+  };
+
+  function fillModelText(f) {
+    if (!f) return "not reported";
+    if (f.buys === "unknown") return "unknown (" + (f.note || "") + ")";
+    return "buys at " + f.buys + ", sells at " + f.sells + " (" + f.slippage_pct + "%); commissions " +
+      (f.commissions_modeled ? "modeled" : "NOT modeled") + ". " + (f.note || "");
+  }
+
+  function feeHeadroomText(r) {
+    const f = r.breakeven_fee_per_contract_usd;
+    if (f === null || f === undefined) return "n/a (no closed profit to erase)";
+    return "a round-trip fee of about $" + Number(f).toFixed(2) + " per contract (" + (r.contracts_closed || 0) +
+      " closed) would erase the simulated profit; real option fees are charged on top of these fills.";
+  }
+
+  function promotionText(p) {
+    if (!p) return "unknown (not reported); treat as NOT ready";
+    return (p.promotion_recommended ? "unexpected: marked recommended; verify" : "NO") +
+      ". Still missing: " + (p.evidence_missing || []).join("; ") + ".";
+  }
+
+  function multipleTestingText(m) {
+    if (!m) return "unknown (not reported); treat any best-looking result as overstated";
+    return (m.strategy_variants_selectable || []).length + " strategies selectable (" + (m.strategy_variants_selectable || []).join(", ") +
+      "); results split by strategy: " + (m.results_split_by_strategy ? "yes" : "NO") + ". " + (m.note || "");
+  }
+
+  // Results come from /api/results; every value is shown as text, and gaps are shown as "n/a", never as zero.
+  function renderResults(r) {
+    const split = r.split_half || {};
+    const open = r.open_positions || {};
+    const bad = r.status !== "SAMPLE_SIZE_MET_NOT_PROOF_OF_EDGE";
+    $("results-status").replaceChildren(
+      el("div", (STATUS_TEXT[r.status] || String(r.status)) + " (" + r.closed_trades + " of " + r.min_trades_required + " trades)", bad ? "warn" : ""));
+    const rows = [
+      ["Realized P&L (closed trades)", money(r.realized_pnl_usd)],
+      ["Win rate", pctPlain(r.win_rate_pct)],
+      ["P&L without the best trade", money(r.pnl_without_best_trade_usd)],
+      ["Worst closed-trade drawdown (not account drawdown)", pctPlain(r.closed_trade_max_drawdown_pct)],
+      ["Longest losing streak (closed trades)", r.longest_losing_streak === null || r.longest_losing_streak === undefined ? "n/a" : String(r.longest_losing_streak)],
+      ["Cumulative closed P&L, last " + (r.cumulative_pnl_recent_usd || []).length + " of " + (r.cumulative_pnl_points_total || 0) + " trades",
+        (r.cumulative_pnl_recent_usd || []).length ? r.cumulative_pnl_recent_usd.map(money).join(" > ") : "n/a"],
+      ["Early half vs later half", split.status === "CHECKED"
+        ? money(split.first_half_pnl_usd) + " vs " + money(split.second_half_pnl_usd) + (split.consistent ? " (same sign)" : " (NOT consistent)")
+        : "withheld until enough trades"],
+      ["Unrealized P&L (marked to bid)", open.unrealized_pnl_usd === null || open.unrealized_pnl_usd === undefined
+        ? "n/a: " + (open.error || ((open.unmarked || []).length + " position(s) cannot be marked")) : money(open.unrealized_pnl_usd)],
+      ["Fee headroom (no fees are modeled)", feeHeadroomText(r)],
+      ["Filled exits with no cost basis", r.unpriced_exits],
+      ["Ready to promote beyond paper?", promotionText(r.promotion)],
+      ["Several strategies, one total?", multipleTestingText(r.multiple_testing)],
+      ["How fills are simulated", fillModelText(r.fill_model)],
+    ];
+    table($("results-table"), [{ label: "Measure", get: (x) => x[0] }, { label: "Value", get: (x) => x[1] }], rows, "No results");
+    $("results-limits").textContent = (r.limitations || []).join(" ");
+  }
+
+  // Plain-language reading of the last cycle: what was taken, what was skipped, and why.
+  const RESULT_TEXT = {
+    FILLED: "Bought (paper)", NO_DATA: "Skipped: no market data for this symbol",
+    NO_PROPOSAL: "Skipped: nothing met the strategy rules",
+    NOTHING_AFFORDABLE_WITHIN_SIZE_CAP: "Skipped: nothing fits the position size cap",
+    REJECTED: "Blocked by a risk check", KEY_CONFLICT: "Skipped: duplicate order key",
+  };
+  function outcomesLine(r) {
+    if (!r || !r.cycles) return "";
+    const parts = Object.keys(r.counts).sort().map((k) => (RESULT_TEXT[k] || k).replace(/^Skipped: /, "skipped: ") + " x" + r.counts[k]);
+    return "Last " + r.cycles + " cycle(s) (kept up to " + r.window + "): " + (parts.length ? parts.join("; ") : "no entry decisions") + ".";
+  }
+
+  function renderCycleDecisions(c, recent) {
+    const rows = (c ? c.entries : []).map((x) => ({
+      what: x.contract || x.symbol,
+      outcome: RESULT_TEXT[x.result] || String(x.result),
+      why: [x.reason || (x.risk_failures || []).join("; ") || (x.rationale && x.rationale.trend ? "Trend " + x.rationale.trend + ", spread " + x.rationale.spread_pct + "%" : ""),
+      x.size_vs_liquidity && x.size_vs_liquidity.warnings.length ? "Size check: " + x.size_vs_liquidity.warnings.join("; ") : ""].filter(Boolean).join(" | "),
+    }));
+    const base = c ? (c.entries_note || (rows.length ? "" : "No symbols were evaluated.")) : "No cycle has run yet.";
+    $("decisions-note").textContent = [base, outcomesLine(recent)].filter(Boolean).join(" ");
+    table($("decisions-table"), [
+      { label: "Symbol / contract", get: (r) => r.what }, { label: "Outcome", get: (r) => r.outcome }, { label: "Why", get: (r) => r.why },
+    ], rows, "No entry decisions in the last cycle");
+  }
+
+  function renderCandidates(c) {
+    const rows = c && c.candidates ? c.candidates : [];
+    $("candidates-note").textContent = c
+      ? "Contracts that passed the strategy filters, best score first. The score ranks liquidity and closeness to the price; it is not a chance of profit. Symbols after a buy in the same cycle are not scanned."
+      : "No cycle has run yet.";
+    table($("candidates-table"), [
+      { label: "Contract", get: (r) => r.contract }, { label: "Trend", get: (r) => r.trend },
+      { label: "Score", get: (r) => r.score }, { label: "Limit", get: (r) => r.limit_price },
+      { label: "Spread %", get: (r) => r.spread_pct }, { label: "Days to expiry", get: (r) => r.dte },
+      { label: "Volume", get: (r) => (r.volume == null ? "not reported" : r.volume) },
+      { label: "Open interest", get: (r) => (r.open_interest == null ? "not reported" : r.open_interest) },
+      { label: "Last traded", get: (r) => (r.last_trade_age_hours == null ? "unknown" : r.last_trade_age_hours > 24 ? "STALE? " + r.last_trade_age_hours + "h ago" : r.last_trade_age_hours + "h ago") },
+    ], rows, "No contract passed the filters in the last cycle");
+  }
+
+  function renderFlow(c) {
+    const rows = c && c.flow ? c.flow : [];
+    const themes = c && c.flow_themes ? c.flow_themes.map((t) => t.group + ": " + t.symbols.join(", ")).join("; ") : "";
+    $("flow-note").textContent = c
+      ? (c.flow_caveats || []).join(" ") + (themes ? " Same theme in several names: " + themes + "." : "") + (rows.some((r) => r.fictional) ? " Some rows are from FICTIONAL demo data." : "")
+      : "No cycle has run yet.";
+    table($("flow-table"), [
+      { label: "Contract", get: (r) => r.contract + (r.fictional ? " (fictional)" : "") },
+      { label: "Tier", get: (r) => r.tier },
+      { label: "Volume / OI", get: (r) => r.volume + " / " + (r.open_interest == null ? "not reported" : r.open_interest) + (r.volume_oi_ratio ? " (" + r.volume_oi_ratio + "x)" : "") },
+      { label: "OTM / DTE", get: (r) => (r.otm_pct == null ? "?" : r.otm_pct + "%") + " / " + r.dte + "d" },
+      { label: "Premium at quoted mid (scale only)", get: (r) => (r.premium_at_quoted_mid_usd == null ? "n/a" : money(r.premium_at_quoted_mid_usd)) },
+      { label: "Ask-side share", get: () => "not available" },
+      { label: "Flags", get: (r) => r.flags.join("; ") },
+    ], rows, "No unusual turnover in the last cycle");
+  }
+
+  function renderGex(c) {
+    const rows = c && c.gex ? c.gex : [];
+    $("gex-note").textContent = c
+      ? "Calls are counted positive and puts negative. That is an assumption, not real dealer positions, and it uses only the chain sample the provider returned. Context, not a prediction. " + (rows.some((r) => r.fictional) ? "Some rows are from FICTIONAL demo data." : "")
+      : "No cycle has run yet.";
+    table($("gex-table"), [
+      { label: "Symbol", get: (r) => r.symbol + (r.fictional ? " (fictional)" : "") },
+      { label: "Net GEX, USD M per 1% move", get: (r) => (r.net_gex_musd === null ? "n/a" : r.net_gex_musd) },
+      { label: "Largest positive strike", get: (r) => (r.largest_positive_strike === null ? "-" : r.largest_positive_strike) },
+      { label: "Largest negative strike", get: (r) => (r.largest_negative_strike === null ? "-" : r.largest_negative_strike) },
+      { label: "Rows used / skipped", get: (r) => r.rows_used + " / " + r.rows_skipped },
+      { label: "As of", get: (r) => r.as_of },
+    ], rows, "No GEX computed in the last cycle");
+  }
+
+  // "At a glance": plain-words reading of safety, money and what needs the owner. Pure function of API data.
+  // Each item is {level: "ok"|"warn"|"bad", text}. Unknown or missing data is reported as unknown, never as fine.
+  function buildGlance(h, st, pf, res, pol, nowMs) {
+    const out = [];
+    const add = (level, text) => out.push({ level, text });
+    if (h.mode !== "PAPER") add("bad", "Broker mode is " + h.mode + ", not PAPER. Stop and check.");
+    else add("ok", "Paper only: no real money can be used by this app.");
+    if (pf && pf.kill_switch) add("bad", "Kill switch is ON: no new orders are accepted.");
+    else if (pf) add("ok", "Kill switch is off (you can still press it any time).");
+    else add("warn", "Kill switch state unknown.");
+    if (st.data_source && st.data_source.fictional) add("warn", "Market data is FICTIONAL demo data: every number here is made up.");
+    else if (st.data_source) add("ok", "Market data source: " + st.data_source.name + " (not demo data).");
+    else add("warn", "Market data source unknown.");
+    if (st.strategy && st.strategy.name) add("ok", "Strategy in use: " + st.strategy.name + " " + (st.strategy.version || "") +
+      " (paper research, no demonstrated edge). Switching strategies mixes their trades in Results; the totals are not split by strategy.");
+    else add("warn", "Which strategy is running is unknown.");
+    if (st.config && st.config.auto_entries) add("warn", "Automatic entries are ON: the engine may buy paper contracts by itself.");
+    else if (st.config) add("ok", "Automatic entries are off: nothing is bought unless you press Run one cycle.");
+    if (st.config && st.config.auto_entries) add("warn", "There is no daily loss halt: a bad day will not stop new entries by itself. Only the per-order and total-premium limits and the kill switch apply.");
+    if (st.market) {
+      if (st.market.open) add("ok", "Market is open (" + st.market.reason + ").");
+      else add("ok", "Market is closed (" + st.market.reason + "): " + (st.config && st.config.enforce_market_hours === false ? "but the market-hours check is off, see below." : "no new paper trades until it opens."));
+    } else add("warn", "Market session unknown.");
+    if (st.market && Array.isArray(st.market.upcoming)) {
+      if (st.market.upcoming.length) add("ok", "Coming up (exchange calendar only, not earnings or news): " +
+        st.market.upcoming.map(function (e) { return e.date + (e.kind === "closed" ? " market closed" : " early close"); }).join("; ") + ".");
+      else add("ok", "No market holidays or early closes in the next 3 weeks (exchange calendar only; earnings and news are not tracked).");
+    }
+    if (st.config && st.config.enforce_market_hours === false) add("warn", "Market-hours check is OFF: the engine may act outside the session, on quotes that may be stale.");
+    if (pol && pol.require_verified_quote_time === false) add("warn", "Quote-time verification is OFF.");
+    if (pol && typeof pol.max_position_pct === "number")
+      add("ok", "Risk limits: up to " + pol.max_position_pct + "% of equity per order, " + pol.max_total_premium_pct + "% open in total, " + pol.max_open_positions + " positions.");
+    const acct = pf && pf.account;
+    if (acct && typeof acct.equity === "number" && acct.equity > 0 && typeof acct.open_premium === "number") {
+      const share = (acct.open_premium / acct.equity) * 100;
+      add(share > 50 ? "warn" : "ok", "Worst case today: the open contracts are worth " + money(acct.open_premium) + " at cost (" + share.toFixed(1) +
+        "% of equity). A long option can lose all of its premium, so losing all of it is the worst case for these positions; fees are not modeled.");
+    } else if (pf) add("warn", "Money at risk unknown: account equity or open premium is missing.");
+    const c = st.last_cycle;
+    if (!c) add("warn", "No cycle has run yet, so there is no recent activity to show.");
+    else if (c.errors && c.errors.length) add("bad", "The last cycle had " + c.errors.length + " error(s): " + c.errors.join("; "));
+    else add("ok", "Last cycle ran without errors (" + c.entries.length + " entry decision(s), " + c.exits.length + " exit decision(s)).");
+    if (st.runner && st.runner.running && st.runner.consecutive_failures > 0)
+      add("bad", "The loop has failed " + st.runner.consecutive_failures + " cycle(s) in a row. Last error: " + (st.runner.last_error || "unknown") + ".");
+    if (st.runner && st.runner.stalled === true) add("warn", "The server reports the loop as stalled: no successful cycle for " + Math.round((st.runner.seconds_since_success || 0) / 60) + " min.");
+    else if (c && c.started_at && st.runner && st.runner.running && st.runner.stalled === undefined && st.config && st.config.interval_s) {
+      const ageS = ((typeof nowMs === "number" ? nowMs : Date.now()) - Date.parse(c.started_at)) / 1000;
+      if (isNaN(ageS)) add("warn", "Last cycle time is unreadable, so staleness cannot be checked.");
+      else if (ageS > 3 * st.config.interval_s) add("warn", "The loop says it is running but the last cycle started " + Math.round(ageS / 60) + " min ago (interval " + Math.round(st.config.interval_s / 60) + " min): it may be stalled.");
+    }
+    if (st.runner && !st.runner.running && st.config && (st.config.auto_entries || st.config.auto_exits))
+      add("warn", "Automatic actions are enabled but the loop is stopped, so nothing runs on its own.");
+    if (res) {
+      if (res.status !== "SAMPLE_SIZE_MET_NOT_PROOF_OF_EDGE") add("warn", "Results: only " + res.closed_trades + " closed trade(s); too few to judge anything.");
+      const u = res.open_positions ? res.open_positions.unrealized_pnl_usd : null;
+      if (u === null || u === undefined) add("warn", "Open-position profit or loss cannot be fully measured right now.");
+    }
+    return out;
+  }
+
+  // Severity order for the glance list: things that need you come first, routine OK lines last.
+  // Stable: lines of equal severity keep their original order. Pure function, exposed for tests.
+  function orderGlance(items) {
+    const rank = { bad: 0, warn: 1, ok: 2 };
+    return items
+      .map((i, n) => ({ i, n }))
+      .sort((a, b) => (rank[a.i.level] - rank[b.i.level]) || (a.n - b.n))
+      .map((x) => x.i);
+  }
+
+  function glanceCounts(items) {
+    const c = { bad: 0, warn: 0, ok: 0 };
+    items.forEach((i) => { if (c[i.level] !== undefined) c[i.level] += 1; });
+    return c;
+  }
+
+  function renderGlance(items) {
+    const box = $("glance");
+    box.replaceChildren();
+    const c = glanceCounts(items);
+    const worst = c.bad ? "bad" : c.warn ? "warn" : "ok";
+    box.appendChild(el("div", worst === "bad" ? "Needs your attention" : worst === "warn" ? "Check these" : "Nothing needs you right now", "pill " + worst));
+    box.appendChild(el("span", " " + c.bad + " action, " + c.warn + " note, " + c.ok + " ok (most urgent first)", "muted"));
+    const ul = el("ul");
+    orderGlance(items).forEach((i) => ul.appendChild(el("li", (i.level === "ok" ? "OK: " : i.level === "warn" ? "Note: " : "ACTION: ") + i.text, i.level)));
+    box.appendChild(ul);
+  }
+
+  function planFor(plans, contract, key) {
+    const p = (plans || []).find((x) => x.contract === contract);
+    return !p || p[key] === null || p[key] === undefined ? "unknown" : p[key];
+  }
+
+  function expiryExit(plans, contract) {
+    const p = (plans || []).find((x) => x.contract === contract);
+    if (!p) return "unknown";
+    return p.expiry_exit_within_days + " days before " + p.expiry + " (" + p.days_to_expiry + " days left)";
+  }
+
   async function refresh() {
     if (!token) { S.connected = false; showPage(); return; }
     try {
-      const [health, status, portfolio, orders, report, decisions, eq, allTrades] = await Promise.all([
+      const [health, status, portfolio, orders, report, decisions, eq, allTrades, results, policy] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         api("/api/engine/status"), api("/api/portfolio"), api("/api/paper/orders"), api("/api/report"),
         api("/api/journal?limit=15"), api("/api/equity"), api("/api/alltrades").catch(() => null),
+        api("/api/results").catch(() => null), api("/api/risk/policy").catch(() => null),
       ]);
       S.connected = true; S.core = { status, report };
       checkForNewBuild(health.build_id);
@@ -1332,10 +1574,16 @@
       renderTrust(status);
       renderDesk(portfolio, report, eq, status);
       renderAccounts(allTrades);
-      renderPositions(report, status.config);
+      renderPositions(report, status.config, status.exit_plans);
       renderDecisions(decisions);
       renderOrders(orders);
       syncControls(status, status.config);
+      renderGlance(buildGlance(health, status, portfolio, results, policy));
+      if (results) renderResults(results);
+      renderCycleDecisions(status.last_cycle, status.recent_outcomes);
+      renderCandidates(status.last_cycle);
+      renderGex(status.last_cycle);
+      renderFlow(status.last_cycle);
       await loadPage();
       setMsg("");
     } catch (e) {
@@ -1414,6 +1662,8 @@
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => { if (route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); }, 150);
   });
+  window.optplatGlanceOrder = orderGlance;
+  window.optplatGlance = buildGlance; // exposed so tests can run it under node
   showPage();
   refresh();
   setInterval(refresh, 10000);

@@ -65,3 +65,23 @@ def evaluate_exit(
         if held_days >= policy.max_days_held:
             return ExitDecision(EXIT, f"Held {held_days:.1f} days", pnl_pct, "max_days_held")
     return ExitDecision(HOLD, "No exit rule triggered", pnl_pct)
+
+
+def exit_plan(position: Position, policy: ExitPolicy, now: datetime) -> dict:
+    """Display only: where the exit rules WOULD sell, so a reader sees what happens before it happens.
+
+    Uses the same thresholds as `evaluate_exit` (bid-based). It states levels, not predictions, and
+    never decides or trades. An unusable cost basis gives `None` levels, never a guess.
+    """
+    cost = position.avg_cost
+    ok = isinstance(cost, (int, float)) and math.isfinite(cost) and cost > 0
+    expiry = position.contract.expiry
+    return {
+        "contract": position.contract.occ_symbol.strip(),
+        "take_profit_bid": round(cost * (1 + policy.take_profit_pct / 100), 2) if ok else None,
+        "stop_loss_bid": round(cost * (1 - policy.stop_loss_pct / 100), 2) if ok else None,
+        "expiry": expiry.isoformat(),
+        "days_to_expiry": (expiry - now.date()).days,
+        "expiry_exit_within_days": policy.min_dte_to_hold,
+        "max_days_held": policy.max_days_held,
+    }

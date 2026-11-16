@@ -152,3 +152,62 @@ def test_yahoo_style_records_are_mapped_and_bad_rows_dropped():
     assert [r.contract.strike for r in rows] == [100.0, 120.0]
     assert rows[0].volume == 10 and rows[0].open_interest == 50 and rows[0].iv == 0.4
     assert rows[1].volume is None and rows[1].iv is None  # NaN volume and absurd IV become unknown, not guessed
+
+
+# ------------------------------------------------ explain_no_proposal (display only)
+def test_explain_flat_trend_and_short_history():
+    s = LiquidTrendStrategy()
+    assert "No clear trend" in s.explain_no_proposal(snap(FLAT, [row()]), NOW)
+    assert "Fewer than 50" in s.explain_no_proposal(snap(UP[:10], [row()]), NOW)
+
+
+def test_explain_counts_why_each_contract_failed():
+    s = LiquidTrendStrategy()
+    rows = [row(160, bid=1.0, ask=5.0), row(161, vol=1), row(150, expiry=NOW.date() + timedelta(days=5)), row(400)]
+    text = s.explain_no_proposal(snap(UP, rows), NOW)
+    assert "Trend is up" in text
+    for part in ("1 bid/ask spread too wide", "1 volume or open interest too low",
+                 "1 expiry outside the allowed window", "1 strike too far"):
+        assert part in text
+
+
+def test_explain_separates_unreported_volume_oi_from_low_values():
+    s = LiquidTrendStrategy()
+    rows = [row(160, vol=None), row(161, oi=None), row(162, vol=1)]
+    text = s.explain_no_proposal(snap(UP, rows), NOW)
+    assert "2 volume or open interest not reported by the data provider" in text
+    assert "1 volume or open interest too low" in text
+    assert s.propose(snap(UP, rows), NOW) == []  # unknown stays fail-closed: still never proposed
+
+
+def test_explain_never_changes_proposals():
+    s = LiquidTrendStrategy()
+    sn = snap(UP, [row(160)])
+    before = s.propose(sn, NOW)
+    s.explain_no_proposal(sn, NOW)
+    assert s.propose(sn, NOW) == before
+
+
+# ------------------------------------------------ last-trade age (display only)
+def test_last_trade_time_is_parsed_or_unknown():
+    from datetime import datetime, timezone
+    recs = [
+        {"strike": 100, "bid": 1.0, "ask": 1.2, "lastTradeDate": "2026-11-13T20:59:00+00:00"},
+        {"strike": 101, "bid": 1.0, "ask": 1.2, "lastTradeDate": datetime(2026, 11, 13, 15, 0)},  # naive -> UTC
+        {"strike": 102, "bid": 1.0, "ask": 1.2, "lastTradeDate": "garbage"},
+        {"strike": 103, "bid": 1.0, "ask": 1.2},
+    ]
+    rows = rows_from_records(recs, "SPY", date(2027, 1, 15), Right.CALL)
+    assert rows[0].last_trade_at == datetime(2026, 11, 13, 20, 59, tzinfo=timezone.utc)
+    assert rows[1].last_trade_at == datetime(2026, 11, 13, 15, 0, tzinfo=timezone.utc)
+    assert rows[2].last_trade_at is None and rows[3].last_trade_at is None
+
+
+def test_age_hours_helper_never_guesses():
+    from datetime import datetime, timezone
+    from optplat.engine import _age_hours
+    now = datetime(2026, 11, 16, 15, 0, tzinfo=timezone.utc)
+    assert _age_hours("2026-11-16T12:00:00+00:00", now) == 3.0
+    assert _age_hours(None, now) is None
+    assert _age_hours("2026-11-16T12:00:00", now) is None  # naive time: unknown, not assumed
+    assert _age_hours("2026-11-17T12:00:00+00:00", now) is None  # future: unknown

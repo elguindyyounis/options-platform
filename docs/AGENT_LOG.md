@@ -566,3 +566,241 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Auth is unchanged except for one new endpoint that requires the existing token. No risk, sizing or order code touched.
 * Verified: full test suite, 578 passed (8 new), shell syntax checks, workflow YAML parses. Not verified: anything on macOS (launchd, the installer, the updater), the workflow on GitHub, the dashboard in a browser.
 * Blocker: `agent/integration` still conflicts with `main` (13 files, 36 hunks, tried locally and aborted). Until that is resolved and merged, nothing integrated can reach `stable`.
+
+## 2026-11-10: quote and snapshot recorder (scheduled agent run)
+
+* Backlog item 1. New `market_snapshots` / `market_quotes` tables plus `Store.record_snapshot`,
+  `record_quotes`, `recorded_snapshots`, `recorder_counts`, `purge_market_data`. The engine records every
+  snapshot it fetches and the held-position quotes it pulls. Recording is best effort: a storage error is
+  reported in the cycle's `errors` and never blocks exits or entries.
+* New engine config: `record_market_data` (default on) and `record_retention_days` (default 90; 0 keeps
+  everything; validated 0-3650). Retention is applied at the end of each cycle. No safety control,
+  risk limit or auth code was touched.
+* Verified: 156 tests pass (11 new in `tests/test_recorder.py`: contents, time order, disable switch,
+  fictional flag, failure isolation, transaction rollback, retention).
+* Not verified: growth of the database over weeks against Yahoo (a 20-symbol watchlist at a 5 minute
+  interval stores a full chain sample per cycle; the 90 day default is a guess the owner should tune),
+  and no migration path for existing databases beyond `CREATE TABLE IF NOT EXISTS` (new tables only).
+
+
+## 2026-11-15: closed-trade summary (scheduled challenger run)
+
+* Compared with options-alerter (reviewed to `0107246`; see `docs/COMPARISON_ALERTER.md`). The alerter
+  labels fill modelling and returns null stats for empty samples; the platform reported no results at all.
+* Added `optplat/evaluation.py` and token-protected `GET /api/results`. Read-only, no change to risk,
+  orders, auth or sizing. 6 new tests; 162 pass.
+* Not verified: behaviour on real or Yahoo data; no commissions are modelled (logged as challenge 1).
+
+## 2026-11-15: open-position marks (scheduled challenger run 2)
+
+* Alerter unchanged since `0107246`; read `day_limits.py` (see comparison doc).
+* `/api/results` now has `open_positions`: unrealized P&L marked to the bid, only from valid,
+  venue-timestamped quotes under 120s old; any unmarkable position makes the total null and is listed
+  with a reason. Broker errors fail closed. No risk, order, auth or sizing code touched. 4 new tests; 166 pass.
+* Not verified: behaviour against a real broker's `get_positions`/`get_quote`; no commissions modelled.
+
+## 2026-11-15: split-half check (scheduled challenger run 3)
+
+* Alerter advanced to `123eed9` (local durable reports); read `local_reports.py`, `liquidity.py`.
+* `/api/results` gains `split_half`: first vs second half of chronologically ordered closed trades;
+  numbers withheld below the 30-trade gate; `consistent` false on opposite or zero signs. Display only; no
+  risk, order, auth or sizing code touched. 3 new tests; 169 pass.
+* Not verified: behaviour on real data; this is a stability check, not out-of-sample validation. PR/merge result: see below.
+
+## 2026-11-15: dashboard Results panel (scheduled challenger run 4)
+
+* Alerter advanced to `a7a2ca0` (dashboard redesign); read its UI diff. Weekend scan attempted: Yahoo is blocked by this session's egress proxy, so
+  `docs/MONDAY_PLAN.md` records that no real data was reachable (no demo data used).
+* Added a Results panel to the dashboard fed by `/api/results`. Frontend only; no risk, order, auth, sizing or
+  broker code touched. 1 new test; 170 pass.
+* Not verified: rendering in a real browser (only `node --check` and a static test); behaviour on real data.
+
+## 2026-11-15: why-skipped panel (scheduled challenger run 5)
+
+* Alerter unchanged at `a7a2ca0`; read `gex.py`. Added `explain_no_proposal` to `LiquidTrendStrategy`, a `reason`
+  field on `NO_PROPOSAL` cycle entries and a dashboard Decisions panel (textContent only). No risk, order, auth,
+  sizing or broker code touched; `propose` untouched. 4 new tests; 174 pass.
+* Weekend scan: Yahoo unreachable from this session (curl returned no response); MONDAY_PLAN updated, no demo data used.
+* Not verified: rendering in a real browser (only `node --check`); behaviour on real data. The Mac copy is a manual
+  git clone, so this is not on the Mac until the owner updates it. PR/merge result: see PR.
+
+## 2026-11-15: top candidates panel (scheduled challenger run 6)
+
+* Alerter unchanged at `a7a2ca0`; read `market_breadth.py`. Added `candidates` to the cycle report and a dashboard
+  Top candidates panel (textContent only). No risk, order, auth, sizing or broker code touched; `propose` untouched.
+  1 new test; 175 pass.
+* Weekend scan: Yahoo still refused by the egress proxy; MONDAY_PLAN updated, no demo data used.
+* Not verified: rendering in a real browser (only `node --check`); behaviour on real data. The Mac copy is a manual
+  git clone, so this is not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-15: net GEX panel (scheduled challenger run 7)
+
+* Alerter unchanged at `a7a2ca0`; re-read `gex.py`. Added `optplat/gex.py`, `gex`/`gex_assumptions` in the cycle report
+  and a dashboard panel (textContent only), labelled as an assumption on a sample chain. No risk, order, auth, sizing or
+  broker code touched; `propose` untouched. 5 new tests; 180 pass.
+* Weekend scan: Yahoo unreachable from this session; MONDAY_PLAN updated, no demo data used.
+* Not verified: rendering in a real browser (only `node --check`); behaviour on real chains; correctness of the formula
+  against the alerter's output on identical input. The Mac copy is a manual git clone, so this is not on the Mac until the
+  owner pulls. PR/merge result: see PR.
+
+## 2026-11-15: "At a glance" dashboard strip (scheduled challenger run 8)
+
+* Alerter unchanged at `a7a2ca0`; read `sizing.py`. Added `buildGlance`/`renderGlance` and a dashboard section (textContent
+  only); the refresh now also reads `/api/risk/policy`. No risk, order, auth, sizing or broker code touched. 1 new test
+  (executes `buildGlance` under node); 181 pass.
+* Weekend scan: Yahoo unreachable from this session; MONDAY_PLAN unchanged in substance, no demo data used.
+* Not verified: rendering in a real browser (only `node --check` and the node-run test); behaviour on real data. The Mac copy
+  is a manual git clone, so this is not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-15: volume/OI on candidates (scheduled challenger run 9)
+
+* Alerter moved to `80672a6`; read `unusual_activity.py` (see COMPARISON_ALERTER). Added `volume`/`open_interest` to cycle-report
+  candidates, two dashboard columns (textContent only, "not reported" for null) and a distinct skip reason for unreported
+  volume/OI in `explain_no_proposal`. No risk, order, auth, sizing or broker code touched; `propose` untouched. 1 new test, 1
+  updated for the new fields; 182 pass.
+* Weekend scan: Yahoo unreachable (HTTP 000, proxy refused); MONDAY_PLAN updated, no demo data used.
+* Not verified: rendering in a real browser (only `node --check`); behaviour on real chains. The Mac copy is a manual git clone,
+  so this is not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: glance market/stall lines (scheduled challenger run 10)
+
+* Alerter unchanged at `80672a6`; read `strategy_performance.py`. `buildGlance` now reports market open/closed, warns when the
+  market-hours check is off, and warns when a running loop has not started a cycle in 3x its interval. textContent only. No
+  risk, order, auth, sizing or broker code touched. Existing glance node test extended; 182 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and the node-run test); the stall rule against a real runner.
+  The Mac copy is a manual git clone, so this is not on the Mac until the owner pulls. PR/merge result: see PR.
+
+
+## 2026-11-16: fill-model label (scheduled challenger run 11)
+
+* Alerter unchanged at `80672a6`; read `entry_quality.py`. Added `describe_fill_model`, `fill_model` in `/api/results` and a
+  dashboard row (textContent only). No risk, order, auth, sizing or broker code touched. 184 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and string-pinning tests); behaviour with the IBKR adapter
+  (reports "unknown" by design). The Mac copy is a manual git clone, so this is not on the Mac until the owner pulls.
+  PR/merge result: see PR.
+
+## 2026-11-16: server-side runner health (scheduled challenger run 12)
+
+* Alerter unchanged at `80672a6`; read `day_limits.py`. `Runner.status()` now reports `last_success_at`, `last_failure_at`,
+  `consecutive_failures`, `seconds_since_success`, `stalled`; the glance strip shows failure streaks and server stalls. No
+  risk, order, auth, sizing or broker code touched. 2 new tests plus the glance node test extended; 186 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and the node-run test); behaviour of a real stuck cycle (a hung
+  `run_cycle` is detected by age only after the next status call). The Mac copy is a manual git clone, so this is not on the
+  Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: closed-trade P&L path (scheduled challenger run 13)
+
+* Alerter unchanged at `80672a6`; read `daily_review.py`. `/api/results` now has `cumulative_pnl_recent_usd`, `cumulative_pnl_points_total` and
+  `longest_losing_streak`; the Results panel shows them as text. No risk, order, auth, sizing or broker code touched. 2 new tests; 188 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check`); behaviour on real trades. The Mac copy is a manual git clone, so this is not
+  on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: rolling outcome tally (scheduled challenger run 14)
+
+* Alerter unchanged at `80672a6`; read `exit_decisions.py`. Engine now stores a bounded tally of entry result codes per cycle
+  (`outcome_history` state, 50 cycles); `/api/engine/status` has `recent_outcomes`; Decisions panel shows one text line. No risk, order,
+  auth, sizing or broker code touched. 2 new tests; 190 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and string-pinning tests). The Mac copy is a manual git clone, so this is
+  not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: exit plan on open positions (scheduled challenger run 15)
+
+* Alerter unchanged at `80672a6`; read `session_replay.py`. Added `exits.exit_plan`, `TradingEngine.exit_plans()` and `exit_plans` in
+  `/api/engine/status`; Open positions panel shows take-profit bid, stop bid, expiry-exit window and whether automatic exits are ON.
+  textContent only. No risk, order, auth, sizing or broker code touched. 3 new tests; 193 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and string-pinning tests); behaviour on real positions. The Mac copy is
+  a manual git clone, so this is not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: promotion-readiness checklist (scheduled challenger run 16)
+
+* Alerter unchanged at `80672a6`; read `strategy_postmortems.py`. Added `promotion_readiness` and `promotion` in `/api/results`; Results
+  panel row "Ready to promote beyond paper?" (textContent only). No risk, order, auth, sizing or broker code touched. 2 new tests; 195 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and string-pinning tests). The Mac copy is a manual git clone, so this is
+  not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: fee headroom (scheduled challenger run 17)
+
+* Alerter unchanged at `80672a6`; read `risk.py`. Added `breakeven_fee_per_contract` and two fields in `/api/results`; Results panel row
+  "Fee headroom" (textContent only). No risk, order, auth, sizing or broker code touched. 1 new test; 196 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and string-pinning tests). The Mac copy is a manual git clone, so this is
+  not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: size-vs-liquidity note (scheduled challenger run 18)
+
+* Alerter unchanged at `80672a6`; read `liquidity.py` (see comparison doc). Monday: no weekend scan.
+* UX challenge: entry size was not shown against reported volume/OI. Added `optplat/liquidity.py` and a display-only
+  `size_vs_liquidity` on each entry plus a "Size check" in the Decisions panel. Nothing blocks or resizes; no risk, order, auth,
+  sizing or broker code touched.
+* Verified: 197 tests pass (1 new); app.js parses. Not verified: dashboard rendering in a browser; behaviour on real data.
+* The owner's Mac copy is a manual git clone; merged code is not there until the owner pulls.
+
+## 2026-11-16: unusual options flow radar (owner request, run 18b)
+
+* Added `optplat/flow.py`, `flow`/`flow_themes`/`flow_caveats` in the cycle report, a dashboard panel, 4 tests (201 pass), and docs
+  `FLOW_CRITERIA.md` and `ALERTER_FLOW_HANDOFF.md`. Display only: no risk, order, auth, sizing or broker code touched.
+* Not done: alerter changes (read-only here; accounts are on the Mac), flow as a trade trigger (owner decision), a Mac auto-start
+  for the platform (needs the owner; the platform still needs a running process and token). Not verified: live Yahoo data, browser rendering.
+
+## 2026-11-16: flow-following strategies (owner request, run 18c)
+
+* Added `FlowFollowStrategy` with two modes and `OPTPLAT_STRATEGY` selection in `__main__.py` (default `liquid-trend`). 5 tests, 205 pass.
+* Risk policy, sizing, auth, broker untouched; proposals still pass through the same risk gate and size cap. Paper only.
+* Not verified: live Yahoo chains, how often flows pass the filters, any outcome. Not done: relaxing min DTE (owner), a dashboard strategy switch, alerter lanes (Mac-only; see ALERTER_FLOW_HANDOFF).
+
+## 2026-11-16: worst-case line in the glance strip (scheduled challenger run 19)
+
+* Alerter unchanged at `80672a6`; read `goal_sprint.py` (see comparison doc). Monday: no weekend scan.
+* UX challenge: the owner could not see at a glance how much open premium can be lost outright. Added a display-only "Worst case today"
+  line to `buildGlance` (textContent only). No risk, order, auth, sizing or broker code touched.
+* Verified: 205 tests pass (existing node-harness test extended); app.js parses. Not verified: rendering in a browser.
+* The owner's Mac copy is a manual git clone; merged code is not there until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: multiple-testing note (scheduled challenger run 20)
+
+* Alerter moved to `30c64d7` (whale thesis dossiers, GEX confluence policy); read, see comparison doc. Monday: no weekend scan.
+* UX/challenge 3: three strategies are selectable but Results showed one total. Added display-only `multiple_testing` to `/api/results` and a Results row (textContent only). No risk, order, auth, sizing or broker code touched.
+* Verified: 206 tests pass. Not verified: rendering in a browser; per-strategy results (orders do not record the strategy).
+* The owner's Mac copy is a manual git clone; merged code is not there until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16 (run 21, challenger)
+
+* Changed: dashboard glance now shows "Strategy in use" from `/api/engine/status.strategy` (name, version, no-edge note, results-not-split warning); unknown shows a warning. Frontend only.
+* Verified: `python -m pytest -q` 206 pass (glance node test extended, runs under node 22). Alerter unchanged at `30c64d7`.
+* Not verified: not viewed in a real browser; no real market data (cloud run, Monday, no weekend scan). Not on the owner's Mac until they pull their clone.
+
+## 2026-11-16 (run 22, challenger)
+
+* Alerter unchanged at `30c64d7`; read `market_clock.py`. Monday: no weekend scan.
+* Changed: `upcoming_closures()` in `market_clock.py`, `market.upcoming` in engine status, one glance line. Display only; holiday table, risk, auth, broker untouched.
+* Verified: 208 pass (2 new tests, node glance test extended). Not verified: browser rendering; real data (cloud run). Not on the owner's Mac until they pull their clone.
+
+* 2026-11-16 (run 23): Added display-only last-trade age to Top candidates (`ChainRow.last_trade_at`, `last_trade_age_hours`, dashboard column). Verified: 210 pytest pass, `node --check app.js`. Not verified: rendering in a real browser, behaviour on real Yahoo data (unreachable from cloud). No risk/order/auth/broker change. Mac copy is a manual clone; arrival not confirmed.
+
+## 2026-11-16 (run 24): glance sorted by urgency
+
+* Alerter unchanged at `30c64d7`; read `technical_confluence.py` (see COMPARISON_ALERTER). Monday, no weekend scan.
+* Changed: `renderGlance` orders lines bad, warn, ok (stable) and shows counts. Frontend only; DOM still textContent only.
+* Verified: `python -m pytest -q` 210 pass, including the node harness (ordering and stability asserted). Not verified: appearance in a real browser; Mac copy is a manual git clone, so merged code is not on the Mac until the owner pulls.
+
+## 2026-11-16 (run 25): no-daily-loss-halt glance warning
+
+* Alerter unchanged at `30c64d7`; read `feedback.py`. Monday, no weekend scan.
+* Changed: one glance note when auto entries are ON saying there is no daily loss halt. Frontend only; DOM textContent only.
+* Verified: 210 pytest pass (node glance test extended). Not verified: real browser. Mac copy is a manual git clone; merged code is not on the Mac until the owner pulls.
+
+## 2026-11-16: merged `main` into `agent/integration` (interactive, owner said always attempt it myself)
+
+* `main` had 55 commits from per-topic agent branches; many re-implemented features integration already had. Resolution rules: integration wins where both sides built the same thing; main-only features are kept; nothing was deleted from either side.
+* Name clashes resolved: main's `evaluation.py` (closed-trade summary, `/api/results`) is now `closed_trades.py` (integration's `evaluation.py` is the replay-based strategy evaluation); main's quote recorder methods are `record_market_snapshot`, `record_market_quotes`, `recorded_market_snapshots`, `market_recorder_counts`, with their tests in `tests/test_market_recorder.py`; main's `docs/CHALLENGES.md` and `docs/COMPARISON_ALERTER.md` are kept as `docs/CHALLENGES_MAIN.md` and `docs/COMPARISON_ALERTER_MAIN.md`.
+* Two recorders now run side by side (integration's `snapshots` table and main's `market_snapshots`/`market_quotes`), so recorded data is stored twice. Owner or a later run should pick one; both are bounded by their own retention settings.
+* Dashboard: integration's v2 layout is the base. Main's glance strip, results panel, why-skipped, top candidates, flow radar and GEX panels sit on the Desk page; main's exit levels are added to each position card; main's `renderDecisions` became `renderCycleDecisions`. Runner health merged (stall check kept from integration; failure counters and `status(now)` from main). `__main__` keeps both the strategy choice (`OPTPLAT_STRATEGY`) and the event calendar.
+* Test change to say plainly: the node harness in `test_glance_summary_is_text_only_and_flags_unsafe_states` gained browser stubs (matchMedia, location, history) because the v2 script touches them at load; no assertion was changed.
+* Verified: full suite, 644 passed; headless Chromium against the demo server loaded every page with no script errors and showed the build id, glance and results. Not verified: real data, the Mac, the GitHub workflow.

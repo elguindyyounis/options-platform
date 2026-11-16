@@ -13,17 +13,20 @@ import math
 import re
 import threading
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from . import committee as cmt
 from .agents import Context
 from .broker.sim import SimBroker
-from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
-from .market_clock import session_status
+from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
+from .market_clock import session_status, upcoming_closures
 from .events import EventCalendar
 from .dataquality import MAX_FUTURE_SKEW_S, check_snapshot, frozen_issue, quote_fingerprint
 from .diagnostics import clock_status
+from .liquidity import size_vs_liquidity
+from .flow import CAVEATS as FLOW_CAVEATS, related_themes, scan_flow
+from .gex import ASSUMPTIONS as GEX_ASSUMPTIONS, net_gex
 from .marketdata import MarketDataProvider, MarketSnapshot, snapshot_to_dict
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
 from .orders import OrderManager
@@ -37,6 +40,18 @@ from .optionlanes import OptionLanes
 from .strategy import Strategy
 
 SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
+
+
+def _age_hours(iso: Any, now: datetime) -> Optional[float]:
+    """Hours since the contract last traded (display only); None when unknown or in the future."""
+    try:
+        then = datetime.fromisoformat(str(iso))
+    except (TypeError, ValueError):
+        return None
+    if then.tzinfo is None:
+        return None
+    hours = (now - then).total_seconds() / 3600
+    return round(hours, 1) if hours >= 0 else None
 
 
 @dataclass(frozen=True)
@@ -60,6 +75,8 @@ class EngineConfig:
     shortterm_enabled: bool = False  # research lane: simulated intraday share trades on the underlying, no orders
     swing_enabled: bool = False  # research lane: simulated multi-day share trades on daily bars, no orders
     option_lanes_enabled: bool = False  # research lanes: simulated long calls and puts from real chain quotes, no orders
+    record_market_data: bool = True  # persist every snapshot/quote the engine sees (replay raw material)
+    record_retention_days: int = 90  # 0 keeps recordings forever
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -91,7 +108,7 @@ class EngineConfig:
         for name, value in asdict(self).items():
             if name == "watchlist":
                 continue
-            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots", "shortterm_enabled", "swing_enabled", "option_lanes_enabled")):
+            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots", "record_market_data", "shortterm_enabled", "swing_enabled", "option_lanes_enabled")):
                 raise ValueError(f"{name} has the wrong type")
         checks = [
             (0 <= self.max_new_per_cycle <= 5, "max_new_per_cycle must be 0-5"),
@@ -105,6 +122,7 @@ class EngineConfig:
             (1 <= self.snapshot_retention_days <= 3650, "snapshot_retention_days must be 1-3650"),
             (self.scan_interval_s == 0 or 600 <= self.scan_interval_s <= 86400, "scan_interval_s must be 0 or 600-86400"),
             (self.committee_mode in ("off", "shadow", "active"), "committee_mode must be off, shadow or active"),
+            (0 <= self.record_retention_days <= 3650, "record_retention_days must be 0-3650"),
         ]
         for ok, message in checks:
             if not ok:
@@ -119,6 +137,9 @@ def size_quantity(account: Account, policy: RiskPolicy, limit_price: float) -> i
         return 0
     budget = min(account.equity * policy.max_position_pct / 100, account.cash)
     return max(0, min(policy.max_quantity, math.floor(budget / (limit_price * 100) + 1e-9)))
+
+
+OUTCOME_WINDOW = 50  # cycles kept for the display-only outcome tally
 
 
 class TradingEngine:
@@ -149,6 +170,7 @@ class TradingEngine:
         self.shortterm = ShortTermLane(provider, self.store, clock=clock)
         self.swing = SwingLane(provider, self.store, clock=clock, calendar=self.calendar)
         self.option_lanes = OptionLanes(provider, self.store, clock=clock, calendar=self.calendar)
+        self._record_market = True  # per-cycle copy of cfg.record_market_data
 
     # ---- config -------------------------------------------------------
     def config(self) -> EngineConfig:
@@ -179,7 +201,8 @@ class TradingEngine:
         is_open, reason = session_status(self.clock())
         return {
             "config": self.config().to_dict(),
-            "market": {"open": is_open, "reason": reason, "hours_enforced": self._hours_enforced(self.config())},
+            "market": {"open": is_open, "reason": reason, "hours_enforced": self._hours_enforced(self.config()),
+                       "upcoming": upcoming_closures(self.clock())},
             "data_source": {"name": self.provider.name, "fictional": self.provider.fictional},
             "strategy": {"name": self.strategy.name, "version": self.strategy.version},
             "kill_switch": self.manager.kill_switch_active(),
@@ -191,7 +214,54 @@ class TradingEngine:
                 "window_hours": 24,
                 "issues": self.store.data_issue_summary(self.clock() - timedelta(hours=24)),
             },
+            "recent_outcomes": self.recent_outcomes(),
+            "exit_plans": self.exit_plans(),
         }
+
+    def exit_plans(self) -> list[dict[str, Any]]:
+        """Display only: the sell levels the exit rules use for each open position."""
+        cfg = self.config()
+        policy = ExitPolicy(
+            take_profit_pct=cfg.take_profit_pct,
+            stop_loss_pct=cfg.stop_loss_pct,
+            max_days_held=cfg.max_days_held,
+            min_dte_to_hold=cfg.min_dte_to_hold,
+        )
+        try:
+            now = self.clock()
+            return [exit_plan(p, policy, now) for p in self.manager.broker.get_positions()]
+        except Exception:  # noqa: BLE001 - a display helper must never break status
+            return []
+
+    def recent_outcomes(self) -> dict[str, Any]:
+        """Display only: how many entry decisions of each kind over the last few cycles."""
+        try:
+            hist = json.loads(self.store.get_state("outcome_history", "") or "[]")
+        except (ValueError, TypeError):
+            hist = []
+        if not isinstance(hist, list):
+            hist = []
+        totals: dict[str, int] = {}
+        for cyc in hist:
+            if isinstance(cyc, dict):
+                for k, n in cyc.items():
+                    if isinstance(n, int) and not isinstance(n, bool):
+                        totals[str(k)] = totals.get(str(k), 0) + n
+        return {"cycles": len(hist), "window": OUTCOME_WINDOW, "counts": totals}
+
+    def _remember_outcomes(self, report: dict[str, Any]) -> None:
+        counts: dict[str, int] = {}
+        for item in report.get("entries") or []:
+            key = str(item.get("result", "UNKNOWN")) if isinstance(item, dict) else "UNKNOWN"
+            counts[key] = counts.get(key, 0) + 1
+        try:
+            hist = json.loads(self.store.get_state("outcome_history", "") or "[]")
+            if not isinstance(hist, list):
+                hist = []
+        except (ValueError, TypeError):
+            hist = []
+        hist.append(counts)
+        self.store.set_state("outcome_history", json.dumps(hist[-OUTCOME_WINDOW:]))
 
     # ---- cycle --------------------------------------------------------
     def run_cycle(self) -> dict[str, Any]:
@@ -216,11 +286,18 @@ class TradingEngine:
                 "entries_note": "",
                 "snapshots_recorded": 0,
                 "data_quality": [],
+                "candidates": [],
+                "gex": [],
+                "gex_assumptions": list(GEX_ASSUMPTIONS),
+                "flow": [],
+                "flow_themes": [],
+                "flow_caveats": list(FLOW_CAVEATS),
                 "errors": [],
             }
             self._guard(report, "snapshot prune", lambda: self._maybe_prune_snapshots(cfg, now))
             self._maybe_learn(cfg, now)
             snapshots: dict[str, Optional[MarketSnapshot]] = {}
+            self._record_market = cfg.record_market_data
 
             if hasattr(self.provider, "advance"):
                 self.provider.advance()  # demo market moves one step per cycle
@@ -254,6 +331,7 @@ class TradingEngine:
             return self._finish(report)
 
     def _finish(self, report: dict[str, Any]) -> dict[str, Any]:
+        self._purge_recordings(report)
         report["finished_at"] = self.clock().isoformat()
         if report.get("trading_allowed"):  # equity only moves with the market; flat overnight points would stretch the chart
             try:
@@ -261,9 +339,18 @@ class TradingEngine:
                 self.store.record_equity(self._cycle_now, acct.equity, acct.cash, acct.open_premium, self.provider.fictional)
             except Exception:  # noqa: BLE001 - a missing chart point must never affect a cycle
                 pass
+        self._guard(report, "outcome_history", lambda: self._remember_outcomes(report))
         self.store.set_state("last_cycle", json.dumps(report, default=str))
         self.store.audit("engine_cycle", None, {"exits": len(report["exits"]), "entries": len(report["entries"])})
         return report
+
+    def _purge_recordings(self, report: dict[str, Any]) -> None:
+        try:
+            cfg = self.config()
+            if cfg.record_market_data:
+                self.store.purge_market_data(cfg.record_retention_days, now=self.clock())
+        except Exception as exc:  # noqa: BLE001 - housekeeping must never stop the cycle
+            report["errors"].append(f"recorder purge: {type(exc).__name__}: {str(exc)[:100]}")
 
     @staticmethod
     def _guard(report: dict[str, Any], phase: str, fn: Callable[[], Any]) -> None:
@@ -279,6 +366,9 @@ class TradingEngine:
         if symbol not in cache:
             try:
                 cache[symbol] = self.provider.snapshot(symbol)
+                self._record_market_snapshot(cache[symbol], report)
+                self._summarize_gex(cache[symbol], report)
+                self._summarize_flow(cache[symbol], report)
             except Exception as exc:  # noqa: BLE001
                 cache[symbol] = None
                 report["errors"].append(f"data {symbol}: {type(exc).__name__}: {str(exc)[:100]}")
@@ -486,6 +576,41 @@ class TradingEngine:
         self.store.prune_data_issues(now - timedelta(days=cfg.snapshot_retention_days))
         self.store.prune_equity(now - timedelta(days=max(cfg.snapshot_retention_days, 90)))
         self.store.set_state("snapshot_last_prune", now.isoformat())
+    @staticmethod
+    def _summarize_flow(snap: MarketSnapshot, report: dict[str, Any]) -> None:
+        """Display-only unusual-turnover radar; a failure is reported but never affects trading."""
+        try:
+            report["flow"].extend(scan_flow(snap))
+            report["flow"].sort(key=lambda r: ({"EXTREME": 0, "HIGH": 1, "ELEVATED": 2}[r["tier"]], -(r["premium_at_quoted_mid_usd"] or 0)))
+            del report["flow"][30:]
+            report["flow_themes"] = related_themes(report["flow"])
+        except Exception as exc:  # noqa: BLE001
+            report["errors"].append(f"flow {snap.symbol}: {type(exc).__name__}")
+
+    @staticmethod
+    def _summarize_gex(snap: MarketSnapshot, report: dict[str, Any]) -> None:
+        """Display-only context; a failure here is reported but never affects trading."""
+        try:
+            report["gex"].append(net_gex(snap))
+        except Exception as exc:  # noqa: BLE001
+            report["errors"].append(f"gex {snap.symbol}: {type(exc).__name__}")
+
+    def _record_market_snapshot(self, snap: MarketSnapshot, report: dict[str, Any]) -> None:
+        """Recording is best effort: a storage failure is reported but never blocks trading or exits."""
+        if not self._record_market:
+            return
+        try:
+            self.store.record_market_snapshot(snap, recorded_at=self.clock())
+        except Exception as exc:  # noqa: BLE001
+            report["errors"].append(f"recorder {snap.symbol}: {type(exc).__name__}: {str(exc)[:100]}")
+
+    def _record_market_quotes(self, quotes: list, report: dict[str, Any]) -> None:
+        if not self._record_market:
+            return
+        try:
+            self.store.record_market_quotes(quotes, fictional=self.provider.fictional, recorded_at=self.clock())
+        except Exception as exc:  # noqa: BLE001
+            report["errors"].append(f"recorder quotes: {type(exc).__name__}: {str(exc)[:100]}")
 
     def _sync_sim_quotes(
         self,
@@ -509,7 +634,9 @@ class TradingEngine:
         missing = [p.contract for p in positions if p.contract not in covered]
         if missing:
             try:
-                for quote in self.provider.quotes_for(missing):
+                held = self.provider.quotes_for(missing)
+                self._record_market_quotes(held, report)
+                for quote in held:
                     sim.set_quote(quote)
             except Exception as exc:  # noqa: BLE001
                 report["errors"].append(f"held quotes: {type(exc).__name__}: {str(exc)[:100]}")
@@ -642,8 +769,30 @@ class TradingEngine:
                                   {"rationale": p.rationale, "score": p.score}, snap)
             proposals = [p for p in raw if p.contract not in held and not cooling(p.contract)]
             if not proposals:
-                report["entries"].append({"symbol": symbol, "result": "NO_PROPOSAL"})
+                item_np: dict[str, Any] = {"symbol": symbol, "result": "NO_PROPOSAL"}
+                explain = getattr(self.strategy, "explain_no_proposal", None)
+                if callable(explain):
+                    try:
+                        item_np["reason"] = str(explain(snap, now))[:300]
+                    except Exception:  # noqa: BLE001  # display only: never let it affect trading
+                        pass
+                report["entries"].append(item_np)
                 continue
+            for cand in proposals[:3]:  # display only: runner-ups the owner can see, not orders
+                report["candidates"].append(
+                    {
+                        "symbol": symbol,
+                        "contract": cand.contract.occ_symbol.strip(),
+                        "score": cand.score,
+                        "limit_price": cand.limit_price,
+                        "trend": cand.rationale.get("trend"),
+                        "spread_pct": cand.rationale.get("spread_pct"),
+                        "dte": cand.rationale.get("dte"),
+                        "volume": cand.rationale.get("volume"),
+                        "open_interest": cand.rationale.get("open_interest"),
+                        "last_trade_age_hours": _age_hours(cand.rationale.get("last_trade_at"), now),
+                    }
+                )
             account = self.manager.broker.get_account()
             votes = self._committee_votes(cfg, symbol, snap, proposals, positions, account, now)
             chosen = None
@@ -698,6 +847,12 @@ class TradingEngine:
             if proposal.contract in votes:
                 item["committee"] = {"decision": votes[proposal.contract].disposition, "mode": cfg.committee_mode,
                                      "reasons": list(votes[proposal.contract].reasons)}
+            try:  # display only: never let it affect trading
+                item["size_vs_liquidity"] = size_vs_liquidity(
+                    quantity, proposal.rationale.get("volume"), proposal.rationale.get("open_interest")
+                )
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 order = self.manager.submit(intent)
             except ValueError as exc:
@@ -715,6 +870,8 @@ class TradingEngine:
                            "risk_failures": order.risk_failures}, snap, order.id)
             if order.state in (OrderState.SUBMITTED, OrderState.PARTIALLY_FILLED, OrderState.FILLED):
                 submitted += 1
+        report["candidates"].sort(key=lambda c: (-c["score"], c["contract"]))
+        del report["candidates"][10:]
 
 
 class Runner:
@@ -730,6 +887,8 @@ class Runner:
         self.last_error: Optional[str] = None
         self.started_at: Optional[datetime] = None
         self.last_success_at: Optional[datetime] = None
+        self.last_failure_at: Optional[datetime] = None
+        self.consecutive_failures = 0
 
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive() and not self._stop.is_set()
@@ -751,24 +910,26 @@ class Runner:
         if thread is not None:
             thread.join(timeout=5)
 
-    def seconds_since_success(self) -> Optional[int]:
+    def seconds_since_success(self, now: Optional[datetime] = None) -> Optional[int]:
         """Seconds since the last cycle that finished without raising (or since start, if none has yet)."""
         ref = self.last_success_at or self.started_at
         if ref is None:
             return None
-        return max(0, int((self.engine.clock() - ref).total_seconds()))
+        return max(0, int(((now or self.engine.clock()) - ref).total_seconds()))
 
-    def stalled(self) -> bool:
-        since = self.seconds_since_success()
+    def stalled(self, now: Optional[datetime] = None) -> bool:
+        since = self.seconds_since_success(now)
         return self.running() and since is not None and since > self.STALL_FACTOR * self.engine.config().interval_s
 
-    def status(self) -> dict[str, Any]:
+    def status(self, now: Optional[datetime] = None) -> dict[str, Any]:
         return {
             "running": self.running(),
             "last_error": self.last_error,
             "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
-            "seconds_since_success": self.seconds_since_success(),
-            "stalled": self.stalled(),
+            "seconds_since_success": self.seconds_since_success(now),
+            "stalled": self.stalled(now),
+            "last_failure_at": self.last_failure_at.isoformat() if self.last_failure_at else None,
+            "consecutive_failures": self.consecutive_failures,
         }
 
     def health(self) -> dict[str, Any]:
@@ -784,11 +945,14 @@ class Runner:
             try:
                 self.engine.run_cycle()
                 self.last_error = None
+                self.consecutive_failures = 0
                 self.last_success_at = self.engine.clock()
                 self.engine.maybe_scan()
                 self.engine.maybe_shortterm()
                 self.engine.maybe_swing()
                 self.engine.maybe_option_lanes()
             except Exception as exc:  # noqa: BLE001 - keep the loop alive; the error is surfaced in status
+                self.consecutive_failures += 1
+                self.last_failure_at = self.engine.clock()
                 self.last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
             self._stop.wait(self.engine.config().interval_s)

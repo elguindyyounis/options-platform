@@ -20,7 +20,7 @@ from .marketdata import DemoDataProvider, YahooDataProvider
 from .orders import OrderManager
 from .risk import RiskPolicy
 from .store import Store
-from .strategy import LiquidTrendStrategy
+from .strategy import FlowFollowStrategy, LiquidTrendStrategy
 
 
 _FRAGMENT_SAFE_TOKEN = re.compile(r"[A-Za-z0-9_-]{16,200}")
@@ -141,8 +141,18 @@ def main() -> None:
     default_cfg = EngineConfig(enforce_market_hours=(data != "demo"))
     from .events import EventCalendar, yahoo_earnings_dates
 
+    which_strategy = os.environ.get("OPTPLAT_STRATEGY", "liquid-trend")
+    strategies = {
+        "liquid-trend": LiquidTrendStrategy,
+        "flow-otm": lambda: FlowFollowStrategy(mode="flagged"),
+        "flow-near": lambda: FlowFollowStrategy(mode="nearer"),
+    }
+    if which_strategy not in strategies:
+        sys.exit("OPTPLAT_STRATEGY must be one of: " + ", ".join(strategies))
+    strategy = strategies[which_strategy]()
+    print(f"Strategy: {strategy.name} (paper research, no demonstrated edge)", flush=True)
     calendar = EventCalendar(earnings_source=yahoo_earnings_dates if data == "yahoo" else None)
-    engine = TradingEngine(manager, provider, LiquidTrendStrategy(), default_config=default_cfg, calendar=calendar)
+    engine = TradingEngine(manager, provider, strategy, default_config=default_cfg, calendar=calendar)
     scan_every = os.environ.get("OPTPLAT_SCAN_EVERY_S", "")
     if scan_every:
         try:

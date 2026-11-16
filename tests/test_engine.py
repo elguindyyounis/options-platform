@@ -353,3 +353,167 @@ def test_a_raising_cycle_is_recorded_as_an_error_and_not_as_a_success(monkeypatc
 def test_never_started_runner_has_no_health_numbers():
     engine, *_ = build()
     assert Runner(engine).health() == {"running": False, "stalled": False, "seconds_since_success": None}
+
+
+def test_no_proposal_entry_carries_a_plain_reason():
+    engine, manager, broker, *_ = build(auto_entries=True)
+    engine.run_cycle()
+    again = engine.run_cycle()
+    entry = again["entries"][0]
+    assert entry["result"] == "NO_PROPOSAL"
+    assert isinstance(entry["reason"], str) and entry["reason"]
+
+
+def test_cycle_report_lists_ranked_candidates_without_trading_on_them():
+    engine, manager, broker, *_ = build(auto_entries=True)
+    report = engine.run_cycle()
+    cands = report["candidates"]
+    assert cands and len(cands) <= 10
+    assert [c["score"] for c in cands] == sorted((c["score"] for c in cands), reverse=True)
+    assert {"symbol", "contract", "score", "limit_price", "trend", "spread_pct", "dte", "volume", "open_interest", "last_trade_age_hours"} <= set(cands[0])
+    assert len(manager.list()) <= len(report["entries"])  # candidates are never extra orders
+
+
+def test_runner_status_reports_health_and_stall_server_side():
+    from datetime import datetime, timedelta, timezone
+
+    engine, *_ = build()
+    runner = Runner(engine)
+    idle = runner.status()
+    assert idle["running"] is False and idle["stalled"] is False and idle["last_success_at"] is None
+    runner.start()
+    deadline = time.time() + 5
+    while runner.last_success_at is None and time.time() < deadline:
+        time.sleep(0.05)
+    try:
+        live = runner.status()
+        assert live["running"] and live["last_success_at"] and live["consecutive_failures"] == 0
+        assert live["stalled"] is False
+        interval = engine.config().interval_s
+        late = runner.status(now=runner.last_success_at + timedelta(seconds=3 * interval + 1))
+        assert late["stalled"] is True and late["seconds_since_success"] > 3 * interval
+    finally:
+        runner.stop()
+
+
+def test_runner_failures_are_counted_and_reset_on_success():
+    engine, *_ = build()
+    runner = Runner(engine)
+    calls = {"n": 0}
+    real = engine.run_cycle
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("boom")
+        return real()
+
+    class OneShotStop:
+        """Stops the loop after the given number of waits, without real sleeping."""
+
+        def __init__(self, waits):
+            self.waits = waits
+
+        def is_set(self):
+            return self.waits <= 0
+
+        def wait(self, _timeout):
+            self.waits -= 1
+
+    engine.run_cycle = flaky  # type: ignore[method-assign]
+    runner._stop = OneShotStop(1)  # type: ignore[assignment]
+    runner._loop()  # first pass fails
+    assert runner.consecutive_failures == 1 and "boom" in runner.last_error
+    assert runner.last_failure_at is not None and runner.last_success_at is None
+    runner._stop = OneShotStop(1)  # type: ignore[assignment]
+    runner._loop()  # second pass succeeds
+    assert runner.consecutive_failures == 0 and runner.last_error is None
+    assert runner.last_success_at is not None and runner.last_failure_at is not None
+
+
+def test_recent_outcomes_tally_entry_results_across_cycles_and_is_bounded():
+    from optplat import engine as eng
+
+    engine, *_ = build(auto_entries=True)
+    assert engine.status()["recent_outcomes"] == {"cycles": 0, "window": eng.OUTCOME_WINDOW, "counts": {}}
+    engine.run_cycle()
+    engine.run_cycle()
+    out = engine.status()["recent_outcomes"]
+    assert out["cycles"] == 2 and sum(out["counts"].values()) >= 2
+    assert out["counts"].get("NO_PROPOSAL", 0) >= 1  # second cycle: already holding the contract
+    engine.store.set_state("outcome_history", "not json")  # corrupt history must never break status
+    assert engine.status()["recent_outcomes"]["cycles"] == 0
+    for _ in range(eng.OUTCOME_WINDOW + 3):
+        engine.run_cycle()
+    assert engine.status()["recent_outcomes"]["cycles"] == eng.OUTCOME_WINDOW
+
+
+def test_dashboard_outcome_line_uses_text_nodes_only():
+    from pathlib import Path
+
+    js = (Path(__file__).parent.parent / "src/optplat/static/app.js").read_text()
+    assert "outcomesLine" in js and "innerHTML" not in js
+
+
+# ---------------------------------------------------------------- exit plans (display only)
+def test_exit_plans_show_sell_levels_for_open_positions():
+    engine, manager, broker, provider, clock = build(auto_entries=True, auto_exits=True)
+    assert engine.status()["exit_plans"] == []
+    engine.run_cycle()
+    pos = broker.get_positions()[0]
+    plan = engine.status()["exit_plans"][0]
+    assert plan["contract"] == pos.contract.occ_symbol.strip()
+    assert plan["take_profit_bid"] == round(pos.avg_cost * 1.40, 2)
+    assert plan["stop_loss_bid"] == round(pos.avg_cost * 0.70, 2)
+    assert plan["days_to_expiry"] == 60 and plan["expiry_exit_within_days"] == 5
+
+
+def test_exit_plan_levels_follow_config_and_bad_cost_is_none():
+    from optplat.exits import ExitPolicy, exit_plan
+    from optplat.models import Position
+
+    c = contract()
+    pol = ExitPolicy(take_profit_pct=50.0, stop_loss_pct=20.0)
+    good = exit_plan(Position(c, 1, 2.0), pol, NOW)
+    assert (good["take_profit_bid"], good["stop_loss_bid"]) == (3.0, 1.6)
+    bad = exit_plan(Position(c, 1, float("nan")), pol, NOW)
+    assert bad["take_profit_bid"] is None and bad["stop_loss_bid"] is None
+
+
+def test_dashboard_positions_table_states_exit_levels_with_text_only():
+    from pathlib import Path
+
+    js = (Path(__file__).parent.parent / "src/optplat/static/app.js").read_text()
+    assert "Take-profit when bid reaches" in js and "Automatic exits are OFF" in js and "innerHTML" not in js
+
+
+def test_entry_reports_size_vs_liquidity_without_changing_the_order():
+    from optplat.liquidity import size_vs_liquidity
+
+    engine, manager, *_ = build(auto_entries=True)
+    entry = engine.run_cycle()["entries"][0]
+    sl = entry["size_vs_liquidity"]
+    assert sl["quantity"] == entry["quantity"]
+    assert sl["pct_of_volume"] == round(entry["quantity"] / 200 * 100, 2)
+    assert "Display only" in sl["note"]
+    big = size_vs_liquidity(30, 200, 2000)
+    assert any("over 10%" in w for w in big["warnings"])
+    assert size_vs_liquidity(1, None, 0)["pct_of_volume"] is None
+    assert len(size_vs_liquidity(1, None, 0)["warnings"]) == 2
+    assert size_vs_liquidity(1, 200, 2000)["warnings"] == []
+
+
+def test_flow_strategy_runs_in_the_engine_and_orders_pass_the_unchanged_risk_gate():
+    from optplat.strategy import FlowFollowStrategy
+
+    engine, manager, broker, provider, clock = build(auto_entries=True)
+    engine.strategy = FlowFollowStrategy(mode="flagged")
+    far = OptionContract("AAA", NOW.date() + timedelta(days=10), Right.PUT, 120.0)  # spot 159: ~24% OTM
+    provider.set_snapshot(
+        MarketSnapshot("AAA", UP[-1], UP, (ChainRow(far, 0.95, 1.05, 30000, 500, 0.6),), NOW, "test", True)
+    )
+    report = engine.run_cycle()
+    entry = report["entries"][0]
+    assert entry["contract"].startswith("AAA") and entry["rationale"]["strategy"].startswith("flow-otm")
+    assert entry["rationale"]["otm_pct"] > 20
+    assert entry["result"] in {s.value for s in OrderState}  # accepted or risk-rejected, never bypassed

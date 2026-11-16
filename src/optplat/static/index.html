@@ -275,6 +275,7 @@
 
       <section id="view-desk" data-page="desk" data-question="How is the paper account doing, and can I trust the numbers?" hidden>
         <div id="trust-verdict" class="verdict"></div>
+        <div class="panel"><h2 class="sect">At a glance: is it safe, what is it doing, what needs you</h2><div id="glance" class="muted">Connect to see the summary.</div></div>
         <div class="panel hero">
           <div class="hero-top">
             <div>
@@ -309,6 +310,32 @@
           <p class="q">Why it acted, or didn't. Includes candidates it passed on.</p>
           <div class="panel" style="padding:4px 16px"><div id="decisions"></div></div>
         </div>
+        <details class="panel" open>
+          <summary>Results check (research, not proof of an edge)</summary>
+          <div id="results-status"></div>
+          <div class="scroll" id="results-table"></div>
+          <div id="results-limits" class="muted"></div>
+        </details>
+        <details class="panel">
+          <summary>Why trades were taken or skipped (last cycle)</summary>
+          <div id="decisions-note" class="muted"></div>
+          <div class="scroll" id="decisions-table"></div>
+        </details>
+        <details class="panel">
+          <summary>Top candidates (last cycle, ranking heuristic only)</summary>
+          <div id="candidates-note" class="muted"></div>
+          <div class="scroll" id="candidates-table"></div>
+        </details>
+        <details class="panel">
+          <summary>Unusual options turnover (research radar, not a signal)</summary>
+          <div id="flow-note" class="muted"></div>
+          <div class="scroll" id="flow-table"></div>
+        </details>
+        <details class="panel">
+          <summary>Modeled net GEX (assumption, research only)</summary>
+          <div id="gex-note" class="muted"></div>
+          <div class="scroll" id="gex-table"></div>
+        </details>
         <details class="panel health">
           <summary>System health</summary>
           <p class="q" style="margin-top:8px">Loop, data source, last cycle and data quality.</p>
