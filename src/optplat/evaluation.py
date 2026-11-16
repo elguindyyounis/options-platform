@@ -59,6 +59,25 @@ def promotion_readiness(closed_trades: int, min_trades: int = DEFAULT_MIN_TRADES
             "note": "No strategy is recommended for anything beyond paper experiments; that is the owner's decision."}
 
 
+STRATEGY_VARIANTS = ("liquid-trend", "flow-otm", "flow-near")  # keep in step with OPTPLAT_STRATEGY choices in __main__
+
+
+def multiple_testing_note() -> dict[str, Any]:
+    """Display-only warning that several strategies can be tried and the results are not split per strategy.
+
+    Challenge 3: with more than one variant, picking whichever looks best afterwards overstates it. The
+    closed-trade orders do not record which strategy placed the buy, so the totals may mix variants.
+    """
+    n = len(STRATEGY_VARIANTS)
+    return {
+        "strategy_variants_selectable": list(STRATEGY_VARIANTS),
+        "results_split_by_strategy": False,
+        "note": (f"{n} strategies can be selected. Totals here are not split by strategy, so they may mix variants. "
+                 "If several are tried and the best-looking one is kept, its result is overstated by that choice; "
+                 "judge each variant only on trades made after it was fixed, against the same baseline."),
+    }
+
+
 def breakeven_fee_per_contract(total_pnl: float, contracts: int) -> float | None:
     """Round-trip fee per contract that would erase the realised P&L (display only, no fee is assumed).
 
@@ -160,6 +179,7 @@ def summarize_closed_trades(
         "cumulative_pnl_recent_usd": cumulative[-CURVE_POINTS:],
         "cumulative_pnl_points_total": n,
         "promotion": promotion_readiness(n, min_trades),
+        "multiple_testing": multiple_testing_note(),
         "limitations": list(LIMITATIONS),
     }
 

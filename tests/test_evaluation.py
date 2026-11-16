@@ -192,3 +192,14 @@ def test_breakeven_fee_per_contract_is_derived_not_assumed():
     assert summarize_closed_trades([])["breakeven_fee_per_contract_usd"] is None
     js = open("src/optplat/static/app.js").read()
     assert "feeHeadroomText" in js and "innerHTML" not in js
+
+
+def test_multiple_testing_note_names_variants_and_unsplit_totals():
+    from optplat.evaluation import STRATEGY_VARIANTS
+    from optplat.strategy import FlowFollowStrategy, LiquidTrendStrategy
+    assert set(STRATEGY_VARIANTS) == {LiquidTrendStrategy().name, FlowFollowStrategy(mode="flagged").name, FlowFollowStrategy(mode="nearer").name}
+    c = TestClient(create_app(OrderManager(SimBroker(), Store(":memory:")), "t" * 24))
+    m = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()["multiple_testing"]
+    assert m["results_split_by_strategy"] is False and len(m["strategy_variants_selectable"]) == 3 and "overstated" in m["note"]
+    js = open("src/optplat/static/app.js").read()
+    assert "multipleTestingText" in js and "Several strategies, one total?" in js and "innerHTML" not in js

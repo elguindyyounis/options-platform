@@ -175,3 +175,12 @@ replay yet (backlog 1) and no intraday-bar strategy; when it gets one, copy the 
   (contracts can gap to zero). Shows an illustrative three-full-premium-losses stress per policy.
 * Platform gap: the dashboard showed open premium but never said "this much can be lost outright". Run 19 added a glance line for it.
   The platform has no goal or required-return math (and should not: a stretch target must not drive risk).
+
+## `whale_thesis.py` + `GEX_CONFLUENCE_POLICY.md` (read 2026-11-16, run 20; alerter at `30c64d7`)
+
+* For a high volume/OI anomaly it builds a bounded research dossier from the whole sampled chain: nearby strikes, opposite side, later expiries,
+  modeled GEX between spot and strike, ATR/20-day reachability, and seven deterministic "reviewer" events. Sizing returns NO_TRADE; it is not a
+  candidate or a wallet. States repeatedly that volume is unsigned, OI lags, and GEX walls are not dealer positioning or support/resistance.
+* Honest points the platform can copy: freeze the entry-time GEX snapshot and never use later gamma to justify an earlier entry; keep vetoed and
+  unselected candidates with future marks for a baseline; record chain truncation. Platform gap: its flow radar has no cross-strike context, and
+  no point-in-time GEX record. Not copied this run (data lives in the alerter on the Mac).
