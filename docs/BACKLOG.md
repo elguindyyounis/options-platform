@@ -33,6 +33,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
+* Record the strategy name on each order (schema change) so `/api/results` can report per strategy; freeze a point-in-time GEX snapshot per entry like the alerter.
+
 * Turn the size-vs-liquidity note into an entry check, plus bid-concession exit stress like the alerter's `exit_stress` (risk change: owner decision).
 
 * Fee/commission model for the sim broker (needs an owner-chosen cost assumption).
@@ -43,6 +45,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Multiple-testing note in `/api/results` and the dashboard (challenge 3, run 20); per-strategy split still open: record the strategy on each order.
 
 * `FlowFollowStrategy` (`flow-otm`, `flow-near`) selectable with `OPTPLAT_STRATEGY`; default unchanged (owner request, challenge 18).
 

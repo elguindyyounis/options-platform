@@ -1,6 +1,6 @@
 # Challenges (platform vs. alerter)
 
-Last alerter commit reviewed: `80672a6` (unchanged at run 19)
+Last alerter commit reviewed: `30c64d7` (was `80672a6` at run 19)
 
 ## Open challenges
 
@@ -8,7 +8,7 @@ Last alerter commit reviewed: `80672a6` (unchanged at run 19)
 |---|---|---|
 | 1 | No commissions/fees in paper fills; results look better than reality. Needs a fee model value. | Yes (cost assumption) |
 | 2 | Win/loss stats on few trades. Addressed in part: `/api/results` sample gate plus (2026-11-15 run 3) a chronological split-half stability check. Still no true out-of-sample test or baseline comparison (backlog 2). | No |
-| 3 | Alerter judges many lanes on few trades; platform has one strategy but no multiple-testing note once variants exist. | No |
+| 3 | Alerter judges many lanes on few trades. Run 20: the platform now has three selectable strategies; `/api/results.multiple_testing` and a Results row say totals are not split by strategy and a best-looking variant is overstated. Still missing: per-strategy results (sell orders do not record the strategy), a shared do-nothing baseline (backlog 1-2). | No |
 | 4 | ~~Open-position losses invisible~~ Addressed 2026-11-15: `/api/results.open_positions` marks to bid with verified fresh quotes; total is null if any position is unmarkable. Still no equity curve or recorded-quote marking. | No |
 | 5 | Alerter's day limits (`day_limits.py`) are all OFF until set and say `NOT_CHECKED` when the ledger cannot measure them; platform has no daily loss halt yet (backlog 3, default is a risk decision). | Yes (default value) |
 | 6 | **UX:** `/api/results` existed only as JSON, so the dashboard showed a bare win rate with no sample warning (fixed 2026-11-15 run 4: Results panel). Why-skipped in plain words done (run 5: Decisions panel + `explain_no_proposal`). Top candidates done run 6 (cycle report `candidates`, dashboard panel). Net GEX done run 7 (cycle report `gex` + dashboard panel, labelled an invented-inventory assumption on a sample chain). Run 8 added an "At a glance" strip (safe? acting? needs you?) with unknown data shown as a warning, never as fine. Still missing from the owner's mock-up: per-account performance/tuning, calendar. The calendar needs a trustworthy event source (owner). Per-account tuning is alerter-only (Mac DB, not visible here). Run 9: candidates now show volume and open interest, and an unreported value reads "not reported", never 0. | Partly |
@@ -27,6 +27,13 @@ Last alerter commit reviewed: `80672a6` (unchanged at run 19)
 | 19 | **UX (run 19):** the glance strip said how much was allowed per order but not how much of the account is sitting in open premium and can go to zero. Added a "Worst case today" line (open premium at cost as % of equity; warns above 50%; unknown if equity/premium missing). Display only; derived from `/api/portfolio`, no sizing or risk change. The alerter's `goal_sprint.py` goes further (three-full-loss stress, required return per session); the platform has no goal math on purpose. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 
 ## Run log
+
+* 2026-11-16 (run 20, Monday so no weekend scan): Alerter moved to `30c64d7` (one commit: `whale_thesis.py`, seven-role research dossier from the full
+  sampled chain, plus `GEX_CONFLUENCE_POLICY.md`; research-only, no order authority). Read both (see COMPARISON_ALERTER). UX challenge: results
+  did not warn that totals may mix three strategies. Added `multiple_testing` + one Results row (display only). No risk, order, auth, sizing or
+  broker code touched. Weakness noted: the alerter freezes the entry-time GEX snapshot and labels every wall "modeled, not dealer positioning";
+  the platform's GEX panel has the invented-inventory caveat but no freeze/point-in-time record. 1 new test; 206 pass. The Mac copy is a manual
+  git clone: merged code is not on the Mac until the owner pulls.
 
 * 2026-11-16 (run 19, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `goal_sprint.py` (see COMPARISON_ALERTER).
   UX challenge: open money at risk was not stated in plain words. Added the "Worst case today" glance line (display only). No risk,

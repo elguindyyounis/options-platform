@@ -219,3 +219,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   line to `buildGlance` (textContent only). No risk, order, auth, sizing or broker code touched.
 * Verified: 205 tests pass (existing node-harness test extended); app.js parses. Not verified: rendering in a browser.
 * The owner's Mac copy is a manual git clone; merged code is not there until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: multiple-testing note (scheduled challenger run 20)
+
+* Alerter moved to `30c64d7` (whale thesis dossiers, GEX confluence policy); read, see comparison doc. Monday: no weekend scan.
+* UX/challenge 3: three strategies are selectable but Results showed one total. Added display-only `multiple_testing` to `/api/results` and a Results row (textContent only). No risk, order, auth, sizing or broker code touched.
+* Verified: 206 tests pass. Not verified: rendering in a browser; per-strategy results (orders do not record the strategy).
+* The owner's Mac copy is a manual git clone; merged code is not there until the owner pulls. PR/merge result: see PR.

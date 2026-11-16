@@ -72,6 +72,12 @@
       ". Still missing: " + (p.evidence_missing || []).join("; ") + ".";
   }
 
+  function multipleTestingText(m) {
+    if (!m) return "unknown (not reported); treat any best-looking result as overstated";
+    return (m.strategy_variants_selectable || []).length + " strategies selectable (" + (m.strategy_variants_selectable || []).join(", ") +
+      "); results split by strategy: " + (m.results_split_by_strategy ? "yes" : "NO") + ". " + (m.note || "");
+  }
+
   // Results come from /api/results; every value is shown as text, and gaps are shown as "n/a", never as zero.
   function renderResults(r) {
     const split = r.split_half || {};
@@ -95,6 +101,7 @@
       ["Fee headroom (no fees are modeled)", feeHeadroomText(r)],
       ["Filled exits with no cost basis", r.unpriced_exits],
       ["Ready to promote beyond paper?", promotionText(r.promotion)],
+      ["Several strategies, one total?", multipleTestingText(r.multiple_testing)],
       ["How fills are simulated", fillModelText(r.fill_model)],
     ];
     table($("results-table"), [{ label: "Measure", get: (x) => x[0] }, { label: "Value", get: (x) => x[1] }], rows, "No results");
