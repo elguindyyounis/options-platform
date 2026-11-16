@@ -71,6 +71,9 @@
       ["Win rate", pct(r.win_rate_pct)],
       ["P&L without the best trade", money(r.pnl_without_best_trade_usd)],
       ["Worst closed-trade drawdown (not account drawdown)", pct(r.closed_trade_max_drawdown_pct)],
+      ["Longest losing streak (closed trades)", r.longest_losing_streak === null || r.longest_losing_streak === undefined ? "n/a" : String(r.longest_losing_streak)],
+      ["Cumulative closed P&L, last " + (r.cumulative_pnl_recent_usd || []).length + " of " + (r.cumulative_pnl_points_total || 0) + " trades",
+        (r.cumulative_pnl_recent_usd || []).length ? r.cumulative_pnl_recent_usd.map(money).join(" > ") : "n/a"],
       ["Early half vs later half", split.status === "CHECKED"
         ? money(split.first_half_pnl_usd) + " vs " + money(split.second_half_pnl_usd) + (split.consistent ? " (same sign)" : " (NOT consistent)")
         : "withheld until enough trades"],

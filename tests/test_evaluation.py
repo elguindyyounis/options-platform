@@ -151,3 +151,18 @@ def test_unknown_broker_fill_model_is_reported_unknown_not_conservative():
 
     fm = describe_fill_model(object())
     assert fm["buys"] == "unknown" and fm["slippage_pct"] is None and fm["commissions_modeled"] is False
+
+
+def test_cumulative_curve_and_losing_streak_follow_time_order():
+    orders = [sell(3, 2.0, 3.0), sell(1, 3.0, 2.0), sell(2, 2.0, 3.0), sell(4, 2.0, 3.0)]  # +100,-100,-100,-100 by time
+    s = summarize_closed_trades(orders)
+    assert s["cumulative_pnl_recent_usd"] == [100.0, 0.0, -100.0, -200.0]
+    assert s["longest_losing_streak"] == 3 and s["cumulative_pnl_points_total"] == 4
+
+
+def test_curve_is_capped_and_empty_has_no_streak():
+    s = summarize_closed_trades([sell(i, 3.0, 2.0) for i in range(30)])
+    assert len(s["cumulative_pnl_recent_usd"]) == 20 and s["cumulative_pnl_recent_usd"][-1] == 3000.0
+    assert s["longest_losing_streak"] == 0
+    e = summarize_closed_trades([])
+    assert e["longest_losing_streak"] is None and e["cumulative_pnl_recent_usd"] == []
