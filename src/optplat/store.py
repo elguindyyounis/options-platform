@@ -111,6 +111,23 @@ CREATE TABLE IF NOT EXISTS tracker_marks (
     payload TEXT NOT NULL,
     PRIMARY KEY (contract, sighted_day, horizon, fictional)
 );
+CREATE TABLE IF NOT EXISTS shadow_follows (
+    contract TEXT NOT NULL,
+    followed_day TEXT NOT NULL,
+    fictional INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (contract, followed_day, fictional)
+);
+CREATE TABLE IF NOT EXISTS shadow_points (
+    contract TEXT NOT NULL,
+    followed_day TEXT NOT NULL,
+    fictional INTEGER NOT NULL,
+    ts TEXT NOT NULL,
+    observed_day TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (contract, followed_day, fictional, ts)
+);
 CREATE TABLE IF NOT EXISTS agent_weights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,
@@ -427,6 +444,51 @@ class Store:
         with self._lock:
             rows = self._db.execute("SELECT payload FROM tracker_marks WHERE fictional=? ORDER BY sighted_day, horizon", (int(fictional),)).fetchall()
         return [json.loads(r["payload"]) for r in rows]
+
+    # ---- shadow book: followed candidates and their bid paths (research only) ----
+    def record_shadow_follow(self, contract: str, day: str, fictional: bool, payload: dict[str, Any]) -> bool:
+        with self._lock:
+            cur = self._db.execute("INSERT OR IGNORE INTO shadow_follows (contract, followed_day, fictional, symbol, payload) VALUES (?,?,?,?,?)",
+                                   (contract, day, int(fictional), payload["symbol"], json.dumps(payload, default=str)))
+            self._db.execute("DELETE FROM shadow_follows WHERE followed_day < date(?, '-120 day')", (day,))
+            self._db.execute("DELETE FROM shadow_points WHERE followed_day < date(?, '-120 day')", (day,))
+            self._db.commit()
+            return cur.rowcount == 1
+
+    def record_shadow_point(self, contract: str, followed_day: str, fictional: bool, ts: str, observed_day: str, payload: dict[str, Any]) -> bool:
+        with self._lock:
+            cur = self._db.execute("INSERT OR IGNORE INTO shadow_points (contract, followed_day, fictional, ts, observed_day, payload) VALUES (?,?,?,?,?,?)",
+                                   (contract, followed_day, int(fictional), ts, observed_day, json.dumps(payload, default=str)))
+            self._db.commit()
+            return cur.rowcount == 1
+
+    def shadow_follows(self, symbol: str, today: str, fictional: bool) -> list[dict[str, Any]]:
+        """Followed contracts of one underlying that are still inside the 30 trading day window (about 50 calendar days)."""
+        with self._lock:
+            rows = self._db.execute("SELECT followed_day, payload FROM shadow_follows WHERE fictional=? AND symbol=? AND followed_day>=date(?, '-50 day')",
+                                    (int(fictional), symbol, today)).fetchall()
+        return [{**json.loads(r["payload"]), "followed_day": r["followed_day"]} for r in rows]
+
+    def shadow_observed_days(self, symbol: str, fictional: bool) -> dict[tuple[str, str], set[str]]:
+        with self._lock:
+            rows = self._db.execute("SELECT p.contract, p.followed_day, p.observed_day FROM shadow_points p JOIN shadow_follows f "
+                                    "ON f.contract=p.contract AND f.followed_day=p.followed_day AND f.fictional=p.fictional "
+                                    "WHERE p.fictional=? AND f.symbol=?", (int(fictional), symbol)).fetchall()
+        out: dict[tuple[str, str], set[str]] = {}
+        for r in rows:
+            out.setdefault((r["contract"], r["followed_day"]), set()).add(r["observed_day"])
+        return out
+
+    def shadow_all_follows(self, fictional: bool) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT followed_day, payload FROM shadow_follows WHERE fictional=? ORDER BY followed_day", (int(fictional),)).fetchall()
+        return [{**json.loads(r["payload"]), "followed_day": r["followed_day"]} for r in rows]
+
+    def shadow_all_points(self, fictional: bool) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT contract, followed_day, ts, observed_day, payload FROM shadow_points WHERE fictional=? ORDER BY followed_day, ts",
+                                    (int(fictional),)).fetchall()
+        return [{**json.loads(r["payload"]), "contract": r["contract"], "followed_day": r["followed_day"], "ts": r["ts"], "observed_day": r["observed_day"]} for r in rows]
 
     def unusual_streak(self, day: str, fictional: bool, contract: str) -> int:
         """How many earlier trading days in a row (ending at the newest earlier day) this contract was unusual."""

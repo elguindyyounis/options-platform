@@ -811,3 +811,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Found that this repository is PUBLIC, so the export cannot live here. `export.py` writes allow-listed tables (orders, audit, decisions, equity, lane_trades, tracker and scan tables, hypotheses, and state keys with the prefixes `challenge:`, `lane_mark:`, `optlane_last_*`) as gzipped JSON lines plus a manifest; raw snapshots are left out; any key that looks like a credential or account is redacted; the database is opened read-only. `deploy/export_push.sh` runs nightly at 21:15 local through a third LaunchAgent and refuses to push unless `gh repo view` says the destination is private.
 * Not done: the private repository does not exist yet and `OPTPLAT_EXPORT_REPO` is unset, so nothing is exported until the owner creates it. The shadow book (Phase 1 item 1) is the next build.
 * Verified: new tests (redaction, allow-list, read-only, reproducible output, fail-closed script text). Not verified: the push on macOS, `gh` availability on the Mac.
+
+## 2026-11-16 (scheduled improvement run): shadow book, first slice
+
+* Backlog item 000 (evolution plan Phase 1.1). Helps every Phase 2 hypothesis (S1, E1-E5, X1-X3) by creating the recorded bid paths they need.
+* Changed: `shadow.py`, two store tables, a scan hook (wrapped so it can never break a scan), `GET /api/shadow` (gate progress; never says the gate passed because the export streak is invisible to it), export allow-list. Entry is the ask, exit the bid on a path point; a contract missing from a later chain leaves a gap, not a guess.
+* Decision made: selection is generic (6 most active liquid contracts per underlying, spread at most 25%, 7 to 120 days to expiry). Per-strategy candidates, IV percentile and days to earnings are NOT recorded yet and are flagged in each row's `missing_features`.
+* Verified: `python -m pytest -q` 657 pass (new `tests/test_shadow.py`). Not verified: real Yahoo chains, scan time cost with the extra writes, the Mac. No risk, order, auth, sizing or broker code touched; no schema deletion of existing data.

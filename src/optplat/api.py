@@ -248,6 +248,13 @@ def create_app(
             now = engine.clock()
             return tracker.report(engine.store, engine.provider.fictional, now, session_day(now), unusual_criteria())
 
+        @app.get("/api/shadow", dependencies=[Depends(auth)])
+        def shadow_report() -> dict[str, Any]:
+            from . import shadow
+            from .scanner import session_day
+
+            return shadow.report(engine.store, engine.provider.fictional, session_day(engine.clock()))
+
         @app.get("/api/rotation", dependencies=[Depends(auth)])
         def sector_rotation() -> dict[str, Any]:
             from . import rotation

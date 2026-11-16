@@ -48,8 +48,10 @@ Own data the owner provides stays out of commits and logs, and results are label
 
 ## Next up
 
-000. **Evolution plan, Phase 1 (owner priority, 2026-11-16).** See `docs/EVOLUTION_PLAN.md`: shadow book (extend `tracker.py` to
-   follow every candidate with features and a bid path), exit replay harness, independent-observation counting. Take these before anything else.
+000. **Evolution plan, Phase 1 (owner priority, 2026-11-16).** See `docs/EVOLUTION_PLAN.md`. Shadow book first slice is built
+   (`shadow.py`, see Done). Still open, in order: (a) follow the top candidates of each strategy and lane, not only the generic
+   most-active pick; (b) record IV percentile and days to earnings per followed contract (listed in `missing_features`);
+   (c) exit replay harness over `shadow_points`; (d) independent-observation counting (one per underlying per day).
 
 00. **Follow-ups from the tracker (owner decisions marked).** Once the tracker has 20 or more marks in a group, check whether any feature
    beats the average; only then consider letting the `flow` agent support a trade (owner decision, since it adds conviction). Add a "chains read" count to the tracker page. Single-stock watchlists need a first real run to see spreads and earnings handling.
@@ -117,6 +119,7 @@ Existing items, in order:
 
 ## Done
 
+* Shadow book, first slice (evolution plan Phase 1.1): `shadow.py`, tables `shadow_follows`/`shadow_points`, hooked into the scan after the tracker, `/api/shadow` gate progress, tables added to the export allow-list. Follows up to 6 liquid contracts per underlying per day with features at entry, then records the bid path (every scan for 10 trading days, daily to 30). Research only.
 * Nightly secret-free paper-data export (`export.py`, `deploy/export_push.sh`, a third LaunchAgent in `install_mac.sh`): allow-listed tables, redaction, read-only, pushes only to a repository confirmed private. Needs the owner to create the private repository and set `OPTPLAT_EXPORT_REPO`.
 * Refresh-to-update (owner request 2026-11-16): `deploy.py` build id on `/api/health`, token-protected `/api/deployment/check-on-refresh`, `deploy/` installer and fast-forward-only updater for the `stable` branch, `promote-stable.yml`, dashboard reload on a new build. See `docs/DEPLOYMENT.md`. Reaches the Mac only after integration is merged to `main`; untested on macOS.
 * Tracker 30 trading day marks: `HORIZONS` is now (1, 3, 7, 30) and the watch window is 50 calendar days so a flag stays watched until its 30 day mark; Tracker page shows the new horizon. Display and research only.

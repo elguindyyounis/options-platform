@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-TABLES = ("orders", "audit", "decisions", "equity", "lane_trades", "unusual_history", "tracker_marks", "agent_weights",
+TABLES = ("orders", "audit", "decisions", "equity", "lane_trades", "unusual_history", "tracker_marks", "shadow_follows", "shadow_points", "agent_weights",
           "scan_results", "hypotheses", "hypothesis_results", "data_issues")
 STATE_PREFIXES = ("challenge:", "lane_mark:", "optlane_last_result:", "optlane_last_run:")
 _SECRET_KEY = re.compile(r"token|secret|password|passwd|api[_-]?key|authorization|account|credential", re.I)
