@@ -59,6 +59,13 @@
       (f.commissions_modeled ? "modeled" : "NOT modeled") + ". " + (f.note || "");
   }
 
+  function feeHeadroomText(r) {
+    const f = r.breakeven_fee_per_contract_usd;
+    if (f === null || f === undefined) return "n/a (no closed profit to erase)";
+    return "a round-trip fee of about $" + Number(f).toFixed(2) + " per contract (" + (r.contracts_closed || 0) +
+      " closed) would erase the simulated profit; real option fees are charged on top of these fills.";
+  }
+
   function promotionText(p) {
     if (!p) return "unknown (not reported); treat as NOT ready";
     return (p.promotion_recommended ? "unexpected: marked recommended; verify" : "NO") +
@@ -85,6 +92,7 @@
         : "withheld until enough trades"],
       ["Unrealized P&L (marked to bid)", open.unrealized_pnl_usd === null || open.unrealized_pnl_usd === undefined
         ? "n/a: " + (open.error || ((open.unmarked || []).length + " position(s) cannot be marked")) : money(open.unrealized_pnl_usd)],
+      ["Fee headroom (no fees are modeled)", feeHeadroomText(r)],
       ["Filled exits with no cost basis", r.unpriced_exits],
       ["Ready to promote beyond paper?", promotionText(r.promotion)],
       ["How fills are simulated", fillModelText(r.fill_model)],

@@ -44,6 +44,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Fee headroom (`breakeven_fee_per_contract_usd`, `contracts_closed`) in `/api/results` and a Results row (run 17, challenge 15); display only, no fee assumed.
+
 * Promotion-readiness block (`promotion`: never recommended, evidence-missing list) in `/api/results` and a Results row (run 16, challenge 14); display only.
 
 * Exit plan on open positions: `exit_plan` levels in `/api/engine/status.exit_plans` and dashboard columns plus an exits ON/OFF note (run 15, challenge 13); display only.
