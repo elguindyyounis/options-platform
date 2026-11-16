@@ -1,6 +1,6 @@
 # Challenges (platform vs. alerter)
 
-Last alerter commit reviewed: `30c64d7` (was `80672a6` at run 19)
+Last alerter commit reviewed: `30c64d7` (unchanged since run 20)
 
 ## Open challenges
 
@@ -28,8 +28,11 @@ Last alerter commit reviewed: `30c64d7` (was `80672a6` at run 19)
 | 20 | **UX (run 21):** the dashboard never said which strategy is running (three are selectable), although `/api/engine/status` already reports it, so a reader could not tell what produced the trades or that Results mix strategies. Added a glance line naming the strategy and version, saying no edge is demonstrated and that totals are not split by strategy; unknown reads as a warning. Frontend only. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 | 21 | **UX (run 22):** the owner asked for an upcoming calendar; none existed. Added the part the platform really has: known market holidays and early closes from its own clock table (`/api/engine/status.market.upcoming`, one glance line, labelled exchange-calendar only). Earnings, Fed and data releases still need an event source from the owner. Weakness found in the alerter's `market_clock.py`: it trades only 09:35-15:55 ET (five-minute buffers at both ends) while the platform allows 09:30-16:00 sharp, when quotes are least reliable; narrowing the window is a tightening but changes what the strategy can do, so it is left for the owner. | Partly (event source; session buffer) |
 | 22 | **UX (run 23):** the Top candidates table showed volume and open interest but not when the contract last traded; free delayed chains keep a bid/ask on contracts that have not traded for days, so a candidate can look liquid and be stale. The alerter keeps `last_trade_at` per contract (`data_sources.py` `option_rows`) and the platform dropped it. Added display-only `ChainRow.last_trade_at`, `last_trade_age_hours` per candidate and a "Last traded" column (over 24h reads "STALE?", unknown reads "unknown"). It never filters, blocks or scores anything; making staleness a filter would change what the strategy trades (owner). Calendar events (event source) and per-account tuning (Mac only) still blocked. | No |
+| 23 | **UX (run 24):** the glance list printed about 15 lines in code order, so the one line that needed the owner (a stopped loop, kill switch, failing cycle) could sit below a dozen routine OK lines. Now sorted most-urgent-first (stable inside a level) with a count ("1 action, 3 note, 11 ok"). Frontend only; no risk, order, auth, sizing or broker change. Still open from the mock-up: per-account tuning (alerter-only, on the Mac), earnings/Fed calendar and a Monday plan page (need an owner-chosen event/data source). | No |
 
 ## Run log
+
+* 2026-11-16 (run 24, Monday so no weekend scan): Alerter unchanged (`30c64d7`). Read `technical_confluence.py` (see COMPARISON_ALERTER): it refuses stale or incomplete history and states its confluence count is correlated, single-source evidence. UX challenge: urgent lines were buried among OK lines; glance now sorted by severity with counts (row 23). 1 node-harness test extended; 210 pass. The Mac copy is a manual git clone: merged code is not on the Mac until the owner pulls.
 
 * 2026-11-16 (run 23, Monday so no weekend scan): Alerter unchanged (`30c64d7`). Read `data_sources.py` (see COMPARISON_ALERTER): platform's row sanity filters match; alerter also keeps last-trade time and labels its underlying reference basis. UX challenge: candidates could look liquid but be stale. Added display-only last-trade age (row 22). No risk, order, auth, sizing, broker or holiday change. 210 tests pass. The Mac copy is a manual git clone: merged code is not on the Mac until the owner pulls.
 

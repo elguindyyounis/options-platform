@@ -192,3 +192,7 @@ The alerter keeps the same NYSE-published 2026-2028 holiday and early-close tabl
 ## data_sources.py (read run 23)
 
 The alerter's free-chain mapping drops crossed, zero-ask and non-finite rows and nulls absurd IV, exactly as the platform's `rows_from_records` does. Differences: it also records `lastTradeDate` per contract (the platform now shows it, run 23), tags the underlying reference as `DAILY_HISTORY_CLOSE_NOT_INTRADAY_TAPE`, sets `exchange_quote_time_verified=False`, and marks earnings dates `UNCONFIRMED` (a pattern the platform should copy if it ever adds an earnings source). It also drops zero-volume contracts unless pinned; the platform leaves that to strategy filters.
+
+## technical_confluence.py (read run 24)
+
+Closed-bar daily OHLCV only: today's New York candle is always excluded (no provider bar-final flag), malformed or crossed bars are dropped, duplicate dates keep the first row, and history older than 8 days returns `STALE_CHART_HISTORY` instead of a signal. Its output hard-codes `order_authorized: false`, `independent_data_sources: 1`, `source_times_verified: false`, and says that EMA, RSI, volume and FVG are correlated evidence from one source, so its `confluence_count` is "not a probability or entry gate". Honest points the platform can copy: name how many independent sources back a score, and refuse a stale-history reading rather than show it. The platform has no chart indicators at all (not copied; needs a free daily-bar source, which is unreachable from the cloud runner).
