@@ -147,6 +147,7 @@ class LiquidTrendStrategy(Strategy):
                         "spread_pct": round(spread, 2),
                         "volume": row.volume,
                         "open_interest": row.open_interest,
+                        "last_trade_at": row.last_trade_at.isoformat() if row.last_trade_at else None,
                         "dte": dte,
                         "moneyness_pct": round(moneyness, 2),
                         "note": "Baseline strategy with no demonstrated edge",

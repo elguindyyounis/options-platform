@@ -46,6 +46,7 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Last-trade age on Top candidates (run 23, display only; a staleness *filter* would be an owner strategy decision).
 * Glance line "Coming up" from the clock's holiday/early-close table (run 22, challenge 21); display only. Earnings/Fed events still blocked on an event source.
 
 * Glance line "Strategy in use" (run 21, challenge 20); display only. Per-strategy results still need the strategy recorded on each order.
