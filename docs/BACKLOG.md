@@ -48,6 +48,9 @@ Own data the owner provides stays out of commits and logs, and results are label
 
 ## Next up
 
+000. **Evolution plan, Phase 1 (owner priority, 2026-11-16).** See `docs/EVOLUTION_PLAN.md`: shadow book (extend `tracker.py` to
+   follow every candidate with features and a bid path), exit replay harness, independent-observation counting. Take these before anything else.
+
 00. **Follow-ups from the tracker (owner decisions marked).** Once the tracker has 20 or more marks in a group, check whether any feature
    beats the average; only then consider letting the `flow` agent support a trade (owner decision, since it adds conviction). Add a "chains read" count to the tracker page. Single-stock watchlists need a first real run to see spreads and earnings handling.
 
@@ -114,6 +117,7 @@ Existing items, in order:
 
 ## Done
 
+* Nightly secret-free paper-data export (`export.py`, `deploy/export_push.sh`, a third LaunchAgent in `install_mac.sh`): allow-listed tables, redaction, read-only, pushes only to a repository confirmed private. Needs the owner to create the private repository and set `OPTPLAT_EXPORT_REPO`.
 * Refresh-to-update (owner request 2026-11-16): `deploy.py` build id on `/api/health`, token-protected `/api/deployment/check-on-refresh`, `deploy/` installer and fast-forward-only updater for the `stable` branch, `promote-stable.yml`, dashboard reload on a new build. See `docs/DEPLOYMENT.md`. Reaches the Mac only after integration is merged to `main`; untested on macOS.
 * Tracker 30 trading day marks: `HORIZONS` is now (1, 3, 7, 30) and the watch window is 50 calendar days so a flag stays watched until its 30 day mark; Tracker page shows the new horizon. Display and research only.
 * Signal provenance doc (challenge 5): `docs/SIGNALS.md` lists each signal, label and post-mortem tag with origin, status and caveat; a test fails if it drifts from `SIGNAL_NAMES`, `VALIDATED_SIGNALS` or `postmortem.CAUSES`.
