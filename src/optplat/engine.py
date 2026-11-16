@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from .broker.sim import SimBroker
+from .liquidity import size_vs_liquidity
 from .gex import ASSUMPTIONS as GEX_ASSUMPTIONS, net_gex
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
 from .market_clock import session_status
@@ -518,6 +519,12 @@ class TradingEngine:
                 "limit_price": proposal.limit_price,
                 "rationale": proposal.rationale,
             }
+            try:  # display only: never let it affect trading
+                item["size_vs_liquidity"] = size_vs_liquidity(
+                    quantity, proposal.rationale.get("volume"), proposal.rationale.get("open_interest")
+                )
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 order = self.manager.submit(intent)
             except ValueError as exc:

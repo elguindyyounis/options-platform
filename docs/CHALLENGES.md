@@ -1,6 +1,6 @@
 # Challenges (platform vs. alerter)
 
-Last alerter commit reviewed: `80672a6` (unchanged at run 17)
+Last alerter commit reviewed: `80672a6` (unchanged at run 18)
 
 ## Open challenges
 
@@ -21,8 +21,15 @@ Last alerter commit reviewed: `80672a6` (unchanged at run 17)
 | 13 | **UX (run 15):** Open positions showed cost and mark but not what the rules would do with them; a reader could not tell, before it happened, at which bid a position sells or whether exits are even on. Added display-only `exit_plan` (take-profit bid, stop bid, expiry-exit window) to `/api/engine/status.exit_plans` and three Open-positions columns plus a note saying whether automatic exits are ON or OFF. Levels are bid-based rules, not predictions; fills stay simulated and fee-free. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 | 14 | **UX (run 16):** nothing on the dashboard said what the owner is being asked to decide or what evidence is still missing, so a green-looking P&L could read as "ready". Added display-only `promotion` to `/api/results` (`promotion_recommended` always false, `evidence_missing` list: sample size, out-of-sample holdout, do-nothing baseline, fee model, timestamped quotes/real fills) and a "Ready to promote beyond paper?" row. Copied from the alerter's `strategy_postmortems.py`. The list is a checklist, not a test; the platform still has no holdout or baseline run (backlog 1-2). Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 | 15 | **UX (run 17):** challenge 1 (no fees) was only a sentence in the limitations; a reader could not tell how fragile the simulated profit is. Added display-only `breakeven_fee_per_contract_usd` and `contracts_closed` to `/api/results` and a "Fee headroom" Results row: the round-trip fee per contract that would erase realised P&L. It is derived from the fills, no fee is assumed (null when P&L is not positive). Real fees, slippage and queue effects still come on top. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
+| 16 | **UX (run 18):** a decision to buy showed quantity but not how big that is against the contract's reported volume and open interest; with confidence-driven sizing a large order in a thin contract would read as fine. Added display-only `size_vs_liquidity` per entry (percent of reported volume/OI, warning over 10%, copied from the alerter's `liquidity.py`) and a "Size check" in the Decisions Why column. It never blocks or resizes anything; a block would be a risk-policy change for the owner. Volume/OI are delayed provider numbers and paper fills ignore size impact. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 
 ## Run log
+
+* 2026-11-16 (run 18, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `liquidity.py` (see COMPARISON_ALERTER).
+  UX challenge: order size was not shown against liquidity. Added display-only `size_vs_liquidity` to each entry and a Size check
+  in the Decisions panel. No risk, order, auth, sizing or broker code touched. Weaknesses noted: the alerter scores and tiers
+  liquidity and runs bid-concession exit stress; the platform has only a volume/OI floor and immediate, impact-free paper fills.
+  1 new test; 197 pass. The Mac copy is a manual git clone: merged code is not on the Mac until the owner pulls.
 
 * 2026-11-16 (run 17, Monday so no weekend scan): Alerter unchanged (`80672a6`); re-read `risk.py` (see COMPARISON_ALERTER).
   UX challenge: simulated profit looked solid because fees are not modeled. Added fee-headroom (break-even round-trip fee per

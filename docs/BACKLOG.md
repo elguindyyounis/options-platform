@@ -33,7 +33,7 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Ideas (unscheduled)
 
-* Liquidity/size-vs-volume entry check modelled on the alerter's `liquidity.py` (risk change: owner decision).
+* Turn the size-vs-liquidity note into an entry check, plus bid-concession exit stress like the alerter's `exit_stress` (risk change: owner decision).
 
 * Fee/commission model for the sim broker (needs an owner-chosen cost assumption).
 * Dashboard UX steps (one per run): top candidates and why-taken/skipped from cycle data; per-account view (alerter-only data); upcoming calendar (needs event source); Node UI contract test like the alerter's.
@@ -43,6 +43,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Size-vs-liquidity note per entry (`size_vs_liquidity`, run 18, challenge 16); display only, nothing blocked.
 
 * Fee headroom (`breakeven_fee_per_contract_usd`, `contracts_closed`) in `/api/results` and a Results row (run 17, challenge 15); display only, no fee assumed.
 
