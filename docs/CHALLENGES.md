@@ -1,6 +1,6 @@
 # Challenges (platform vs. alerter)
 
-Last alerter commit reviewed: `80672a6` (unchanged at run 16)
+Last alerter commit reviewed: `80672a6` (unchanged at run 17)
 
 ## Open challenges
 
@@ -20,8 +20,16 @@ Last alerter commit reviewed: `80672a6` (unchanged at run 16)
 | 12 | **UX (run 14):** the Decisions panel explained only the last cycle, so a reader could not tell whether "nothing met the rules" was one quiet cycle or the pattern for the last day. Fixed: the engine keeps a bounded (50 cycles) tally of entry result codes, shown in `/api/engine/status.recent_outcomes` and as one line under Decisions. Counts result codes only (not reasons); it is not a per-day rollup and is not an evidence of edge. Per-account tuning (Mac only) and calendar (event source) still blocked. | No |
 | 13 | **UX (run 15):** Open positions showed cost and mark but not what the rules would do with them; a reader could not tell, before it happened, at which bid a position sells or whether exits are even on. Added display-only `exit_plan` (take-profit bid, stop bid, expiry-exit window) to `/api/engine/status.exit_plans` and three Open-positions columns plus a note saying whether automatic exits are ON or OFF. Levels are bid-based rules, not predictions; fills stay simulated and fee-free. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 | 14 | **UX (run 16):** nothing on the dashboard said what the owner is being asked to decide or what evidence is still missing, so a green-looking P&L could read as "ready". Added display-only `promotion` to `/api/results` (`promotion_recommended` always false, `evidence_missing` list: sample size, out-of-sample holdout, do-nothing baseline, fee model, timestamped quotes/real fills) and a "Ready to promote beyond paper?" row. Copied from the alerter's `strategy_postmortems.py`. The list is a checklist, not a test; the platform still has no holdout or baseline run (backlog 1-2). Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
+| 15 | **UX (run 17):** challenge 1 (no fees) was only a sentence in the limitations; a reader could not tell how fragile the simulated profit is. Added display-only `breakeven_fee_per_contract_usd` and `contracts_closed` to `/api/results` and a "Fee headroom" Results row: the round-trip fee per contract that would erase realised P&L. It is derived from the fills, no fee is assumed (null when P&L is not positive). Real fees, slippage and queue effects still come on top. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 
 ## Run log
+
+* 2026-11-16 (run 17, Monday so no weekend scan): Alerter unchanged (`80672a6`); re-read `risk.py` (see COMPARISON_ALERTER).
+  UX challenge: simulated profit looked solid because fees are not modeled. Added fee-headroom (break-even round-trip fee per
+  contract) to `/api/results` and the Results panel. Display only; no risk, order, auth, sizing or broker code touched. Weaknesses
+  noted: the alerter's risk gate rejects stale (>30 min) or unverifiable quotes and caps spread at 35%, and states "unofficial
+  delayed chain" as a warning on every yfinance candidate; the platform's results panel still has no fee assumption. 1 new test;
+  196 pass. The Mac copy is a manual git clone: merged code is not on the Mac until the owner pulls.
 
 * 2026-11-16 (run 16, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `strategy_postmortems.py` (see COMPARISON_ALERTER).
   UX challenge: no place said what is still missing before a strategy could be promoted. Added `promotion` block (never recommends;

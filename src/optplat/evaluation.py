@@ -59,6 +59,17 @@ def promotion_readiness(closed_trades: int, min_trades: int = DEFAULT_MIN_TRADES
             "note": "No strategy is recommended for anything beyond paper experiments; that is the owner's decision."}
 
 
+def breakeven_fee_per_contract(total_pnl: float, contracts: int) -> float | None:
+    """Round-trip fee per contract that would erase the realised P&L (display only, no fee is assumed).
+
+    Paper fills carry no commissions (challenge 1). Rather than invent a fee, show how much headroom the
+    simulated profit has: None when nothing closed or the total is already zero or negative.
+    """
+    if contracts <= 0 or total_pnl <= 0:
+        return None
+    return round(total_pnl / contracts, 4)
+
+
 def closed_trade_pnl(order: Order) -> float | None:
     """Realised P&L in dollars for one fully filled sell-to-close, or None if it cannot be computed."""
     if order.intent.side is not Side.SELL_TO_CLOSE or order.state is not OrderState.FILLED:
@@ -92,6 +103,7 @@ def summarize_closed_trades(
 ) -> dict[str, Any]:
     rows = []
     unpriced = 0
+    contracts = 0
     for o in orders:
         if o.intent.side is Side.SELL_TO_CLOSE and o.state is OrderState.FILLED:
             pnl = closed_trade_pnl(o)
@@ -99,6 +111,7 @@ def summarize_closed_trades(
                 unpriced += 1  # filled exit without a recorded cost basis: counted, never guessed
             else:
                 rows.append((o.updated_at, o.id, pnl))
+                contracts += int(o.filled_qty)
     rows.sort()
     pnls = [r[2] for r in rows]
     n = len(pnls)
@@ -140,6 +153,8 @@ def summarize_closed_trades(
         "best_trade_share_of_gross_wins_pct": round(100.0 * max(pnls) / gross_win, 1) if gross_win > 0 else None,
         "pnl_without_best_trade_usd": round(total - max(pnls), 2) if n else None,
         "closed_trade_max_drawdown_pct": round(max_dd, 3) if n else None,
+        "contracts_closed": contracts,
+        "breakeven_fee_per_contract_usd": breakeven_fee_per_contract(total, contracts),
         "split_half": split_half_check(pnls, min_trades=min_trades),
         "longest_losing_streak": longest if n else None,
         "cumulative_pnl_recent_usd": cumulative[-CURVE_POINTS:],

@@ -183,3 +183,12 @@ def test_results_endpoint_and_dashboard_show_promotion_block():
     assert body["promotion"]["promotion_recommended"] is False
     js = open("src/optplat/static/app.js").read()
     assert "promotionText" in js and "Ready to promote beyond paper?" in js and "innerHTML" not in js
+
+
+def test_breakeven_fee_per_contract_is_derived_not_assumed():
+    s = summarize_closed_trades([sell(1, 3.0, 2.0), sell(2, 3.0, 2.0)])  # +100 each, one contract each
+    assert s["contracts_closed"] == 2 and s["breakeven_fee_per_contract_usd"] == 100.0 and s["breakeven_fee_per_contract_usd"] == round(s["realized_pnl_usd"] / s["contracts_closed"], 4)
+    assert summarize_closed_trades([sell(1, 2.0, 3.0)])["breakeven_fee_per_contract_usd"] is None  # a loss has no headroom
+    assert summarize_closed_trades([])["breakeven_fee_per_contract_usd"] is None
+    js = open("src/optplat/static/app.js").read()
+    assert "feeHeadroomText" in js and "innerHTML" not in js

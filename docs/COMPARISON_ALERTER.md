@@ -149,3 +149,13 @@ replay yet (backlog 1) and no intraday-bar strategy; when it gets one, copy the 
 * Honest about gaps: an empty ledger is called "a missing-evidence diagnosis, not a claim that the strategy was evaluated".
 * Platform difference: the strategy has no predeclared falsification rule or baseline. Run 16 copied the evidence-missing list into
   `/api/results.promotion`; the written hypothesis/falsification step is a possible later docs item for the owner.
+
+## `risk.py` (read 2026-11-16, run 17; alerter still at `80672a6`)
+
+* One fail-closed `evaluate()` gate: kill switch, seven agent reviews must match the current quote snapshot, skeptic PASS, sizing proposal
+  cap, single-leg only, 7-730 DTE, two-sided quote with spread <= 35%, fetch time within 30 minutes, cash, per-position, per-symbol and
+  portfolio premium caps, drawdown stop, plus entry-quality and day limits. Unknown quote source is a rejection.
+* Honest about gaps: warns on every unofficial delayed chain and missing exchange timestamp; pauses new entries when held options lack
+  reliable bid marks.
+* Platform difference: the platform's equivalent lives in `risk.py`/`orders.py` and is similar in spirit; it has no review-matches-snapshot
+  step (single strategy) and no spread cap in the risk gate (the strategy filters spread).
