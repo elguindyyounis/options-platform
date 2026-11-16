@@ -12,8 +12,19 @@ Last alerter commit reviewed: `80672a6`
 | 4 | ~~Open-position losses invisible~~ Addressed 2026-11-15: `/api/results.open_positions` marks to bid with verified fresh quotes; total is null if any position is unmarkable. Still no equity curve or recorded-quote marking. | No |
 | 5 | Alerter's day limits (`day_limits.py`) are all OFF until set and say `NOT_CHECKED` when the ledger cannot measure them; platform has no daily loss halt yet (backlog 3, default is a risk decision). | Yes (default value) |
 | 6 | **UX:** `/api/results` existed only as JSON, so the dashboard showed a bare win rate with no sample warning (fixed 2026-11-15 run 4: Results panel). Why-skipped in plain words done (run 5: Decisions panel + `explain_no_proposal`). Top candidates done run 6 (cycle report `candidates`, dashboard panel). Net GEX done run 7 (cycle report `gex` + dashboard panel, labelled an invented-inventory assumption on a sample chain). Run 8 added an "At a glance" strip (safe? acting? needs you?) with unknown data shown as a warning, never as fine. Still missing from the owner's mock-up: per-account performance/tuning, calendar. The calendar needs a trustworthy event source (owner). Per-account tuning is alerter-only (Mac DB, not visible here). Run 9: candidates now show volume and open interest, and an unreported value reads "not reported", never 0. | Partly |
+| 7 | Alerter's performance report names its fill model in a field (`order_execution`, modeled ask+friction / bid-friction) and sets `source_quote_timestamp_verified=false`; the platform's `/api/results` only lists limitations as prose. Also no closed-trade equity curve. Display-only candidates for a later run. | No |
+| 8 | **UX (run 10):** the glance strip never said whether the market was open, and could not tell a stopped loop from a stalled one or show that the market-hours check was switched off. Fixed in run 10 (see log). Still open from the mock-up: per-account performance/tuning (alerter-only, Mac DB), calendar (needs an event source from the owner), Monday plan page (needs real data; Yahoo is unreachable from cloud runs). | Partly |
 
 ## Run log
+
+* 2026-11-16 (run 10, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `strategy_performance.py` (see
+  COMPARISON_ALERTER). UX challenge: "At a glance" did not state market open/closed, did not warn when the market-hours check
+  is off, and a loop that claims to run but has not started a cycle in 3x its interval looked healthy. Added those lines to
+  `buildGlance` (optional `nowMs` argument for testing). Frontend only; no risk, order, auth, sizing or broker code touched.
+  Weaknesses noted: the stall check trusts the cycle's own `started_at`, so it only catches a stuck loop, not wrong data;
+  the stall rule duplicates backlog item 4 (server-side runner health), which is still the better home. Existing glance test
+  extended (closed/market-hours-off/stalled and fresh cases); 182 pass. The Mac copy is a manual git clone: merged code is not on
+  the Mac until the owner pulls.
 
 * 2026-11-15 (run 9): Alerter moved to `80672a6` (volume/OI anomaly radar, Mac-only; read `unusual_activity.py`).
   UX challenge: the Top candidates panel gave a score but not the liquidity behind it, and a skipped contract with

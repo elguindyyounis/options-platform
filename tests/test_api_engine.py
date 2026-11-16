@@ -129,7 +129,11 @@ const g=window.optplatGlance;
 const st={data_source:{name:'x',fictional:true},config:{auto_entries:true,auto_exits:false},last_cycle:{errors:['boom'],entries:[],exits:[]},runner:{running:false}};
 const bad=g({mode:'LIVE'},st,{kill_switch:true},{status:'INSUFFICIENT_SAMPLE',closed_trades:2,open_positions:{unrealized_pnl_usd:null}},{max_position_pct:1,max_total_premium_pct:10,max_open_positions:12});
 const none=g({mode:'PAPER'},{config:{}},null,null,null);
-console.log(JSON.stringify({bad,none}));
+const now=Date.parse('2026-11-16T12:00:00Z');
+const st2={data_source:{name:'x',fictional:false},market:{open:false,reason:'Weekend'},config:{auto_entries:false,auto_exits:true,enforce_market_hours:false,interval_s:300},runner:{running:true},last_cycle:{errors:[],entries:[],exits:[],started_at:'2026-11-16T11:00:00Z'}};
+const stale=g({mode:'PAPER'},st2,{kill_switch:false},null,null,now);
+const fresh=g({mode:'PAPER'},{...st2,market:{open:true,reason:'Regular session'},config:{...st2.config,enforce_market_hours:true},last_cycle:{...st2.last_cycle,started_at:'2026-11-16T11:58:00Z'}},{kill_switch:false},null,null,now);
+console.log(JSON.stringify({bad,none,stale,fresh}));
 """
     out = subprocess.run([node, "-e", harness, str(root / "app.js")], capture_output=True, text=True, check=True).stdout
     r = json.loads(out)
@@ -140,3 +144,11 @@ console.log(JSON.stringify({bad,none}));
     # missing data must never read as fine
     assert any("unknown" in i["text"] and i["level"] == "warn" for i in r["none"])
     assert not any("Kill switch is off" in i["text"] for i in r["none"])
+
+    # market session, hours-check and stale-loop lines
+    stale = " ".join(i["text"] for i in r["stale"])
+    assert "Market is closed (Weekend)" in stale and "Market-hours check is OFF" in stale and "may be stalled" in stale
+    assert any(i["level"] == "warn" and "may be stalled" in i["text"] for i in r["stale"])
+    fresh = " ".join(i["text"] for i in r["fresh"])
+    assert "Market is open" in fresh and "stalled" not in fresh and "check is OFF" not in fresh
+    assert any("Market session unknown" in i["text"] and i["level"] == "warn" for i in r["none"])

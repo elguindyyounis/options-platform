@@ -45,6 +45,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Glance strip states market open/closed, warns when the market-hours check is off and when a running loop looks stalled (client-side; server-side runner health, item 4, still open).
+
 * Candidates show volume/open interest ("not reported" when null); skip reasons separate unreported from low liquidity data; display only.
 
 * Dashboard "At a glance" strip (safety, activity, what needs the owner) built from existing API data; tested under node.

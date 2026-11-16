@@ -125,7 +125,7 @@
 
   // "At a glance": plain-words reading of safety, money and what needs the owner. Pure function of API data.
   // Each item is {level: "ok"|"warn"|"bad", text}. Unknown or missing data is reported as unknown, never as fine.
-  function buildGlance(h, st, pf, res, pol) {
+  function buildGlance(h, st, pf, res, pol, nowMs) {
     const out = [];
     const add = (level, text) => out.push({ level, text });
     if (h.mode !== "PAPER") add("bad", "Broker mode is " + h.mode + ", not PAPER. Stop and check.");
@@ -138,6 +138,11 @@
     else add("warn", "Market data source unknown.");
     if (st.config && st.config.auto_entries) add("warn", "Automatic entries are ON: the engine may buy paper contracts by itself.");
     else if (st.config) add("ok", "Automatic entries are off: nothing is bought unless you press Run one cycle.");
+    if (st.market) {
+      if (st.market.open) add("ok", "Market is open (" + st.market.reason + ").");
+      else add("ok", "Market is closed (" + st.market.reason + "): " + (st.config && st.config.enforce_market_hours === false ? "but the market-hours check is off, see below." : "no new paper trades until it opens."));
+    } else add("warn", "Market session unknown.");
+    if (st.config && st.config.enforce_market_hours === false) add("warn", "Market-hours check is OFF: the engine may act outside the session, on quotes that may be stale.");
     if (pol && pol.require_verified_quote_time === false) add("warn", "Quote-time verification is OFF.");
     if (pol && typeof pol.max_position_pct === "number")
       add("ok", "Risk limits: up to " + pol.max_position_pct + "% of equity per order, " + pol.max_total_premium_pct + "% open in total, " + pol.max_open_positions + " positions.");
@@ -145,6 +150,11 @@
     if (!c) add("warn", "No cycle has run yet, so there is no recent activity to show.");
     else if (c.errors && c.errors.length) add("bad", "The last cycle had " + c.errors.length + " error(s): " + c.errors.join("; "));
     else add("ok", "Last cycle ran without errors (" + c.entries.length + " entry decision(s), " + c.exits.length + " exit decision(s)).");
+    if (c && c.started_at && st.runner && st.runner.running && st.config && st.config.interval_s) {
+      const ageS = ((typeof nowMs === "number" ? nowMs : Date.now()) - Date.parse(c.started_at)) / 1000;
+      if (isNaN(ageS)) add("warn", "Last cycle time is unreadable, so staleness cannot be checked.");
+      else if (ageS > 3 * st.config.interval_s) add("warn", "The loop says it is running but the last cycle started " + Math.round(ageS / 60) + " min ago (interval " + Math.round(st.config.interval_s / 60) + " min): it may be stalled.");
+    }
     if (st.runner && !st.runner.running && st.config && (st.config.auto_entries || st.config.auto_exits))
       add("warn", "Automatic actions are enabled but the loop is stopped, so nothing runs on its own.");
     if (res) {
