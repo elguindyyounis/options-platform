@@ -203,6 +203,11 @@
       if (st.market.open) add("ok", "Market is open (" + st.market.reason + ").");
       else add("ok", "Market is closed (" + st.market.reason + "): " + (st.config && st.config.enforce_market_hours === false ? "but the market-hours check is off, see below." : "no new paper trades until it opens."));
     } else add("warn", "Market session unknown.");
+    if (st.market && Array.isArray(st.market.upcoming)) {
+      if (st.market.upcoming.length) add("ok", "Coming up (exchange calendar only, not earnings or news): " +
+        st.market.upcoming.map(function (e) { return e.date + (e.kind === "closed" ? " market closed" : " early close"); }).join("; ") + ".");
+      else add("ok", "No market holidays or early closes in the next 3 weeks (exchange calendar only; earnings and news are not tracked).");
+    }
     if (st.config && st.config.enforce_market_hours === false) add("warn", "Market-hours check is OFF: the engine may act outside the session, on quotes that may be stale.");
     if (pol && pol.require_verified_quote_time === false) add("warn", "Quote-time verification is OFF.");
     if (pol && typeof pol.max_position_pct === "number")

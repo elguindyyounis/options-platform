@@ -21,7 +21,7 @@ from .liquidity import size_vs_liquidity
 from .flow import CAVEATS as FLOW_CAVEATS, related_themes, scan_flow
 from .gex import ASSUMPTIONS as GEX_ASSUMPTIONS, net_gex
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
-from .market_clock import session_status
+from .market_clock import session_status, upcoming_closures
 from .marketdata import MarketDataProvider, MarketSnapshot
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
 from .orders import OrderManager
@@ -154,7 +154,7 @@ class TradingEngine:
         is_open, reason = session_status(self.clock())
         return {
             "config": self.config().to_dict(),
-            "market": {"open": is_open, "reason": reason},
+            "market": {"open": is_open, "reason": reason, "upcoming": upcoming_closures(self.clock())},
             "data_source": {"name": self.provider.name, "fictional": self.provider.fictional},
             "strategy": {"name": self.strategy.name, "version": self.strategy.version},
             "kill_switch": self.manager.kill_switch_active(),
