@@ -421,3 +421,19 @@ def test_entry_reports_size_vs_liquidity_without_changing_the_order():
     assert size_vs_liquidity(1, None, 0)["pct_of_volume"] is None
     assert len(size_vs_liquidity(1, None, 0)["warnings"]) == 2
     assert size_vs_liquidity(1, 200, 2000)["warnings"] == []
+
+
+def test_flow_strategy_runs_in_the_engine_and_orders_pass_the_unchanged_risk_gate():
+    from optplat.strategy import FlowFollowStrategy
+
+    engine, manager, broker, provider, clock = build(auto_entries=True)
+    engine.strategy = FlowFollowStrategy(mode="flagged")
+    far = OptionContract("AAA", NOW.date() + timedelta(days=10), Right.PUT, 120.0)  # spot 159: ~24% OTM
+    provider.set_snapshot(
+        MarketSnapshot("AAA", UP[-1], UP, (ChainRow(far, 0.95, 1.05, 30000, 500, 0.6),), NOW, "test", True)
+    )
+    report = engine.run_cycle()
+    entry = report["entries"][0]
+    assert entry["contract"].startswith("AAA") and entry["rationale"]["strategy"].startswith("flow-otm")
+    assert entry["rationale"]["otm_pct"] > 20
+    assert entry["result"] in {s.value for s in OrderState}  # accepted or risk-rejected, never bypassed

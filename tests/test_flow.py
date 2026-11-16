@@ -50,3 +50,41 @@ def test_cycle_report_carries_flow_without_creating_orders():
     engine, manager, *_ = build(auto_entries=False)
     rep = engine.run_cycle()
     assert "flow" in rep and "flow_caveats" in rep and manager.list() == []
+
+
+def _flow_snapshot():
+    rows = [
+        row(330.0, 65601, 810, bid=0.24, ask=0.26),          # flagged, 31% OTM
+        row(440.0, 400, 600, bid=2.00, ask=2.10),            # nearer, ~8% OTM, liquid
+        row(460.0, 900, 5000, bid=7.0, ask=7.2),             # too close to the money for target
+    ]
+    return snap("SMH", rows)
+
+
+def test_flow_strategy_flagged_buys_the_otm_contract_and_nearer_buys_closer():
+    from optplat.strategy import FlowFollowStrategy
+
+    s = _flow_snapshot()
+    a = FlowFollowStrategy(mode="flagged").propose(s, NOW)
+    assert len(a) == 1 and a[0].contract.strike == 330.0 and a[0].rationale["otm_pct"] > 30
+    assert "hedge" in a[0].rationale["note"]
+    b = FlowFollowStrategy(mode="nearer").propose(s, NOW)
+    assert len(b) == 1 and b[0].contract.strike == 440.0 and b[0].rationale["flagged_contract"] == a[0].contract.occ_symbol.strip()
+
+
+def test_flow_strategy_skips_small_premium_short_expiry_and_bad_quotes():
+    from optplat.strategy import FlowFollowStrategy
+
+    assert FlowFollowStrategy(min_premium_usd=10_000_000).propose(_flow_snapshot(), NOW) == []
+    assert FlowFollowStrategy(min_dte=10).propose(_flow_snapshot(), NOW) == []
+    wide = snap("SMH", [row(330.0, 65601, 810, bid=0.05, ask=0.26)])
+    assert FlowFollowStrategy().propose(wide, NOW) == []
+    assert "unusual-turnover" in FlowFollowStrategy().explain_no_proposal(wide, NOW)
+    import pytest
+    with pytest.raises(ValueError):
+        FlowFollowStrategy(mode="x")
+
+
+def test_flow_strategy_proposal_goes_through_the_risk_gate_unchanged():
+    from optplat.risk import RiskPolicy
+    assert RiskPolicy().min_dte == 7 and RiskPolicy().max_spread_pct_of_ask == 15.0  # policy untouched

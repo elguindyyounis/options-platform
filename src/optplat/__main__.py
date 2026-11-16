@@ -14,7 +14,7 @@ from .marketdata import DemoDataProvider, YahooDataProvider
 from .orders import OrderManager
 from .risk import RiskPolicy
 from .store import Store
-from .strategy import LiquidTrendStrategy
+from .strategy import FlowFollowStrategy, LiquidTrendStrategy
 
 
 def main() -> None:
@@ -57,7 +57,17 @@ def main() -> None:
     manager = OrderManager(broker, store, policy)
     # The demo market is fictional and runs at any hour, so market-hours enforcement is off by default there.
     default_cfg = EngineConfig(enforce_market_hours=(data != "demo"))
-    engine = TradingEngine(manager, provider, LiquidTrendStrategy(), default_config=default_cfg)
+    which_strategy = os.environ.get("OPTPLAT_STRATEGY", "liquid-trend")
+    strategies = {
+        "liquid-trend": LiquidTrendStrategy,
+        "flow-otm": lambda: FlowFollowStrategy(mode="flagged"),
+        "flow-near": lambda: FlowFollowStrategy(mode="nearer"),
+    }
+    if which_strategy not in strategies:
+        sys.exit("OPTPLAT_STRATEGY must be one of: " + ", ".join(strategies))
+    strategy = strategies[which_strategy]()
+    print(f"Strategy: {strategy.name} (paper research, no demonstrated edge)", flush=True)
+    engine = TradingEngine(manager, provider, strategy, default_config=default_cfg)
     runner = Runner(engine)
     port = int(os.environ.get("OPTPLAT_PORT", "8800"))
     print(f"Dashboard: http://127.0.0.1:{port}   broker={which}   data={data}", flush=True)
