@@ -197,6 +197,12 @@
     if (pol && pol.require_verified_quote_time === false) add("warn", "Quote-time verification is OFF.");
     if (pol && typeof pol.max_position_pct === "number")
       add("ok", "Risk limits: up to " + pol.max_position_pct + "% of equity per order, " + pol.max_total_premium_pct + "% open in total, " + pol.max_open_positions + " positions.");
+    const acct = pf && pf.account;
+    if (acct && typeof acct.equity === "number" && acct.equity > 0 && typeof acct.open_premium === "number") {
+      const share = (acct.open_premium / acct.equity) * 100;
+      add(share > 50 ? "warn" : "ok", "Worst case today: the open contracts are worth " + money(acct.open_premium) + " at cost (" + share.toFixed(1) +
+        "% of equity). A long option can lose all of its premium, so losing all of it is the worst case for these positions; fees are not modeled.");
+    } else if (pf) add("warn", "Money at risk unknown: account equity or open premium is missing.");
     const c = st.last_cycle;
     if (!c) add("warn", "No cycle has run yet, so there is no recent activity to show.");
     else if (c.errors && c.errors.length) add("bad", "The last cycle had " + c.errors.length + " error(s): " + c.errors.join("; "));

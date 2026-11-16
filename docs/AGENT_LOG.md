@@ -211,3 +211,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Added `FlowFollowStrategy` with two modes and `OPTPLAT_STRATEGY` selection in `__main__.py` (default `liquid-trend`). 5 tests, 205 pass.
 * Risk policy, sizing, auth, broker untouched; proposals still pass through the same risk gate and size cap. Paper only.
 * Not verified: live Yahoo chains, how often flows pass the filters, any outcome. Not done: relaxing min DTE (owner), a dashboard strategy switch, alerter lanes (Mac-only; see ALERTER_FLOW_HANDOFF).
+
+## 2026-11-16: worst-case line in the glance strip (scheduled challenger run 19)
+
+* Alerter unchanged at `80672a6`; read `goal_sprint.py` (see comparison doc). Monday: no weekend scan.
+* UX challenge: the owner could not see at a glance how much open premium can be lost outright. Added a display-only "Worst case today"
+  line to `buildGlance` (textContent only). No risk, order, auth, sizing or broker code touched.
+* Verified: 205 tests pass (existing node-harness test extended); app.js parses. Not verified: rendering in a browser.
+* The owner's Mac copy is a manual git clone; merged code is not there until the owner pulls. PR/merge result: see PR.
