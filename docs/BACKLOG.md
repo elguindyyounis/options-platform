@@ -46,6 +46,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Run 25: glance warns that no daily loss halt exists when auto entries are on (item 3 itself still open).
+
 * Last-trade age on Top candidates (run 23, display only; a staleness *filter* would be an owner strategy decision).
 * Glance line "Coming up" from the clock's holiday/early-close table (run 22, challenge 21); display only. Earnings/Fed events still blocked on an event source.
 

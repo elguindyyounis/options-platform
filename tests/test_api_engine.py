@@ -142,7 +142,8 @@ const riskLow=mk({equity:1000,open_premium:100});const riskHigh=mk({equity:1000,
 const strat=g({mode:'PAPER'},{config:{},strategy:{name:'flow-otm',version:'1.0'}},{kill_switch:false},null,null,now);
 const cal=g({mode:'PAPER'},{config:{},market:{open:false,reason:'x',upcoming:[{date:'2026-11-26',kind:'closed'},{date:'2026-11-27',kind:'early_close'}]}},{kill_switch:false},null,null,now);
 const ordered=window.optplatGlanceOrder(bad).map(i=>i.level);const stable=window.optplatGlanceOrder([{level:'ok',text:'a'},{level:'warn',text:'b'},{level:'ok',text:'c'},{level:'bad',text:'d'},{level:'warn',text:'e'}]).map(i=>i.text);
-console.log(JSON.stringify({ordered,stable,cal,strat,riskLow,riskHigh,riskMissing,bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
+const halt=g({mode:'PAPER'},{config:{auto_entries:true,auto_exits:true}},{kill_switch:false},null,null,now);
+console.log(JSON.stringify({halt,ordered,stable,cal,strat,riskLow,riskHigh,riskMissing,bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
 """
     out = subprocess.run([node, "-e", harness, str(root / "app.js")], capture_output=True, text=True, check=True).stdout
     r = json.loads(out)
@@ -171,6 +172,9 @@ console.log(JSON.stringify({ordered,stable,cal,strat,riskLow,riskHigh,riskMissin
     assert any("reports the loop as stalled" in i["text"] and i["level"] == "warn" for i in r["srvStalled"])
     assert any("failed 3 cycle(s) in a row" in i["text"] and i["level"] == "bad" for i in r["srvFail"])
     assert not any("stalled" in i["text"] for i in r["srvOk"])
+    # no daily loss halt exists: say so when automatic entries are on, and only then
+    assert any("no daily loss halt" in i["text"] and i["level"] == "warn" for i in r["halt"])
+    assert not any("daily loss halt" in i["text"] for i in r["srvOk"])
     # worst-case money line: shown from account data, warns when most of equity is in open premium, unknown when missing
     low = [i for i in r["riskLow"] if "Worst case" in i["text"]]
     assert low and low[0]["level"] == "ok" and "10.0% of equity" in low[0]["text"]
