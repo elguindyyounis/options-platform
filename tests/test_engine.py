@@ -405,3 +405,19 @@ def test_dashboard_positions_table_states_exit_levels_with_text_only():
 
     js = (Path(__file__).parent.parent / "src/optplat/static/app.js").read_text()
     assert "Take-profit when bid reaches" in js and "Automatic exits are OFF" in js and "innerHTML" not in js
+
+
+def test_entry_reports_size_vs_liquidity_without_changing_the_order():
+    from optplat.liquidity import size_vs_liquidity
+
+    engine, manager, *_ = build(auto_entries=True)
+    entry = engine.run_cycle()["entries"][0]
+    sl = entry["size_vs_liquidity"]
+    assert sl["quantity"] == entry["quantity"]
+    assert sl["pct_of_volume"] == round(entry["quantity"] / 200 * 100, 2)
+    assert "Display only" in sl["note"]
+    big = size_vs_liquidity(30, 200, 2000)
+    assert any("over 10%" in w for w in big["warnings"])
+    assert size_vs_liquidity(1, None, 0)["pct_of_volume"] is None
+    assert len(size_vs_liquidity(1, None, 0)["warnings"]) == 2
+    assert size_vs_liquidity(1, 200, 2000)["warnings"] == []

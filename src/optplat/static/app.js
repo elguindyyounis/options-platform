@@ -118,7 +118,8 @@
     const rows = (c ? c.entries : []).map((x) => ({
       what: x.contract || x.symbol,
       outcome: RESULT_TEXT[x.result] || String(x.result),
-      why: x.reason || (x.risk_failures || []).join("; ") || (x.rationale && x.rationale.trend ? "Trend " + x.rationale.trend + ", spread " + x.rationale.spread_pct + "%" : ""),
+      why: [x.reason || (x.risk_failures || []).join("; ") || (x.rationale && x.rationale.trend ? "Trend " + x.rationale.trend + ", spread " + x.rationale.spread_pct + "%" : ""),
+      x.size_vs_liquidity && x.size_vs_liquidity.warnings.length ? "Size check: " + x.size_vs_liquidity.warnings.join("; ") : ""].filter(Boolean).join(" | "),
     }));
     const base = c ? (c.entries_note || (rows.length ? "" : "No symbols were evaluated.")) : "No cycle has run yet.";
     $("decisions-note").textContent = [base, outcomesLine(recent)].filter(Boolean).join(" ");

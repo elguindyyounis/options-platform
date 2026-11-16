@@ -159,3 +159,10 @@ replay yet (backlog 1) and no intraday-bar strategy; when it gets one, copy the 
   reliable bid marks.
 * Platform difference: the platform's equivalent lives in `risk.py`/`orders.py` and is similar in spirit; it has no review-matches-snapshot
   step (single strategy) and no spread cap in the risk gate (the strategy filters spread).
+
+## `liquidity.py` (read 2026-11-16, run 18; alerter still at `80672a6`)
+
+* Scores volume, OI, spread and premium turnover into a 0-100 score and a PREFERRED/WATCH/THIN tier, and warns when quantity
+  exceeds 10% of reported volume or OI. Status is always `SCENARIO_ONLY`; it says OI/volume are not live depth.
+* `exit_stress` models bid liquidation with extra concession (base, thin, stressed) that grows with spread and participation.
+* Platform: floor on volume/OI and spread only. Run 18 added the 10% participation note (display only). No exit stress yet.

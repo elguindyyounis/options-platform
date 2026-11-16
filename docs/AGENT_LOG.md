@@ -189,3 +189,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * No weekend scan (Monday); MONDAY_PLAN unchanged.
 * Not verified: rendering in a real browser (only `node --check` and string-pinning tests). The Mac copy is a manual git clone, so this is
   not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: size-vs-liquidity note (scheduled challenger run 18)
+
+* Alerter unchanged at `80672a6`; read `liquidity.py` (see comparison doc). Monday: no weekend scan.
+* UX challenge: entry size was not shown against reported volume/OI. Added `optplat/liquidity.py` and a display-only
+  `size_vs_liquidity` on each entry plus a "Size check" in the Decisions panel. Nothing blocks or resizes; no risk, order, auth,
+  sizing or broker code touched.
+* Verified: 197 tests pass (1 new); app.js parses. Not verified: dashboard rendering in a browser; behaviour on real data.
+* The owner's Mac copy is a manual git clone; merged code is not there until the owner pulls.
