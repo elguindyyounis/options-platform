@@ -246,3 +246,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Alerter unchanged at `30c64d7`; read `technical_confluence.py` (see COMPARISON_ALERTER). Monday, no weekend scan.
 * Changed: `renderGlance` orders lines bad, warn, ok (stable) and shows counts. Frontend only; DOM still textContent only.
 * Verified: `python -m pytest -q` 210 pass, including the node harness (ordering and stability asserted). Not verified: appearance in a real browser; Mac copy is a manual git clone, so merged code is not on the Mac until the owner pulls.
+
+## 2026-11-16 (run 25): no-daily-loss-halt glance warning
+
+* Alerter unchanged at `30c64d7`; read `feedback.py`. Monday, no weekend scan.
+* Changed: one glance note when auto entries are ON saying there is no daily loss halt. Frontend only; DOM textContent only.
+* Verified: 210 pytest pass (node glance test extended). Not verified: real browser. Mac copy is a manual git clone; merged code is not on the Mac until the owner pulls.

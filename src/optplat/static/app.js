@@ -200,6 +200,7 @@
     else add("warn", "Which strategy is running is unknown.");
     if (st.config && st.config.auto_entries) add("warn", "Automatic entries are ON: the engine may buy paper contracts by itself.");
     else if (st.config) add("ok", "Automatic entries are off: nothing is bought unless you press Run one cycle.");
+    if (st.config && st.config.auto_entries) add("warn", "There is no daily loss halt: a bad day will not stop new entries by itself. Only the per-order and total-premium limits and the kill switch apply.");
     if (st.market) {
       if (st.market.open) add("ok", "Market is open (" + st.market.reason + ").");
       else add("ok", "Market is closed (" + st.market.reason + "): " + (st.config && st.config.enforce_market_hours === false ? "but the market-hours check is off, see below." : "no new paper trades until it opens."));

@@ -196,3 +196,7 @@ The alerter's free-chain mapping drops crossed, zero-ask and non-finite rows and
 ## technical_confluence.py (read run 24)
 
 Closed-bar daily OHLCV only: today's New York candle is always excluded (no provider bar-final flag), malformed or crossed bars are dropped, duplicate dates keep the first row, and history older than 8 days returns `STALE_CHART_HISTORY` instead of a signal. Its output hard-codes `order_authorized: false`, `independent_data_sources: 1`, `source_times_verified: false`, and says that EMA, RSI, volume and FVG are correlated evidence from one source, so its `confluence_count` is "not a probability or entry gate". Honest points the platform can copy: name how many independent sources back a score, and refuse a stale-history reading rather than show it. The platform has no chart indicators at all (not copied; needs a free daily-bar source, which is unreachable from the cloud runner).
+
+## feedback.py (read run 25)
+
+Paper-only decision journal that also records rejected and missed setups, with 1/7/30-day counterfactuals explicitly labelled "indicative ask-to-bid marks, NEVER actual fills". Each case carries an evidence snapshot where every field has a `why` and a `limitation` (e.g. "unofficial source lacks verified exchange quote timestamps", "OI is lagged"). It accepts only yfinance, non-demo, 100-multiplier quotes with sane bid/ask. The platform records decisions and skips but never follows skipped ideas forward, so it cannot say whether its filters help or hurt (needs the replay provider, backlog 1). Not copied.
