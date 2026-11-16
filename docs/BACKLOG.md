@@ -44,6 +44,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* `FlowFollowStrategy` (`flow-otm`, `flow-near`) selectable with `OPTPLAT_STRATEGY`; default unchanged (owner request, challenge 18).
+
 * Unusual-turnover radar `flow.py` with dashboard panel (owner examples, challenge 17); display only.
 
 * Size-vs-liquidity note per entry (`size_vs_liquidity`, run 18, challenge 16); display only, nothing blocked.

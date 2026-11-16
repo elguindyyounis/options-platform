@@ -205,3 +205,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   `FLOW_CRITERIA.md` and `ALERTER_FLOW_HANDOFF.md`. Display only: no risk, order, auth, sizing or broker code touched.
 * Not done: alerter changes (read-only here; accounts are on the Mac), flow as a trade trigger (owner decision), a Mac auto-start
   for the platform (needs the owner; the platform still needs a running process and token). Not verified: live Yahoo data, browser rendering.
+
+## 2026-11-16: flow-following strategies (owner request, run 18c)
+
+* Added `FlowFollowStrategy` with two modes and `OPTPLAT_STRATEGY` selection in `__main__.py` (default `liquid-trend`). 5 tests, 205 pass.
+* Risk policy, sizing, auth, broker untouched; proposals still pass through the same risk gate and size cap. Paper only.
+* Not verified: live Yahoo chains, how often flows pass the filters, any outcome. Not done: relaxing min DTE (owner), a dashboard strategy switch, alerter lanes (Mac-only; see ALERTER_FLOW_HANDOFF).

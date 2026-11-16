@@ -17,7 +17,15 @@ screen (SMH $330P 11/20: volume 65,601 vs open interest 810, about $1.6M premium
 Ask-side share, multi-leg share, whether a trade opened or closed a position, who the buyer was, and true executed premium.
 The screenshots show those; a Yahoo chain does not. A big put can be a hedge, a spread leg or a lottery ticket.
 
-## How it fits the current strategy
+## Strategies that follow it (owner decision, 2026-11-16: "I want out-of-the-money contracts")
+
+`OPTPLAT_STRATEGY=flow-otm` buys the flagged contract itself (out of the money, 7-30 days, premium at mid at least $100k, usable quote).
+`OPTPLAT_STRATEGY=flow-near` buys the same side and expiry at the strike nearest 8% OTM with volume and open interest of at least 100,
+a step toward the money. Default stays `liquid-trend`; set the variable before `python -m optplat` to switch. Both go through the
+unchanged risk gate (min 7 days, spread 15% or less, 1% of equity per order), so the 3-day SPCX example would still be rejected: loosening
+`min_dte` or the size cap is an owner risk decision I did not make. Direction is an assumption (it may be a hedge). No demonstrated edge.
+
+## How it fits the original strategy
 
 None of the three examples would be traded by the platform's `liquid-trend` strategy: it wants near-the-money, mid-dated
 contracts with open interest of at least 500 and follows the underlying's 20/50-day trend, while these are 10-46% OTM, 3-7 days
