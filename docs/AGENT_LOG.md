@@ -226,3 +226,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * UX/challenge 3: three strategies are selectable but Results showed one total. Added display-only `multiple_testing` to `/api/results` and a Results row (textContent only). No risk, order, auth, sizing or broker code touched.
 * Verified: 206 tests pass. Not verified: rendering in a browser; per-strategy results (orders do not record the strategy).
 * The owner's Mac copy is a manual git clone; merged code is not there until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16 (run 21, challenger)
+
+* Changed: dashboard glance now shows "Strategy in use" from `/api/engine/status.strategy` (name, version, no-edge note, results-not-split warning); unknown shows a warning. Frontend only.
+* Verified: `python -m pytest -q` 206 pass (glance node test extended, runs under node 22). Alerter unchanged at `30c64d7`.
+* Not verified: not viewed in a real browser; no real market data (cloud run, Monday, no weekend scan). Not on the owner's Mac until they pull their clone.
