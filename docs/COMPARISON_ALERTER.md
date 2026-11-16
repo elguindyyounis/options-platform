@@ -113,3 +113,13 @@ Strict new-entry gate for real-source paper options ("observation is not authori
 * Honest about gaps: strategy-lane accounts have no closed ledger in this view, so the result is `NOT_CHECKED_NO_CLOSED_LEDGER`
   instead of a pass. The platform has no daily loss halt at all yet (backlog 3; the default value is a risk decision for the owner).
 * Platform difference: it fails closed on missing data but has no per-day counters.
+
+## `daily_review.py` (read 2026-11-16, run 13; alerter still at `80672a6`)
+
+* A once-per-day, proposals-only report stored in `daily_platform_reviews`: 24h audit counts, skip/reject reason tallies, liquidity tier mix, and
+  findings. It states in its header that a report cannot authorise trades, change risk settings or promote skills.
+* Operational problems come first: unreliable held-option marks are an `OPERATIONAL_BLOCKER` and the fallback equity is called non-executable.
+  GEX and unusual-activity findings are only counted when fresh (24h) and from a scan that did not error; partial expiry coverage is flagged.
+* Honest about gaps: "zero completed paper exits despite open positions; outcome-based learning is not yet validated".
+* Platform difference: no daily report and no per-day audit tally of skip reasons (only the last cycle's `explain_no_proposal`). A daily
+  rollup of skip reasons is a possible later step; it needs recorded cycle reports, which the platform does not yet persist.

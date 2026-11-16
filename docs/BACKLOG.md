@@ -44,6 +44,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Cumulative closed P&L (last 20 trades) and longest losing streak in `/api/results` and the Results panel (run 13); still no chart or open-mark curve.
+
 * Runner health server-side: `Runner.status()` reports last success/failure, failure streak, seconds since success and `stalled`; glance uses it (2026-11-16, run 12).
 
 * Glance strip states market open/closed, warns when the market-hours check is off and when a running loop looks stalled (client-side; server-side runner health, item 4, still open).

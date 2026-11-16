@@ -14,6 +14,7 @@ from .broker.base import QuoteUnavailable
 from .models import Order, OrderState, Position, Quote, Side
 
 DEFAULT_MIN_TRADES = 30
+CURVE_POINTS = 20  # most recent closed trades shown in the cumulative P&L line
 
 LIMITATIONS = (
     "Simulated fills only; no commissions or exchange fees are modeled, so real costs would be higher.",
@@ -91,6 +92,13 @@ def summarize_closed_trades(
         if peak > 0:
             max_dd = max(max_dd, 100.0 * (peak - equity) / peak)
     total = sum(pnls)
+    cumulative, running = [], 0.0
+    longest = current = 0
+    for p in pnls:
+        running += p
+        cumulative.append(round(running, 2))
+        current = current + 1 if p < 0 else 0
+        longest = max(longest, current)
     if n == 0:
         status = "NO_CLOSED_TRADES"
     elif n < min_trades:
@@ -112,6 +120,9 @@ def summarize_closed_trades(
         "pnl_without_best_trade_usd": round(total - max(pnls), 2) if n else None,
         "closed_trade_max_drawdown_pct": round(max_dd, 3) if n else None,
         "split_half": split_half_check(pnls, min_trades=min_trades),
+        "longest_losing_streak": longest if n else None,
+        "cumulative_pnl_recent_usd": cumulative[-CURVE_POINTS:],
+        "cumulative_pnl_points_total": n,
         "limitations": list(LIMITATIONS),
     }
 
