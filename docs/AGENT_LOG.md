@@ -198,3 +198,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
   sizing or broker code touched.
 * Verified: 197 tests pass (1 new); app.js parses. Not verified: dashboard rendering in a browser; behaviour on real data.
 * The owner's Mac copy is a manual git clone; merged code is not there until the owner pulls.
+
+## 2026-11-16: unusual options flow radar (owner request, run 18b)
+
+* Added `optplat/flow.py`, `flow`/`flow_themes`/`flow_caveats` in the cycle report, a dashboard panel, 4 tests (201 pass), and docs
+  `FLOW_CRITERIA.md` and `ALERTER_FLOW_HANDOFF.md`. Display only: no risk, order, auth, sizing or broker code touched.
+* Not done: alerter changes (read-only here; accounts are on the Mac), flow as a trade trigger (owner decision), a Mac auto-start
+  for the platform (needs the owner; the platform still needs a running process and token). Not verified: live Yahoo data, browser rendering.

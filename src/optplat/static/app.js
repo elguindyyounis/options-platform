@@ -142,6 +142,23 @@
     ], rows, "No contract passed the filters in the last cycle");
   }
 
+  function renderFlow(c) {
+    const rows = c && c.flow ? c.flow : [];
+    const themes = c && c.flow_themes ? c.flow_themes.map((t) => t.group + ": " + t.symbols.join(", ")).join("; ") : "";
+    $("flow-note").textContent = c
+      ? (c.flow_caveats || []).join(" ") + (themes ? " Same theme in several names: " + themes + "." : "") + (rows.some((r) => r.fictional) ? " Some rows are from FICTIONAL demo data." : "")
+      : "No cycle has run yet.";
+    table($("flow-table"), [
+      { label: "Contract", get: (r) => r.contract + (r.fictional ? " (fictional)" : "") },
+      { label: "Tier", get: (r) => r.tier },
+      { label: "Volume / OI", get: (r) => r.volume + " / " + (r.open_interest == null ? "not reported" : r.open_interest) + (r.volume_oi_ratio ? " (" + r.volume_oi_ratio + "x)" : "") },
+      { label: "OTM / DTE", get: (r) => (r.otm_pct == null ? "?" : r.otm_pct + "%") + " / " + r.dte + "d" },
+      { label: "Premium at quoted mid (scale only)", get: (r) => (r.premium_at_quoted_mid_usd == null ? "n/a" : money(r.premium_at_quoted_mid_usd)) },
+      { label: "Ask-side share", get: () => "not available" },
+      { label: "Flags", get: (r) => r.flags.join("; ") },
+    ], rows, "No unusual turnover in the last cycle");
+  }
+
   function renderGex(c) {
     const rows = c && c.gex ? c.gex : [];
     $("gex-note").textContent = c
@@ -240,6 +257,7 @@
       renderDecisions(status.last_cycle, status.recent_outcomes);
       renderCandidates(status.last_cycle);
       renderGex(status.last_cycle);
+      renderFlow(status.last_cycle);
       pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
       pill("data", status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), status.data_source.fictional ? "warn" : "");
       pill("market", "market " + (status.market.open ? "open" : "closed") + ": " + status.market.reason, status.market.open ? "ok" : "");
