@@ -105,6 +105,9 @@ def size_quantity(account: Account, policy: RiskPolicy, limit_price: float) -> i
     return max(0, min(policy.max_quantity, math.floor(budget / (limit_price * 100) + 1e-9)))
 
 
+OUTCOME_WINDOW = 50  # cycles kept for the display-only outcome tally
+
+
 class TradingEngine:
     def __init__(
         self,
@@ -154,7 +157,38 @@ class TradingEngine:
             "strategy": {"name": self.strategy.name, "version": self.strategy.version},
             "kill_switch": self.manager.kill_switch_active(),
             "last_cycle": self.last_cycle(),
+            "recent_outcomes": self.recent_outcomes(),
         }
+
+    def recent_outcomes(self) -> dict[str, Any]:
+        """Display only: how many entry decisions of each kind over the last few cycles."""
+        try:
+            hist = json.loads(self.store.get_state("outcome_history", "") or "[]")
+        except (ValueError, TypeError):
+            hist = []
+        if not isinstance(hist, list):
+            hist = []
+        totals: dict[str, int] = {}
+        for cyc in hist:
+            if isinstance(cyc, dict):
+                for k, n in cyc.items():
+                    if isinstance(n, int) and not isinstance(n, bool):
+                        totals[str(k)] = totals.get(str(k), 0) + n
+        return {"cycles": len(hist), "window": OUTCOME_WINDOW, "counts": totals}
+
+    def _remember_outcomes(self, report: dict[str, Any]) -> None:
+        counts: dict[str, int] = {}
+        for item in report.get("entries") or []:
+            key = str(item.get("result", "UNKNOWN")) if isinstance(item, dict) else "UNKNOWN"
+            counts[key] = counts.get(key, 0) + 1
+        try:
+            hist = json.loads(self.store.get_state("outcome_history", "") or "[]")
+            if not isinstance(hist, list):
+                hist = []
+        except (ValueError, TypeError):
+            hist = []
+        hist.append(counts)
+        self.store.set_state("outcome_history", json.dumps(hist[-OUTCOME_WINDOW:]))
 
     # ---- cycle --------------------------------------------------------
     def run_cycle(self) -> dict[str, Any]:
@@ -217,6 +251,7 @@ class TradingEngine:
     def _finish(self, report: dict[str, Any]) -> dict[str, Any]:
         self._purge_recordings(report)
         report["finished_at"] = self.clock().isoformat()
+        self._guard(report, "outcome_history", lambda: self._remember_outcomes(report))
         self.store.set_state("last_cycle", json.dumps(report, default=str))
         self.store.audit("engine_cycle", None, {"exits": len(report["exits"]), "entries": len(report["entries"])})
         return report

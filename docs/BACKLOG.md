@@ -58,6 +58,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 * Top candidates: cycle report `candidates` (top 3 per symbol, best 10) and a dashboard panel; display only.
 
+* Rolling outcome tally (last 50 cycles) in engine status and the Decisions panel (run 14, challenge 12).
+
 * Dashboard Results panel (`/api/results` shown with sample-size verdict, split-half, unrealized n/a handling; textContent only).
 
 * Split-half stability check in `/api/results` (`split_half_check`): earlier vs later half of closed trades, withheld below the sample gate. Not an out-of-sample test.

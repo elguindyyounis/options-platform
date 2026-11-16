@@ -93,13 +93,20 @@
     NOTHING_AFFORDABLE_WITHIN_SIZE_CAP: "Skipped: nothing fits the position size cap",
     REJECTED: "Blocked by a risk check", KEY_CONFLICT: "Skipped: duplicate order key",
   };
-  function renderDecisions(c) {
+  function outcomesLine(r) {
+    if (!r || !r.cycles) return "";
+    const parts = Object.keys(r.counts).sort().map((k) => (RESULT_TEXT[k] || k).replace(/^Skipped: /, "skipped: ") + " x" + r.counts[k]);
+    return "Last " + r.cycles + " cycle(s) (kept up to " + r.window + "): " + (parts.length ? parts.join("; ") : "no entry decisions") + ".";
+  }
+
+  function renderDecisions(c, recent) {
     const rows = (c ? c.entries : []).map((x) => ({
       what: x.contract || x.symbol,
       outcome: RESULT_TEXT[x.result] || String(x.result),
       why: x.reason || (x.risk_failures || []).join("; ") || (x.rationale && x.rationale.trend ? "Trend " + x.rationale.trend + ", spread " + x.rationale.spread_pct + "%" : ""),
     }));
-    $("decisions-note").textContent = c ? (c.entries_note || (rows.length ? "" : "No symbols were evaluated.")) : "No cycle has run yet.";
+    const base = c ? (c.entries_note || (rows.length ? "" : "No symbols were evaluated.")) : "No cycle has run yet.";
+    $("decisions-note").textContent = [base, outcomesLine(recent)].filter(Boolean).join(" ");
     table($("decisions-table"), [
       { label: "Symbol / contract", get: (r) => r.what }, { label: "Outcome", get: (r) => r.outcome }, { label: "Why", get: (r) => r.why },
     ], rows, "No entry decisions in the last cycle");
@@ -203,7 +210,7 @@
       ]);
       renderGlance(buildGlance(health, status, portfolio, results, policy));
       renderResults(results);
-      renderDecisions(status.last_cycle);
+      renderDecisions(status.last_cycle, status.recent_outcomes);
       renderCandidates(status.last_cycle);
       renderGex(status.last_cycle);
       pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");

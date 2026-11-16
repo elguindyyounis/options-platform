@@ -349,3 +349,27 @@ def test_runner_failures_are_counted_and_reset_on_success():
     runner._loop()  # second pass succeeds
     assert runner.consecutive_failures == 0 and runner.last_error is None
     assert runner.last_success_at is not None and runner.last_failure_at is not None
+
+
+def test_recent_outcomes_tally_entry_results_across_cycles_and_is_bounded():
+    from optplat import engine as eng
+
+    engine, *_ = build(auto_entries=True)
+    assert engine.status()["recent_outcomes"] == {"cycles": 0, "window": eng.OUTCOME_WINDOW, "counts": {}}
+    engine.run_cycle()
+    engine.run_cycle()
+    out = engine.status()["recent_outcomes"]
+    assert out["cycles"] == 2 and sum(out["counts"].values()) >= 2
+    assert out["counts"].get("NO_PROPOSAL", 0) >= 1  # second cycle: already holding the contract
+    engine.store.set_state("outcome_history", "not json")  # corrupt history must never break status
+    assert engine.status()["recent_outcomes"]["cycles"] == 0
+    for _ in range(eng.OUTCOME_WINDOW + 3):
+        engine.run_cycle()
+    assert engine.status()["recent_outcomes"]["cycles"] == eng.OUTCOME_WINDOW
+
+
+def test_dashboard_outcome_line_uses_text_nodes_only():
+    from pathlib import Path
+
+    js = (Path(__file__).parent.parent / "src/optplat/static/app.js").read_text()
+    assert "outcomesLine" in js and "innerHTML" not in js

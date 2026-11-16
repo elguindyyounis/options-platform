@@ -1,6 +1,6 @@
 # Challenges (platform vs. alerter)
 
-Last alerter commit reviewed: `80672a6`
+Last alerter commit reviewed: `80672a6` (unchanged at run 14)
 
 ## Open challenges
 
@@ -17,8 +17,16 @@ Last alerter commit reviewed: `80672a6`
 | 9 | **UX (run 11):** the Results panel showed P&L but not how fills were simulated, so a reader could not tell the numbers assume immediate fills at ask/bid plus slippage with no fees. Fixed: `fill_model` row (unknown brokers read "unknown", never "conservative"). Also found: the alerter caps same-side exposure per symbol and group (`entry_quality.py`); the platform limits only same-underlying exposure, not groups. Group caps are a risk-policy change. | Yes (concentration caps) |
 | 10 | **UX (run 12):** "stalled" was only a dashboard guess from the last cycle start; a loop whose cycles all fail (and so look recent) still read as healthy, and nothing server-side said how long since a success. Fixed: `Runner.status()` now reports `last_success_at`, `last_failure_at`, `consecutive_failures`, `seconds_since_success` and `stalled`; glance shows failure streaks and server-reported stalls. `/api/health` left unchanged on purpose (unauthenticated). Still missing: calendar (needs an event source), per-account tuning (Mac only), daily loss halt (default is a risk decision, see 5). | Partly |
 | 11 | **UX (run 13):** Results showed totals and drawdown but not the path: a positive total could hide a long slide. Added `cumulative_pnl_recent_usd` (last 20 closed trades, time order) and `longest_losing_streak` to `/api/results` and two text-only Results rows. Still no chart and no curve including open marks; the curve uses the same optimistic, fee-free fills. Calendar and per-account tuning remain blocked (event source / Mac-only). | No |
+| 12 | **UX (run 14):** the Decisions panel explained only the last cycle, so a reader could not tell whether "nothing met the rules" was one quiet cycle or the pattern for the last day. Fixed: the engine keeps a bounded (50 cycles) tally of entry result codes, shown in `/api/engine/status.recent_outcomes` and as one line under Decisions. Counts result codes only (not reasons); it is not a per-day rollup and is not an evidence of edge. Per-account tuning (Mac only) and calendar (event source) still blocked. | No |
 
 ## Run log
+
+* 2026-11-16 (run 14, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `exit_decisions.py` (see COMPARISON_ALERTER).
+  UX challenge: Decisions showed one cycle only. Added a rolling outcome tally (last 50 cycles, in the store's state table,
+  display only) to engine status and the Decisions note. No risk, order, auth, sizing or broker code touched. Weaknesses noted: the
+  alerter's shadow exits are research-only and labelled, while the platform has no exit research at all; the tally counts result
+  codes, so reasons inside NO_PROPOSAL are still last-cycle only. 2 new tests; 190 pass. The Mac copy is a manual git clone: merged
+  code is not on the Mac until the owner pulls.
 
 * 2026-11-16 (run 13, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `daily_review.py` (see COMPARISON_ALERTER).
   UX challenge: Results gave totals but not the path. Added cumulative closed P&L (last 20) and longest losing streak to

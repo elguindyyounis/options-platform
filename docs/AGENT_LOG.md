@@ -155,3 +155,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * No weekend scan (Monday); MONDAY_PLAN unchanged.
 * Not verified: rendering in a real browser (only `node --check`); behaviour on real trades. The Mac copy is a manual git clone, so this is not
   on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: rolling outcome tally (scheduled challenger run 14)
+
+* Alerter unchanged at `80672a6`; read `exit_decisions.py`. Engine now stores a bounded tally of entry result codes per cycle
+  (`outcome_history` state, 50 cycles); `/api/engine/status` has `recent_outcomes`; Decisions panel shows one text line. No risk, order,
+  auth, sizing or broker code touched. 2 new tests; 190 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and string-pinning tests). The Mac copy is a manual git clone, so this is
+  not on the Mac until the owner pulls. PR/merge result: see PR.

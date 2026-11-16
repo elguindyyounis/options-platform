@@ -123,3 +123,11 @@ Strict new-entry gate for real-source paper options ("observation is not authori
 * Honest about gaps: "zero completed paper exits despite open positions; outcome-based learning is not yet validated".
 * Platform difference: no daily report and no per-day audit tally of skip reasons (only the last cycle's `explain_no_proposal`). A daily
   rollup of skip reasons is a possible later step; it needs recorded cycle reports, which the platform does not yet persist.
+
+## `exit_decisions.py` (read 2026-11-16, run 14; alerter still at `80672a6`)
+
+* Local-only exit research: a deterministic "shadow" rule set (adverse trend, expiry within 14 days, early profit/loss tests) that only
+  proposes EXIT/HOLD; hard stop/target/holding rules keep precedence. The optional Ollama model path accepts loopback endpoints only
+  and is labelled a paper simulation, "not an observed edge".
+* Honest about gaps: insufficient trend evidence returns HOLD with that reason, and stale quotes or missing contracts never create fills.
+* Platform difference: exits are fixed take-profit/stop-loss only (backlog 5 trailing stop); there is no shadow-exit research log.
