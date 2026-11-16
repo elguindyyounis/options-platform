@@ -46,6 +46,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Glance line "Strategy in use" (run 21, challenge 20); display only. Per-strategy results still need the strategy recorded on each order.
+
 * Multiple-testing note in `/api/results` and the dashboard (challenge 3, run 20); per-strategy split still open: record the strategy on each order.
 
 * `FlowFollowStrategy` (`flow-otm`, `flow-near`) selectable with `OPTPLAT_STRATEGY`; default unchanged (owner request, challenge 18).

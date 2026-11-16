@@ -194,6 +194,9 @@
     if (st.data_source && st.data_source.fictional) add("warn", "Market data is FICTIONAL demo data: every number here is made up.");
     else if (st.data_source) add("ok", "Market data source: " + st.data_source.name + " (not demo data).");
     else add("warn", "Market data source unknown.");
+    if (st.strategy && st.strategy.name) add("ok", "Strategy in use: " + st.strategy.name + " " + (st.strategy.version || "") +
+      " (paper research, no demonstrated edge). Switching strategies mixes their trades in Results; the totals are not split by strategy.");
+    else add("warn", "Which strategy is running is unknown.");
     if (st.config && st.config.auto_entries) add("warn", "Automatic entries are ON: the engine may buy paper contracts by itself.");
     else if (st.config) add("ok", "Automatic entries are off: nothing is bought unless you press Run one cycle.");
     if (st.market) {
