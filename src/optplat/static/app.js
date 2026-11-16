@@ -52,6 +52,13 @@
     SAMPLE_SIZE_MET_NOT_PROOF_OF_EDGE: "Sample size met, but this is still not proof of an edge.",
   };
 
+  function fillModelText(f) {
+    if (!f) return "not reported";
+    if (f.buys === "unknown") return "unknown (" + (f.note || "") + ")";
+    return "buys at " + f.buys + ", sells at " + f.sells + " (" + f.slippage_pct + "%); commissions " +
+      (f.commissions_modeled ? "modeled" : "NOT modeled") + ". " + (f.note || "");
+  }
+
   // Results come from /api/results; every value is shown as text, and gaps are shown as "n/a", never as zero.
   function renderResults(r) {
     const split = r.split_half || {};
@@ -70,6 +77,7 @@
       ["Unrealized P&L (marked to bid)", open.unrealized_pnl_usd === null || open.unrealized_pnl_usd === undefined
         ? "n/a: " + (open.error || ((open.unmarked || []).length + " position(s) cannot be marked")) : money(open.unrealized_pnl_usd)],
       ["Filled exits with no cost basis", r.unpriced_exits],
+      ["How fills are simulated", fillModelText(r.fill_model)],
     ];
     table($("results-table"), [{ label: "Measure", get: (x) => x[0] }, { label: "Value", get: (x) => x[1] }], rows, "No results");
     $("results-limits").textContent = (r.limitations || []).join(" ");

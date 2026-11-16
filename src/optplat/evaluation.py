@@ -24,6 +24,19 @@ LIMITATIONS = (
 )
 
 
+def describe_fill_model(broker: Any) -> dict[str, Any]:
+    """Name how fills are simulated, from the broker itself; unknown stays unknown (display only)."""
+    mode = getattr(getattr(broker, "mode", None), "value", None) or str(getattr(broker, "mode", "unknown"))
+    slip = getattr(broker, "slippage_pct", None)
+    if not isinstance(slip, (int, float)) or isinstance(slip, bool):
+        return {"mode": mode, "buys": "unknown", "sells": "unknown", "slippage_pct": None,
+                "commissions_modeled": False,
+                "note": "Fill model not reported by this broker; do not assume it is conservative."}
+    return {"mode": mode, "buys": "ask plus slippage", "sells": "bid minus slippage", "slippage_pct": float(slip),
+            "commissions_modeled": False,
+            "note": "Immediate simulated fills at the quoted ask/bid; no queue position, partial fills or market impact."}
+
+
 def closed_trade_pnl(order: Order) -> float | None:
     """Realised P&L in dollars for one fully filled sell-to-close, or None if it cannot be computed."""
     if order.intent.side is not Side.SELL_TO_CLOSE or order.state is not OrderState.FILLED:

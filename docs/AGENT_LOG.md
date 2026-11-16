@@ -128,3 +128,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Not verified: rendering in a real browser (only `node --check` and the node-run test); the stall rule against a real runner.
   The Mac copy is a manual git clone, so this is not on the Mac until the owner pulls. PR/merge result: see PR.
 
+
+## 2026-11-16: fill-model label (scheduled challenger run 11)
+
+* Alerter unchanged at `80672a6`; read `entry_quality.py`. Added `describe_fill_model`, `fill_model` in `/api/results` and a
+  dashboard row (textContent only). No risk, order, auth, sizing or broker code touched. 184 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and string-pinning tests); behaviour with the IBKR adapter
+  (reports "unknown" by design). The Mac copy is a manual git clone, so this is not on the Mac until the owner pulls.
+  PR/merge result: see PR.

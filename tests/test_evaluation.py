@@ -136,3 +136,18 @@ def test_split_half_uses_time_order_in_summary():
     s = summarize_closed_trades(list(reversed(orders)))
     assert s["split_half"]["first_half_pnl_usd"] > 0 > s["split_half"]["second_half_pnl_usd"]
     assert s["split_half"]["consistent"] is False
+
+
+# ---- fill-model label (challenge 7) ----
+def test_results_endpoint_names_the_fill_model_and_says_fees_are_not_modeled():
+    c = TestClient(create_app(OrderManager(SimBroker(slippage_pct=0.5), Store(":memory:")), "t" * 24))
+    fm = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()["fill_model"]
+    assert fm["buys"] == "ask plus slippage" and fm["sells"] == "bid minus slippage"
+    assert fm["slippage_pct"] == 0.5 and fm["commissions_modeled"] is False
+
+
+def test_unknown_broker_fill_model_is_reported_unknown_not_conservative():
+    from optplat.evaluation import describe_fill_model
+
+    fm = describe_fill_model(object())
+    assert fm["buys"] == "unknown" and fm["slippage_pct"] is None and fm["commissions_modeled"] is False

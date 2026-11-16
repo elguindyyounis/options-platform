@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .broker.sim import SimBroker
-from .evaluation import summarize_closed_trades, summarize_open_positions
+from .evaluation import describe_fill_model, summarize_closed_trades, summarize_open_positions
 from .engine import Runner, TradingEngine
 from .models import OptionContract, OrderIntent, Quote, Right, Side, utcnow
 from .orders import InvalidTransition, LiveTradingDisabled, OrderManager
@@ -176,6 +176,7 @@ def create_app(
     def results() -> dict[str, Any]:
         """Closed-trade summary with sample-size and limitation labels (research display only)."""
         body = summarize_closed_trades(manager.store.list_orders(limit=5000))
+        body["fill_model"] = describe_fill_model(manager.broker)
         try:
             positions = manager.broker.get_positions()
             body["open_positions"] = summarize_open_positions(positions, manager.broker.get_quote, utcnow())
