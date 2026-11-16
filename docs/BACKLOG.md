@@ -100,3 +100,5 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * Fill-model label on `/api/results` and the Results panel (run 11, challenge 7/9); no equity curve yet.
 
 * Glance line "Worst case today" (open premium as % of equity), display only (challenge 19).
+
+* Glance list sorted most-urgent-first with action/note/ok counts, frontend only (run 24, challenge 23).

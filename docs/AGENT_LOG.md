@@ -240,3 +240,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Verified: 208 pass (2 new tests, node glance test extended). Not verified: browser rendering; real data (cloud run). Not on the owner's Mac until they pull their clone.
 
 * 2026-11-16 (run 23): Added display-only last-trade age to Top candidates (`ChainRow.last_trade_at`, `last_trade_age_hours`, dashboard column). Verified: 210 pytest pass, `node --check app.js`. Not verified: rendering in a real browser, behaviour on real Yahoo data (unreachable from cloud). No risk/order/auth/broker change. Mac copy is a manual clone; arrival not confirmed.
+
+## 2026-11-16 (run 24): glance sorted by urgency
+
+* Alerter unchanged at `30c64d7`; read `technical_confluence.py` (see COMPARISON_ALERTER). Monday, no weekend scan.
+* Changed: `renderGlance` orders lines bad, warn, ok (stable) and shows counts. Frontend only; DOM still textContent only.
+* Verified: `python -m pytest -q` 210 pass, including the node harness (ordering and stability asserted). Not verified: appearance in a real browser; Mac copy is a manual git clone, so merged code is not on the Mac until the owner pulls.

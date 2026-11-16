@@ -241,13 +241,31 @@
     return out;
   }
 
+  // Severity order for the glance list: things that need you come first, routine OK lines last.
+  // Stable: lines of equal severity keep their original order. Pure function, exposed for tests.
+  function orderGlance(items) {
+    const rank = { bad: 0, warn: 1, ok: 2 };
+    return items
+      .map((i, n) => ({ i, n }))
+      .sort((a, b) => (rank[a.i.level] - rank[b.i.level]) || (a.n - b.n))
+      .map((x) => x.i);
+  }
+
+  function glanceCounts(items) {
+    const c = { bad: 0, warn: 0, ok: 0 };
+    items.forEach((i) => { if (c[i.level] !== undefined) c[i.level] += 1; });
+    return c;
+  }
+
   function renderGlance(items) {
     const box = $("glance");
     box.replaceChildren();
-    const worst = items.some((i) => i.level === "bad") ? "bad" : items.some((i) => i.level === "warn") ? "warn" : "ok";
+    const c = glanceCounts(items);
+    const worst = c.bad ? "bad" : c.warn ? "warn" : "ok";
     box.appendChild(el("div", worst === "bad" ? "Needs your attention" : worst === "warn" ? "Check these" : "Nothing needs you right now", "pill " + worst));
+    box.appendChild(el("span", " " + c.bad + " action, " + c.warn + " note, " + c.ok + " ok (most urgent first)", "muted"));
     const ul = el("ul");
-    items.forEach((i) => ul.appendChild(el("li", (i.level === "ok" ? "OK: " : i.level === "warn" ? "Note: " : "ACTION: ") + i.text, i.level)));
+    orderGlance(items).forEach((i) => ul.appendChild(el("li", (i.level === "ok" ? "OK: " : i.level === "warn" ? "Note: " : "ACTION: ") + i.text, i.level)));
     box.appendChild(ul);
   }
 
@@ -353,6 +371,7 @@
     }),
   })));
 
+  window.optplatGlanceOrder = orderGlance;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   refresh();
   setInterval(refresh, 10000);
