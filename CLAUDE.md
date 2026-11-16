@@ -20,6 +20,12 @@ money, risk limits, brokers, or credentials. Agents improve the code around thos
 7. **Do not change auth.** Token checks, host checks and security headers in `api.py` may only be
    made stricter.
 
+## Direction (owner, 2026-11-16)
+
+Read `docs/EVOLUTION_PLAN.md` before picking work. The platform improves by following every candidate (the shadow book) and
+testing pre-registered entry and exit hypotheses on recorded paths, not by adding panels. No paid data. The paper data export
+goes to a private repository only; this repository is public.
+
 ## Things that need a human decision (do not decide these yourself)
 
 * Connecting or implementing a real broker (`broker/ibkr.py`): the owner is doing this themselves.

@@ -31,7 +31,8 @@ write_plist() {  # label, then the program arguments, then extra keys
 }
 write_plist com.optionsplatform.server '<key>KeepAlive</key><true/>' /bin/bash "$APP/deploy/server-wrapper.sh"
 write_plist com.optionsplatform.autoupdate '<key>StartInterval</key><integer>3600</integer>' /bin/bash "$APP/deploy/update.sh"
-for l in com.optionsplatform.server com.optionsplatform.autoupdate; do
+write_plist com.optionsplatform.export '<key>StartCalendarInterval</key><dict><key>Hour</key><integer>21</integer><key>Minute</key><integer>15</integer></dict>' /bin/bash "$APP/deploy/export_push.sh"
+for l in com.optionsplatform.server com.optionsplatform.autoupdate com.optionsplatform.export; do
   launchctl bootout "gui/$(id -u)/$l" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$AGENTS/$l.plist"
 done
