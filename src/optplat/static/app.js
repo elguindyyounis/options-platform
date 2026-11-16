@@ -146,6 +146,7 @@
       { label: "Spread %", get: (r) => r.spread_pct }, { label: "Days to expiry", get: (r) => r.dte },
       { label: "Volume", get: (r) => (r.volume == null ? "not reported" : r.volume) },
       { label: "Open interest", get: (r) => (r.open_interest == null ? "not reported" : r.open_interest) },
+      { label: "Last traded", get: (r) => (r.last_trade_age_hours == null ? "unknown" : r.last_trade_age_hours > 24 ? "STALE? " + r.last_trade_age_hours + "h ago" : r.last_trade_age_hours + "h ago") },
     ], rows, "No contract passed the filters in the last cycle");
   }
 

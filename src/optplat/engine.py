@@ -32,6 +32,18 @@ from .strategy import Strategy
 SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
 
 
+def _age_hours(iso: Any, now: datetime) -> Optional[float]:
+    """Hours since the contract last traded (display only); None when unknown or in the future."""
+    try:
+        then = datetime.fromisoformat(str(iso))
+    except (TypeError, ValueError):
+        return None
+    if then.tzinfo is None:
+        return None
+    hours = (now - then).total_seconds() / 3600
+    return round(hours, 1) if hours >= 0 else None
+
+
 @dataclass(frozen=True)
 class EngineConfig:
     watchlist: tuple[str, ...] = ("SPY", "QQQ")
@@ -506,6 +518,7 @@ class TradingEngine:
                         "dte": cand.rationale.get("dte"),
                         "volume": cand.rationale.get("volume"),
                         "open_interest": cand.rationale.get("open_interest"),
+                        "last_trade_age_hours": _age_hours(cand.rationale.get("last_trade_at"), now),
                     }
                 )
             account = self.manager.broker.get_account()

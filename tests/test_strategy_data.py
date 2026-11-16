@@ -186,3 +186,28 @@ def test_explain_never_changes_proposals():
     before = s.propose(sn, NOW)
     s.explain_no_proposal(sn, NOW)
     assert s.propose(sn, NOW) == before
+
+
+# ------------------------------------------------ last-trade age (display only)
+def test_last_trade_time_is_parsed_or_unknown():
+    from datetime import datetime, timezone
+    recs = [
+        {"strike": 100, "bid": 1.0, "ask": 1.2, "lastTradeDate": "2026-11-13T20:59:00+00:00"},
+        {"strike": 101, "bid": 1.0, "ask": 1.2, "lastTradeDate": datetime(2026, 11, 13, 15, 0)},  # naive -> UTC
+        {"strike": 102, "bid": 1.0, "ask": 1.2, "lastTradeDate": "garbage"},
+        {"strike": 103, "bid": 1.0, "ask": 1.2},
+    ]
+    rows = rows_from_records(recs, "SPY", date(2027, 1, 15), Right.CALL)
+    assert rows[0].last_trade_at == datetime(2026, 11, 13, 20, 59, tzinfo=timezone.utc)
+    assert rows[1].last_trade_at == datetime(2026, 11, 13, 15, 0, tzinfo=timezone.utc)
+    assert rows[2].last_trade_at is None and rows[3].last_trade_at is None
+
+
+def test_age_hours_helper_never_guesses():
+    from datetime import datetime, timezone
+    from optplat.engine import _age_hours
+    now = datetime(2026, 11, 16, 15, 0, tzinfo=timezone.utc)
+    assert _age_hours("2026-11-16T12:00:00+00:00", now) == 3.0
+    assert _age_hours(None, now) is None
+    assert _age_hours("2026-11-16T12:00:00", now) is None  # naive time: unknown, not assumed
+    assert _age_hours("2026-11-17T12:00:00+00:00", now) is None  # future: unknown
