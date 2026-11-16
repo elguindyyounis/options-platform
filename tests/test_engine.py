@@ -292,3 +292,60 @@ def test_cycle_report_lists_ranked_candidates_without_trading_on_them():
     assert [c["score"] for c in cands] == sorted((c["score"] for c in cands), reverse=True)
     assert {"symbol", "contract", "score", "limit_price", "trend", "spread_pct", "dte", "volume", "open_interest"} <= set(cands[0])
     assert len(manager.list()) <= len(report["entries"])  # candidates are never extra orders
+
+
+def test_runner_status_reports_health_and_stall_server_side():
+    from datetime import datetime, timedelta, timezone
+
+    engine, *_ = build()
+    runner = Runner(engine)
+    idle = runner.status()
+    assert idle["running"] is False and idle["stalled"] is False and idle["last_success_at"] is None
+    runner.start()
+    deadline = time.time() + 5
+    while runner.last_success_at is None and time.time() < deadline:
+        time.sleep(0.05)
+    try:
+        live = runner.status()
+        assert live["running"] and live["last_success_at"] and live["consecutive_failures"] == 0
+        assert live["stalled"] is False
+        interval = engine.config().interval_s
+        late = runner.status(now=runner.last_success_at + timedelta(seconds=3 * interval + 1))
+        assert late["stalled"] is True and late["seconds_since_success"] > 3 * interval
+    finally:
+        runner.stop()
+
+
+def test_runner_failures_are_counted_and_reset_on_success():
+    engine, *_ = build()
+    runner = Runner(engine)
+    calls = {"n": 0}
+    real = engine.run_cycle
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("boom")
+        return real()
+
+    class OneShotStop:
+        """Stops the loop after the given number of waits, without real sleeping."""
+
+        def __init__(self, waits):
+            self.waits = waits
+
+        def is_set(self):
+            return self.waits <= 0
+
+        def wait(self, _timeout):
+            self.waits -= 1
+
+    engine.run_cycle = flaky  # type: ignore[method-assign]
+    runner._stop = OneShotStop(1)  # type: ignore[assignment]
+    runner._loop()  # first pass fails
+    assert runner.consecutive_failures == 1 and "boom" in runner.last_error
+    assert runner.last_failure_at is not None and runner.last_success_at is None
+    runner._stop = OneShotStop(1)  # type: ignore[assignment]
+    runner._loop()  # second pass succeeds
+    assert runner.consecutive_failures == 0 and runner.last_error is None
+    assert runner.last_success_at is not None and runner.last_failure_at is not None

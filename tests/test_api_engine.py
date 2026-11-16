@@ -134,7 +134,10 @@ const now=Date.parse('2026-11-16T12:00:00Z');
 const st2={data_source:{name:'x',fictional:false},market:{open:false,reason:'Weekend'},config:{auto_entries:false,auto_exits:true,enforce_market_hours:false,interval_s:300},runner:{running:true},last_cycle:{errors:[],entries:[],exits:[],started_at:'2026-11-16T11:00:00Z'}};
 const stale=g({mode:'PAPER'},st2,{kill_switch:false},null,null,now);
 const fresh=g({mode:'PAPER'},{...st2,market:{open:true,reason:'Regular session'},config:{...st2.config,enforce_market_hours:true},last_cycle:{...st2.last_cycle,started_at:'2026-11-16T11:58:00Z'}},{kill_switch:false},null,null,now);
-console.log(JSON.stringify({bad,none,stale,fresh}));
+const srvStalled=g({mode:'PAPER'},{...st2,runner:{running:true,stalled:true,seconds_since_success:1200,consecutive_failures:0}},{kill_switch:false},null,null,now);
+const srvFail=g({mode:'PAPER'},{...st2,runner:{running:true,stalled:false,consecutive_failures:3,last_error:'RuntimeError: x'}},{kill_switch:false},null,null,now);
+const srvOk=g({mode:'PAPER'},{...st2,last_cycle:{...st2.last_cycle,started_at:'2026-11-16T10:00:00Z'},runner:{running:true,stalled:false,consecutive_failures:0}},{kill_switch:false},null,null,now);
+console.log(JSON.stringify({bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
 """
     out = subprocess.run([node, "-e", harness, str(root / "app.js")], capture_output=True, text=True, check=True).stdout
     r = json.loads(out)
@@ -153,3 +156,8 @@ console.log(JSON.stringify({bad,none,stale,fresh}));
     fresh = " ".join(i["text"] for i in r["fresh"])
     assert "Market is open" in fresh and "stalled" not in fresh and "check is OFF" not in fresh
     assert any("Market session unknown" in i["text"] and i["level"] == "warn" for i in r["none"])
+
+    # server-reported runner health wins over the client-side age guess
+    assert any("reports the loop as stalled" in i["text"] and i["level"] == "warn" for i in r["srvStalled"])
+    assert any("failed 3 cycle(s) in a row" in i["text"] and i["level"] == "bad" for i in r["srvFail"])
+    assert not any("stalled" in i["text"] for i in r["srvOk"])

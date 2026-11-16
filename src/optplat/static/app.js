@@ -158,7 +158,10 @@
     if (!c) add("warn", "No cycle has run yet, so there is no recent activity to show.");
     else if (c.errors && c.errors.length) add("bad", "The last cycle had " + c.errors.length + " error(s): " + c.errors.join("; "));
     else add("ok", "Last cycle ran without errors (" + c.entries.length + " entry decision(s), " + c.exits.length + " exit decision(s)).");
-    if (c && c.started_at && st.runner && st.runner.running && st.config && st.config.interval_s) {
+    if (st.runner && st.runner.running && st.runner.consecutive_failures > 0)
+      add("bad", "The loop has failed " + st.runner.consecutive_failures + " cycle(s) in a row. Last error: " + (st.runner.last_error || "unknown") + ".");
+    if (st.runner && st.runner.stalled === true) add("warn", "The server reports the loop as stalled: no successful cycle for " + Math.round((st.runner.seconds_since_success || 0) / 60) + " min.");
+    else if (c && c.started_at && st.runner && st.runner.running && st.runner.stalled === undefined && st.config && st.config.interval_s) {
       const ageS = ((typeof nowMs === "number" ? nowMs : Date.now()) - Date.parse(c.started_at)) / 1000;
       if (isNaN(ageS)) add("warn", "Last cycle time is unreadable, so staleness cannot be checked.");
       else if (ageS > 3 * st.config.interval_s) add("warn", "The loop says it is running but the last cycle started " + Math.round(ageS / 60) + " min ago (interval " + Math.round(st.config.interval_s / 60) + " min): it may be stalled.");

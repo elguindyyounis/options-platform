@@ -137,3 +137,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Not verified: rendering in a real browser (only `node --check` and string-pinning tests); behaviour with the IBKR adapter
   (reports "unknown" by design). The Mac copy is a manual git clone, so this is not on the Mac until the owner pulls.
   PR/merge result: see PR.
+
+## 2026-11-16: server-side runner health (scheduled challenger run 12)
+
+* Alerter unchanged at `80672a6`; read `day_limits.py`. `Runner.status()` now reports `last_success_at`, `last_failure_at`,
+  `consecutive_failures`, `seconds_since_success`, `stalled`; the glance strip shows failure streaks and server stalls. No
+  risk, order, auth, sizing or broker code touched. 2 new tests plus the glance node test extended; 186 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and the node-run test); behaviour of a real stuck cycle (a hung
+  `run_cycle` is detected by age only after the next status call). The Mac copy is a manual git clone, so this is not on the
+  Mac until the owner pulls. PR/merge result: see PR.
