@@ -44,6 +44,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Exit plan on open positions: `exit_plan` levels in `/api/engine/status.exit_plans` and dashboard columns plus an exits ON/OFF note (run 15, challenge 13); display only.
+
 * Cumulative closed P&L (last 20 trades) and longest losing streak in `/api/results` and the Results panel (run 13); still no chart or open-mark curve.
 
 * Runner health server-side: `Runner.status()` reports last success/failure, failure streak, seconds since success and `stalled`; glance uses it (2026-11-16, run 12).

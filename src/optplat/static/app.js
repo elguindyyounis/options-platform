@@ -196,6 +196,17 @@
     box.appendChild(ul);
   }
 
+  function planFor(plans, contract, key) {
+    const p = (plans || []).find((x) => x.contract === contract);
+    return !p || p[key] === null || p[key] === undefined ? "unknown" : p[key];
+  }
+
+  function expiryExit(plans, contract) {
+    const p = (plans || []).find((x) => x.contract === contract);
+    if (!p) return "unknown";
+    return p.expiry_exit_within_days + " days before " + p.expiry + " (" + p.days_to_expiry + " days left)";
+  }
+
   async function refresh() {
     if (!token) return;
     try {
@@ -224,6 +235,7 @@
       $("cfg-hours").checked = status.config.enforce_market_hours;
       if (document.activeElement !== $("cfg-watch")) $("cfg-watch").value = status.config.watchlist.join(", ");
 
+      const plans = status.exit_plans || [];
       const a = portfolio.account;
       $("account").textContent = "Equity " + money(a.equity) + "  |  Cash " + money(a.cash) + "  |  Open premium " + money(a.open_premium);
       $("report").textContent = report.closed_trades + " closed trades, realized " + money(report.realized_pnl) +
@@ -233,7 +245,13 @@
         { label: "Contract", get: (r) => r.contract }, { label: "Qty", get: (r) => r.quantity },
         { label: "Avg cost", get: (r) => r.avg_cost }, { label: "Bid mark", get: (r) => r.mark === null ? "unobservable" : r.mark },
         { label: "Unrealized", get: (r) => money(r.unrealized_pnl) },
+        { label: "Take-profit when bid reaches", get: (r) => planFor(plans, r.contract, "take_profit_bid") },
+        { label: "Stop when bid falls to", get: (r) => planFor(plans, r.contract, "stop_loss_bid") },
+        { label: "Leaves for expiry by", get: (r) => expiryExit(plans, r.contract) },
       ], report.open, "No open positions");
+      $("positions-note").textContent = status.config.auto_exits
+        ? "Automatic exits are ON: the loop sells at these levels using the bid, if a fresh quote exists. No fresh quote means no exit and a warning, never a guess. Levels are rules, not predictions; fills are simulated."
+        : "Automatic exits are OFF: nothing sells by itself. The levels shown are what the rules would use if you turned exits on.";
 
       const c = status.last_cycle;
       $("cycle").textContent = c ? ("Started " + c.started_at + ". " + (c.entries_note || "") + (c.errors.length ? " Errors: " + c.errors.join("; ") : "")) : "No cycle has run yet";

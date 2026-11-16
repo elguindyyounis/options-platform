@@ -18,7 +18,7 @@ from typing import Any, Callable, Optional
 
 from .broker.sim import SimBroker
 from .gex import ASSUMPTIONS as GEX_ASSUMPTIONS, net_gex
-from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit
+from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
 from .market_clock import session_status
 from .marketdata import MarketDataProvider, MarketSnapshot
 from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
@@ -158,7 +158,23 @@ class TradingEngine:
             "kill_switch": self.manager.kill_switch_active(),
             "last_cycle": self.last_cycle(),
             "recent_outcomes": self.recent_outcomes(),
+            "exit_plans": self.exit_plans(),
         }
+
+    def exit_plans(self) -> list[dict[str, Any]]:
+        """Display only: the sell levels the exit rules use for each open position."""
+        cfg = self.config()
+        policy = ExitPolicy(
+            take_profit_pct=cfg.take_profit_pct,
+            stop_loss_pct=cfg.stop_loss_pct,
+            max_days_held=cfg.max_days_held,
+            min_dte_to_hold=cfg.min_dte_to_hold,
+        )
+        try:
+            now = self.clock()
+            return [exit_plan(p, policy, now) for p in self.manager.broker.get_positions()]
+        except Exception:  # noqa: BLE001 - a display helper must never break status
+            return []
 
     def recent_outcomes(self) -> dict[str, Any]:
         """Display only: how many entry decisions of each kind over the last few cycles."""
