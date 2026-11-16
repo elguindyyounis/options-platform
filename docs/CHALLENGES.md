@@ -15,8 +15,17 @@ Last alerter commit reviewed: `80672a6`
 | 7 | Alerter's performance report names its fill model in a field (`order_execution`, modeled ask+friction / bid-friction) and sets `source_quote_timestamp_verified=false`; the platform's `/api/results` only lists limitations as prose. Also no closed-trade equity curve. Run 11: fill model now named in `/api/results.fill_model` and on the dashboard; equity curve still missing. | No |
 | 8 | **UX (run 10):** the glance strip never said whether the market was open, and could not tell a stopped loop from a stalled one or show that the market-hours check was switched off. Fixed in run 10 (see log). Still open from the mock-up: per-account performance/tuning (alerter-only, Mac DB), calendar (needs an event source from the owner), Monday plan page (needs real data; Yahoo is unreachable from cloud runs). | Partly |
 | 9 | **UX (run 11):** the Results panel showed P&L but not how fills were simulated, so a reader could not tell the numbers assume immediate fills at ask/bid plus slippage with no fees. Fixed: `fill_model` row (unknown brokers read "unknown", never "conservative"). Also found: the alerter caps same-side exposure per symbol and group (`entry_quality.py`); the platform limits only same-underlying exposure, not groups. Group caps are a risk-policy change. | Yes (concentration caps) |
+| 10 | **UX (run 12):** "stalled" was only a dashboard guess from the last cycle start; a loop whose cycles all fail (and so look recent) still read as healthy, and nothing server-side said how long since a success. Fixed: `Runner.status()` now reports `last_success_at`, `last_failure_at`, `consecutive_failures`, `seconds_since_success` and `stalled`; glance shows failure streaks and server-reported stalls. `/api/health` left unchanged on purpose (unauthenticated). Still missing: calendar (needs an event source), per-account tuning (Mac only), daily loss halt (default is a risk decision, see 5). | Partly |
 
 ## Run log
+
+* 2026-11-16 (run 12, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `day_limits.py` (see COMPARISON_ALERTER).
+  UX challenge: runner health was a client-side guess and a loop failing every cycle looked fine. `Runner.status()` now carries
+  success/failure times, a failure streak and a server-side `stalled` flag (3x interval from last success, or from start);
+  glance shows it. No risk, order, auth, sizing or broker code touched. Weaknesses noted: the alerter's day limits are
+  stricter than the platform's nothing-at-all (daily loss halt still open, owner must pick the default); `stalled` detects a
+  stuck or failing loop, not wrong data. 2 new tests, glance node test extended; 186 pass. The Mac copy is a manual git clone:
+  merged code is not on the Mac until the owner pulls.
 
 * 2026-11-16 (run 11, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `entry_quality.py` (see
   COMPARISON_ALERTER). UX challenge: Results panel hid the fill assumptions. Added `describe_fill_model` and `fill_model` in

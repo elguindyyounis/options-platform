@@ -103,3 +103,13 @@ Strict new-entry gate for real-source paper options ("observation is not authori
   group caps (market ETFs, growth tech). Needs an owner decision (risk policy), logged in CHALLENGES.
 * Strike-distance screen by horizon and a 7-730 DTE window; the platform has a single DTE window.
 * Every failure is a plain-language reason list, which is the pattern the platform's `explain_no_proposal` copies.
+
+## `day_limits.py` (read 2026-11-16, run 12; alerter still at `80672a6`)
+
+* Per-day entry limits ported from an MIT-licensed day-trader risk manager: `daily_loss_limit_usd`, `max_entries_per_day`,
+  `entry_window_et`. All OFF until set; they only ever add failures to a new entry, never close or resize anything.
+* Loss check counts realized loss so far today plus the most the new entry could lose (premium, or the modeled stop percent when
+  auto-exits are on, and says that is modeled). "Today" is the New York date.
+* Honest about gaps: strategy-lane accounts have no closed ledger in this view, so the result is `NOT_CHECKED_NO_CLOSED_LEDGER`
+  instead of a pass. The platform has no daily loss halt at all yet (backlog 3; the default value is a risk decision for the owner).
+* Platform difference: it fails closed on missing data but has no per-day counters.

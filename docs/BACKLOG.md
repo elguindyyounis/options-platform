@@ -14,8 +14,7 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 3. **Daily loss halt.** Stop new entries for the rest of the day once equity is down a configurable
    percent from the day's start (default conservative, e.g. 2%). Exits keep working. New policy
    field, engine guard, tests. (The default value is a risk decision: propose it in the PR.)
-4. **Runner health.** Expose time since last successful cycle and last error on `/api/health`; show
-   a "stalled" warning in the dashboard when no cycle has completed in 3x the interval.
+4. **Runner health on `/api/health`** (the authenticated `/api/engine/status` runner block now has it, see Done). Remaining: decide whether the unauthenticated `/api/health` should expose any of it (default: no).
 5. **Trailing stop exit.** Optional trailing stop alongside the fixed take-profit/stop-loss, off by
    default, with tests for ratchet behaviour and unobservable quotes.
 6. **Audit view.** Dashboard panel and endpoint for the audit log of a selected order.
@@ -44,6 +43,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* Runner health server-side: `Runner.status()` reports last success/failure, failure streak, seconds since success and `stalled`; glance uses it (2026-11-16, run 12).
 
 * Glance strip states market open/closed, warns when the market-hours check is off and when a running loop looks stalled (client-side; server-side runner health, item 4, still open).
 

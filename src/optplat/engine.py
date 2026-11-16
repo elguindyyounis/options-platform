@@ -13,7 +13,7 @@ import math
 import re
 import threading
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from .broker.sim import SimBroker
@@ -492,6 +492,10 @@ class Runner:
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self.last_error: Optional[str] = None
+        self.last_success_at: Optional[datetime] = None
+        self.last_failure_at: Optional[datetime] = None
+        self.consecutive_failures = 0
+        self.started_at: Optional[datetime] = None
 
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive() and not self._stop.is_set()
@@ -501,6 +505,7 @@ class Runner:
             if self.running():
                 return
             self._stop.clear()
+            self.started_at = datetime.now(timezone.utc)
             self._thread = threading.Thread(target=self._loop, name="optplat-runner", daemon=True)
             self._thread.start()
 
@@ -511,14 +516,35 @@ class Runner:
         if thread is not None:
             thread.join(timeout=5)
 
-    def status(self) -> dict[str, Any]:
-        return {"running": self.running(), "last_error": self.last_error}
+    def status(self, now: Optional[datetime] = None) -> dict[str, Any]:
+        """Runner health. `stalled` is true when the loop claims to run but has had no
+        successful cycle for 3x the interval (measured from the last success, or from
+        start if none yet). Unknown timing is never reported as healthy."""
+        now = now or datetime.now(timezone.utc)
+        running = self.running()
+        interval = self.engine.config().interval_s
+        ref = self.last_success_at or self.started_at
+        since = (now - ref).total_seconds() if ref else None
+        stalled = bool(running and (since is None or since > 3 * interval))
+        return {
+            "running": running,
+            "last_error": self.last_error,
+            "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
+            "last_failure_at": self.last_failure_at.isoformat() if self.last_failure_at else None,
+            "consecutive_failures": self.consecutive_failures,
+            "seconds_since_success": round(since, 1) if since is not None else None,
+            "stalled": stalled,
+        }
 
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
                 self.engine.run_cycle()
                 self.last_error = None
+                self.consecutive_failures = 0
+                self.last_success_at = datetime.now(timezone.utc)
             except Exception as exc:  # noqa: BLE001 - keep the loop alive; the error is surfaced in status
+                self.consecutive_failures += 1
+                self.last_failure_at = datetime.now(timezone.utc)
                 self.last_error = f"{type(exc).__name__}: {str(exc)[:120]}"
             self._stop.wait(self.engine.config().interval_s)
