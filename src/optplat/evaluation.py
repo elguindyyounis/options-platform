@@ -38,6 +38,27 @@ def describe_fill_model(broker: Any) -> dict[str, Any]:
             "note": "Immediate simulated fills at the quoted ask/bid; no queue position, partial fills or market impact."}
 
 
+EVIDENCE_ALWAYS_MISSING = (
+    "Out-of-sample holdout (later dates, nothing tuned on them)",
+    "Comparison against a do-nothing baseline (backlog item 2)",
+    "Commission and fee model (needs an owner-chosen cost assumption)",
+    "Exchange-timestamped option quotes and real broker fills",
+)
+
+
+def promotion_readiness(closed_trades: int, min_trades: int = DEFAULT_MIN_TRADES) -> dict[str, Any]:
+    """What is still missing before the owner could even consider a strategy beyond paper experiments.
+
+    Display only. ``promotion_recommended`` is always False: the platform has no test that could justify
+    it, and promotion is an owner decision (CLAUDE.md). Mirrors the alerter's ``evidence_missing`` list.
+    """
+    missing = list(EVIDENCE_ALWAYS_MISSING)
+    if closed_trades < min_trades:
+        missing.insert(0, f"Enough closed trades ({closed_trades} of {min_trades})")
+    return {"promotion_recommended": False, "evidence_missing": missing,
+            "note": "No strategy is recommended for anything beyond paper experiments; that is the owner's decision."}
+
+
 def closed_trade_pnl(order: Order) -> float | None:
     """Realised P&L in dollars for one fully filled sell-to-close, or None if it cannot be computed."""
     if order.intent.side is not Side.SELL_TO_CLOSE or order.state is not OrderState.FILLED:
@@ -123,6 +144,7 @@ def summarize_closed_trades(
         "longest_losing_streak": longest if n else None,
         "cumulative_pnl_recent_usd": cumulative[-CURVE_POINTS:],
         "cumulative_pnl_points_total": n,
+        "promotion": promotion_readiness(n, min_trades),
         "limitations": list(LIMITATIONS),
     }
 

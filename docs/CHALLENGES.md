@@ -1,6 +1,6 @@
 # Challenges (platform vs. alerter)
 
-Last alerter commit reviewed: `80672a6` (unchanged at run 15)
+Last alerter commit reviewed: `80672a6` (unchanged at run 16)
 
 ## Open challenges
 
@@ -19,8 +19,16 @@ Last alerter commit reviewed: `80672a6` (unchanged at run 15)
 | 11 | **UX (run 13):** Results showed totals and drawdown but not the path: a positive total could hide a long slide. Added `cumulative_pnl_recent_usd` (last 20 closed trades, time order) and `longest_losing_streak` to `/api/results` and two text-only Results rows. Still no chart and no curve including open marks; the curve uses the same optimistic, fee-free fills. Calendar and per-account tuning remain blocked (event source / Mac-only). | No |
 | 12 | **UX (run 14):** the Decisions panel explained only the last cycle, so a reader could not tell whether "nothing met the rules" was one quiet cycle or the pattern for the last day. Fixed: the engine keeps a bounded (50 cycles) tally of entry result codes, shown in `/api/engine/status.recent_outcomes` and as one line under Decisions. Counts result codes only (not reasons); it is not a per-day rollup and is not an evidence of edge. Per-account tuning (Mac only) and calendar (event source) still blocked. | No |
 | 13 | **UX (run 15):** Open positions showed cost and mark but not what the rules would do with them; a reader could not tell, before it happened, at which bid a position sells or whether exits are even on. Added display-only `exit_plan` (take-profit bid, stop bid, expiry-exit window) to `/api/engine/status.exit_plans` and three Open-positions columns plus a note saying whether automatic exits are ON or OFF. Levels are bid-based rules, not predictions; fills stay simulated and fee-free. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
+| 14 | **UX (run 16):** nothing on the dashboard said what the owner is being asked to decide or what evidence is still missing, so a green-looking P&L could read as "ready". Added display-only `promotion` to `/api/results` (`promotion_recommended` always false, `evidence_missing` list: sample size, out-of-sample holdout, do-nothing baseline, fee model, timestamped quotes/real fills) and a "Ready to promote beyond paper?" row. Copied from the alerter's `strategy_postmortems.py`. The list is a checklist, not a test; the platform still has no holdout or baseline run (backlog 1-2). Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 
 ## Run log
+
+* 2026-11-16 (run 16, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `strategy_postmortems.py` (see COMPARISON_ALERTER).
+  UX challenge: no place said what is still missing before a strategy could be promoted. Added `promotion` block (never recommends;
+  lists missing evidence) to `/api/results` and one Results row. No risk, order, auth, sizing or broker code touched. Weaknesses noted:
+  the alerter predeclares a hypothesis, falsification rule and baseline per lane before trading, the platform has none for its one
+  strategy; the checklist is static text. 2 new tests; 195 pass. The Mac copy is a manual git clone: merged code is not on the Mac
+  until the owner pulls.
 
 * 2026-11-16 (run 15, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `session_replay.py` (see COMPARISON_ALERTER).
   UX challenge: Open positions did not say where they would be sold or whether automatic exits were on. Added display-only

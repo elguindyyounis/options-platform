@@ -59,6 +59,12 @@
       (f.commissions_modeled ? "modeled" : "NOT modeled") + ". " + (f.note || "");
   }
 
+  function promotionText(p) {
+    if (!p) return "unknown (not reported); treat as NOT ready";
+    return (p.promotion_recommended ? "unexpected: marked recommended; verify" : "NO") +
+      ". Still missing: " + (p.evidence_missing || []).join("; ") + ".";
+  }
+
   // Results come from /api/results; every value is shown as text, and gaps are shown as "n/a", never as zero.
   function renderResults(r) {
     const split = r.split_half || {};
@@ -80,6 +86,7 @@
       ["Unrealized P&L (marked to bid)", open.unrealized_pnl_usd === null || open.unrealized_pnl_usd === undefined
         ? "n/a: " + (open.error || ((open.unmarked || []).length + " position(s) cannot be marked")) : money(open.unrealized_pnl_usd)],
       ["Filled exits with no cost basis", r.unpriced_exits],
+      ["Ready to promote beyond paper?", promotionText(r.promotion)],
       ["How fills are simulated", fillModelText(r.fill_model)],
     ];
     table($("results-table"), [{ label: "Measure", get: (x) => x[0] }, { label: "Value", get: (x) => x[1] }], rows, "No results");

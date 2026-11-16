@@ -166,3 +166,20 @@ def test_curve_is_capped_and_empty_has_no_streak():
     assert s["longest_losing_streak"] == 0
     e = summarize_closed_trades([])
     assert e["longest_losing_streak"] is None and e["cumulative_pnl_recent_usd"] == []
+
+
+def test_promotion_is_never_recommended_and_lists_missing_evidence():
+    from optplat.evaluation import promotion_readiness
+    few = promotion_readiness(5)
+    assert few["promotion_recommended"] is False and few["evidence_missing"][0].startswith("Enough closed trades (5 of 30)")
+    many = promotion_readiness(500)  # a big sample still lacks holdout, baseline, fees and real fills
+    assert many["promotion_recommended"] is False and len(many["evidence_missing"]) == 4
+    assert not any(m.startswith("Enough closed trades") for m in many["evidence_missing"])
+
+
+def test_results_endpoint_and_dashboard_show_promotion_block():
+    c = TestClient(create_app(OrderManager(SimBroker(), Store(":memory:")), "t" * 24))
+    body = c.get("/api/results", headers={"X-API-Token": "t" * 24}).json()
+    assert body["promotion"]["promotion_recommended"] is False
+    js = open("src/optplat/static/app.js").read()
+    assert "promotionText" in js and "Ready to promote beyond paper?" in js and "innerHTML" not in js

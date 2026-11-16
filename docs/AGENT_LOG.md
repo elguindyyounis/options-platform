@@ -173,3 +173,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * No weekend scan (Monday); MONDAY_PLAN unchanged.
 * Not verified: rendering in a real browser (only `node --check` and string-pinning tests); behaviour on real positions. The Mac copy is
   a manual git clone, so this is not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: promotion-readiness checklist (scheduled challenger run 16)
+
+* Alerter unchanged at `80672a6`; read `strategy_postmortems.py`. Added `promotion_readiness` and `promotion` in `/api/results`; Results
+  panel row "Ready to promote beyond paper?" (textContent only). No risk, order, auth, sizing or broker code touched. 2 new tests; 195 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and string-pinning tests). The Mac copy is a manual git clone, so this is
+  not on the Mac until the owner pulls. PR/merge result: see PR.

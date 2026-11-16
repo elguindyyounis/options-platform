@@ -140,3 +140,12 @@ simulation from ~60 sessions is not a prediction. Seeded (reproducible), checks 
 drops malformed bars instead of repairing them, and reports "no conclusion" below 30 historical triggers. The platform has no
 replay yet (backlog 1) and no intraday-bar strategy; when it gets one, copy the conservative intrabar rule, the seed and the
 30-trigger gate.
+
+## `strategy_postmortems.py` (read 2026-11-16, run 16; alerter still at `80672a6`)
+
+* Per lane it predeclares a hypothesis, a falsification rule, a baseline and exit rules, then writes a daily postmortem. It never
+  applies a change automatically (`auto_apply: False`, `promotion_recommended: False`) and lists `evidence_missing` (matched holdout and
+  no-entry baseline, timestamped quotes and real fills, enough non-overlapping closed trades). Cohort readiness needs 40 forward trades.
+* Honest about gaps: an empty ledger is called "a missing-evidence diagnosis, not a claim that the strategy was evaluated".
+* Platform difference: the strategy has no predeclared falsification rule or baseline. Run 16 copied the evidence-missing list into
+  `/api/results.promotion`; the written hypothesis/falsification step is a possible later docs item for the owner.
