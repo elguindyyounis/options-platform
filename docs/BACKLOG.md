@@ -44,6 +44,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Unusual-turnover radar `flow.py` with dashboard panel (owner examples, challenge 17); display only.
+
 * Size-vs-liquidity note per entry (`size_vs_liquidity`, run 18, challenge 16); display only, nothing blocked.
 
 * Fee headroom (`breakeven_fee_per_contract_usd`, `contracts_closed`) in `/api/results` and a Results row (run 17, challenge 15); display only, no fee assumed.

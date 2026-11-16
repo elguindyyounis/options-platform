@@ -18,6 +18,7 @@ from typing import Any, Callable, Optional
 
 from .broker.sim import SimBroker
 from .liquidity import size_vs_liquidity
+from .flow import CAVEATS as FLOW_CAVEATS, related_themes, scan_flow
 from .gex import ASSUMPTIONS as GEX_ASSUMPTIONS, net_gex
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
 from .market_clock import session_status
@@ -229,6 +230,9 @@ class TradingEngine:
                 "candidates": [],
                 "gex": [],
                 "gex_assumptions": list(GEX_ASSUMPTIONS),
+                "flow": [],
+                "flow_themes": [],
+                "flow_caveats": list(FLOW_CAVEATS),
                 "errors": [],
             }
             snapshots: dict[str, Optional[MarketSnapshot]] = {}
@@ -297,10 +301,22 @@ class TradingEngine:
                 cache[symbol] = self.provider.snapshot(symbol)
                 self._record_snapshot(cache[symbol], report)
                 self._summarize_gex(cache[symbol], report)
+                self._summarize_flow(cache[symbol], report)
             except Exception as exc:  # noqa: BLE001
                 cache[symbol] = None
                 report["errors"].append(f"data {symbol}: {type(exc).__name__}: {str(exc)[:100]}")
         return cache[symbol]
+
+    @staticmethod
+    def _summarize_flow(snap: MarketSnapshot, report: dict[str, Any]) -> None:
+        """Display-only unusual-turnover radar; a failure is reported but never affects trading."""
+        try:
+            report["flow"].extend(scan_flow(snap))
+            report["flow"].sort(key=lambda r: ({"EXTREME": 0, "HIGH": 1, "ELEVATED": 2}[r["tier"]], -(r["premium_at_quoted_mid_usd"] or 0)))
+            del report["flow"][30:]
+            report["flow_themes"] = related_themes(report["flow"])
+        except Exception as exc:  # noqa: BLE001
+            report["errors"].append(f"flow {snap.symbol}: {type(exc).__name__}")
 
     @staticmethod
     def _summarize_gex(snap: MarketSnapshot, report: dict[str, Any]) -> None:
