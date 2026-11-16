@@ -131,3 +131,12 @@ Strict new-entry gate for real-source paper options ("observation is not authori
   and is labelled a paper simulation, "not an observed edge".
 * Honest about gaps: insufficient trend evidence returns HOLD with that reason, and stale quotes or missing contracts never create fills.
 * Platform difference: exits are fixed take-profit/stop-loss only (backlog 5 trailing stop); there is no shadow-exit research log.
+
+## `session_replay.py` (read 2026-11-16, run 15)
+
+Opening-range breakout replay on the underlying's 5-minute bars ("Time Machine", ported from an MIT day-trader skill). It says
+in its header that results are stock-direction odds, NOT option P&L, that nothing sizes or authorizes a trade, and that a
+simulation from ~60 sessions is not a prediction. Seeded (reproducible), checks stop before target inside a bar (conservative),
+drops malformed bars instead of repairing them, and reports "no conclusion" below 30 historical triggers. The platform has no
+replay yet (backlog 1) and no intraday-bar strategy; when it gets one, copy the conservative intrabar rule, the seed and the
+30-trigger gate.

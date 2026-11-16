@@ -373,3 +373,35 @@ def test_dashboard_outcome_line_uses_text_nodes_only():
 
     js = (Path(__file__).parent.parent / "src/optplat/static/app.js").read_text()
     assert "outcomesLine" in js and "innerHTML" not in js
+
+
+# ---------------------------------------------------------------- exit plans (display only)
+def test_exit_plans_show_sell_levels_for_open_positions():
+    engine, manager, broker, provider, clock = build(auto_entries=True, auto_exits=True)
+    assert engine.status()["exit_plans"] == []
+    engine.run_cycle()
+    pos = broker.get_positions()[0]
+    plan = engine.status()["exit_plans"][0]
+    assert plan["contract"] == pos.contract.occ_symbol.strip()
+    assert plan["take_profit_bid"] == round(pos.avg_cost * 1.40, 2)
+    assert plan["stop_loss_bid"] == round(pos.avg_cost * 0.70, 2)
+    assert plan["days_to_expiry"] == 60 and plan["expiry_exit_within_days"] == 5
+
+
+def test_exit_plan_levels_follow_config_and_bad_cost_is_none():
+    from optplat.exits import ExitPolicy, exit_plan
+    from optplat.models import Position
+
+    c = contract()
+    pol = ExitPolicy(take_profit_pct=50.0, stop_loss_pct=20.0)
+    good = exit_plan(Position(c, 1, 2.0), pol, NOW)
+    assert (good["take_profit_bid"], good["stop_loss_bid"]) == (3.0, 1.6)
+    bad = exit_plan(Position(c, 1, float("nan")), pol, NOW)
+    assert bad["take_profit_bid"] is None and bad["stop_loss_bid"] is None
+
+
+def test_dashboard_positions_table_states_exit_levels_with_text_only():
+    from pathlib import Path
+
+    js = (Path(__file__).parent.parent / "src/optplat/static/app.js").read_text()
+    assert "Take-profit when bid reaches" in js and "Automatic exits are OFF" in js and "innerHTML" not in js

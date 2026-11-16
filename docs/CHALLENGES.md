@@ -1,6 +1,6 @@
 # Challenges (platform vs. alerter)
 
-Last alerter commit reviewed: `80672a6` (unchanged at run 14)
+Last alerter commit reviewed: `80672a6` (unchanged at run 15)
 
 ## Open challenges
 
@@ -18,8 +18,16 @@ Last alerter commit reviewed: `80672a6` (unchanged at run 14)
 | 10 | **UX (run 12):** "stalled" was only a dashboard guess from the last cycle start; a loop whose cycles all fail (and so look recent) still read as healthy, and nothing server-side said how long since a success. Fixed: `Runner.status()` now reports `last_success_at`, `last_failure_at`, `consecutive_failures`, `seconds_since_success` and `stalled`; glance shows failure streaks and server-reported stalls. `/api/health` left unchanged on purpose (unauthenticated). Still missing: calendar (needs an event source), per-account tuning (Mac only), daily loss halt (default is a risk decision, see 5). | Partly |
 | 11 | **UX (run 13):** Results showed totals and drawdown but not the path: a positive total could hide a long slide. Added `cumulative_pnl_recent_usd` (last 20 closed trades, time order) and `longest_losing_streak` to `/api/results` and two text-only Results rows. Still no chart and no curve including open marks; the curve uses the same optimistic, fee-free fills. Calendar and per-account tuning remain blocked (event source / Mac-only). | No |
 | 12 | **UX (run 14):** the Decisions panel explained only the last cycle, so a reader could not tell whether "nothing met the rules" was one quiet cycle or the pattern for the last day. Fixed: the engine keeps a bounded (50 cycles) tally of entry result codes, shown in `/api/engine/status.recent_outcomes` and as one line under Decisions. Counts result codes only (not reasons); it is not a per-day rollup and is not an evidence of edge. Per-account tuning (Mac only) and calendar (event source) still blocked. | No |
+| 13 | **UX (run 15):** Open positions showed cost and mark but not what the rules would do with them; a reader could not tell, before it happened, at which bid a position sells or whether exits are even on. Added display-only `exit_plan` (take-profit bid, stop bid, expiry-exit window) to `/api/engine/status.exit_plans` and three Open-positions columns plus a note saying whether automatic exits are ON or OFF. Levels are bid-based rules, not predictions; fills stay simulated and fee-free. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 
 ## Run log
+
+* 2026-11-16 (run 15, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `session_replay.py` (see COMPARISON_ALERTER).
+  UX challenge: Open positions did not say where they would be sold or whether automatic exits were on. Added display-only
+  `exit_plan` levels and a note. No risk, order, auth, sizing or broker code touched. Weaknesses noted: the alerter's replay
+  withholds any conclusion under 30 historical triggers and labels results stock-direction odds, not option P&L, while the
+  platform still has no replay or baseline (backlog 1-2); exit levels use the bid with immediate simulated fills. 3 new tests;
+  193 pass. The Mac copy is a manual git clone: merged code is not on the Mac until the owner pulls.
 
 * 2026-11-16 (run 14, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `exit_decisions.py` (see COMPARISON_ALERTER).
   UX challenge: Decisions showed one cycle only. Added a rolling outcome tally (last 50 cycles, in the store's state table,
