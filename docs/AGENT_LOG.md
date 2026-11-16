@@ -5,6 +5,26 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-17: principles, a random-pick negative control, and a Challenge board and Risk budget on the Desk
+
+* Owner asked the platform to challenge them instead of agreeing, to be speculative and allowed to make deliberate mistakes on paper,
+  to be aggressive through well-designed risk, and to say what principles it would build on, then update the UI to match.
+* `docs/PRINCIPLES.md`: challenge first; mistakes only count when they answer a question written down first; aggressive upside with a
+  defined maximum loss; honest numbers; nothing graduates toward real money without the owner.
+* New lane `control-random-swing` (`optionlanes.CONTROL`, a `signal="random"` field on `Params`): identical to "Swing options, base"
+  in size, expiry, strike, stop, target, holding limit, earnings gate and fees, but 2 names a day drawn at random from names with a new
+  daily bar (seeded by lane and bar day, so reruns agree). It is a research lane with no order path. It exists so the pullback rule has
+  something to beat. No risk limit, sizing cap or exit threshold was changed.
+* `objections.py` and `GET /api/objections`: objections computed from the records (fictional data, clock behind, lanes under 20 closed
+  trades, no random-control comparison yet or the rule not beating it by 5 points, best-of-many selection, thin tracker, 10x restarts).
+  Each says what the data shows, why it matters, and what would change its mind. "No objection" is stated as not evidence of an edge.
+* Desk: "What I'd challenge right now" cards (serious ones open) and a "Risk budget" table of open option premium by account and lane,
+  labelled by kind (core, aggressive research, reckless on purpose, negative control). Text-only DOM, phone layout checked.
+* Verified: full suite (see below), headless Chromium on fictional demo data at desktop and phone width, no console errors or sideways scroll,
+  with and without open lane positions.
+* Not verified: the control lane over real days (it needs several weeks to reach 20 closed trades), anything on the owner's Mac, live Yahoo.
+  The control mirrors the base lane's earnings gate, so single-stock picks without a known earnings date are skipped, which makes its sample smaller.
+
 ## 2026-11-13: readable contracts, one Trades page, options tracker, sector rotation, Research summary, Desk redesign
 
 * Owner asked (voice) for: single stocks and sector rotation, a better UX, contracts shown as "SPY call 751 · Dec 11", every lane's

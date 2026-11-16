@@ -174,3 +174,13 @@ def test_options_page_and_market_additions_have_every_element_the_script_writes(
     # direction is never carried by colour alone: the heat map and the figures use arrows and signs
     assert "\u25b2" in js and "\u25bc" in js
     assert "innerHTML" not in js
+
+
+def test_the_desk_challenge_board_and_risk_budget_have_their_elements_and_read_the_objections_endpoint(client):
+    c, _ = client
+    html = c.get("/").text
+    js = c.get("/static/app.js").text
+    for ident in ("objections", "objections-note", "risk-budget", "risk-note"):
+        assert f'id="{ident}"' in html and f'$("{ident}")' in js
+    assert "/api/objections" in js and "renderObjections" in js and "renderRisk" in js
+    assert "innerHTML" not in js                                      # API text is only ever written with textContent

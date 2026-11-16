@@ -21,6 +21,10 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 ## Next up
 
+000. **More negative controls (from `docs/PRINCIPLES.md`).** A frozen-baseline lane that is never edited, a stressed-cost lane (double spread and
+   slippage), and a lane that takes the opposite side of the pullback rule. Judge the rule only against these. Then check whether `control-random-swing`
+   and `swing-options-base` each reach 20 closed trades and read the Desk objection about them. Do not change lane sizes or exits to speed this up (owner decision).
+
 00. **Follow-ups from the tracker (owner decisions marked).** Once the tracker has 20 or more marks in a group, check whether any feature
    beats the average; only then consider letting the `flow` agent support a trade (owner decision, since it adds conviction). Add 30 day
    marks and a "chains read" count to the tracker page. Single-stock watchlists need a first real run to see spreads and earnings handling.
@@ -81,6 +85,8 @@ Existing items, in order:
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-17: principles (`docs/PRINCIPLES.md`), the random-pick negative control lane, `/api/objections` with a Challenge board and Risk budget on the Desk.
 
 * Trades, tracker, rotation, research and desk (owner request 2026-11-13): readable contract names, `/api/alltrades` and the unified Trades
   page, `tracker.py` with a Tracker page, the tighten-only `flow` agent, `rotation.py`, `learning.py` and the Research summary, sector

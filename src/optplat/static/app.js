@@ -312,12 +312,65 @@
     ], eq.points.slice().reverse().slice(0, 200), "No equity points yet");
   }
 
+  // The platform arguing with its own numbers: one card per objection, the serious ones open. Text only, no HTML from the API.
+  const SEVERITY = { high: ["Serious", "loss"], medium: ["Worth doubting", "warn"], low: ["Minor", "info"] };
+  function renderObjections(data) {
+    const host = $("objections"), note = $("objections-note");
+    host.replaceChildren();
+    if (!data) { const box = el("div", null, "panel"); host.appendChild(box); empty(box, "Could not load the objections", "They appear once the page can reach /api/objections."); note.textContent = ""; return; }
+    if (!data.objections.length) { const box = el("div", null, "panel"); host.appendChild(box); empty(box, "Nothing to object to right now", "That is not evidence of an edge. It only means the checks below found no reason to doubt these numbers."); }
+    data.objections.forEach((o) => {
+      const d = el("details", null, "obj"), sv = SEVERITY[o.severity] || SEVERITY.low;
+      if (o.severity === "high") d.open = true;
+      const sum = el("summary");
+      kids(sum, [el("span", sv[0], "tag " + sv[1]), el("b", o.title)]);
+      const body = el("div", null, "obj-body");
+      [["What the data shows", o.evidence], ["Why it matters", o.why_it_matters], ["What would change my mind", o.would_change_my_mind]].forEach((k) => {
+        const row = el("div"); kids(row, [el("div", k[0], "k"), el("div", k[1])]); body.appendChild(row);
+      });
+      kids(d, [sum, body]);
+      host.appendChild(d);
+    });
+    note.textContent = data.note;
+  }
+
+  // Risk budget from the open option rows of every account and lane: premium paid is the most each one can lose.
+  const RISK_CLASS = (src) => (src === "main" ? "Core account" : src === "challenge-10x" ? "Reckless on purpose" : src.indexOf("control") === 0 ? "Negative control" : /aggr/.test(src) ? "Aggressive research" : "Research");
+  function renderRisk(data) {
+    const host = $("risk-budget"), note = $("risk-note");
+    if (!data) { empty(host, "Could not load the positions", "The risk budget needs /api/alltrades."); note.textContent = ""; return; }
+    const open = data.trades.filter((r) => r.instrument === "options" && r.status !== "CLOSED" && r.entry_price !== null && r.quantity);
+    const cost = (r) => r.entry_price * r.quantity * 100;
+    const by = {};
+    open.forEach((r) => { const g = by[r.source] || (by[r.source] = { source: r.source, label: r.source_label, n: 0, premium: 0, biggest: 0, names: {} }); g.n += 1; g.premium += cost(r); g.biggest = Math.max(g.biggest, cost(r)); g.names[r.symbol] = (g.names[r.symbol] || 0) + cost(r); });
+    const rows = Object.values(by).sort((a, b) => b.premium - a.premium);
+    const total = rows.reduce((t, g) => t + g.premium, 0);
+    rows.forEach((g) => { const top = Object.entries(g.names).sort((a, b) => b[1] - a[1])[0]; g.top = top ? top[0] : ""; g.topShare = top && g.premium ? Math.round((top[1] / g.premium) * 100) : 0; });
+    const all = {}; open.forEach((r) => { all[r.symbol] = (all[r.symbol] || 0) + cost(r); });
+    const topAll = Object.entries(all).sort((a, b) => b[1] - a[1])[0];
+    if (!rows.length) { empty(host, "No open option positions", "Nothing is at risk right now."); note.textContent = ""; return; }
+    if (phone.matches) {
+      host.replaceChildren();
+      rows.forEach((g) => { const box = el("div", null, "acct"); kids(box, [el("div", null, "acct-top"), el("div", g.n + " open, " + money(g.premium) + " at risk, " + g.topShare + "% in " + g.top, "muted")]);
+        box.firstChild.appendChild(el("b", g.label)); box.firstChild.appendChild(el("span", RISK_CLASS(g.source), "tag")); host.appendChild(box); });
+    } else {
+      table(host, [
+        { label: "Account or lane", get: (g) => g.label }, { label: "Kind", get: (g) => el("span", RISK_CLASS(g.source), "tag") },
+        { label: "Open", right: true, get: (g) => g.n }, { label: "Premium at risk", right: true, get: (g) => money(g.premium) },
+        { label: "Largest position", right: true, get: (g) => money(g.biggest) },
+        { label: "Most in one name", right: true, get: (g) => g.topShare + "% " + g.top },
+      ], rows, "No open option positions");
+    }
+    note.textContent = money(total) + " of premium is at risk across " + open.length + " open option position" + (open.length === 1 ? "" : "s") + (topAll ? "; " + topAll[0] + " is the largest name at " + Math.round((topAll[1] / total) * 100) + "% of it" : "") +
+      ". Each lane is its own simulated ledger, so this adds simulated dollars across them and is not one account's exposure. Fees and slippage are not included." + (data.fictional ? " Fictional demo data." : "");
+  }
+
   // Every account and lane on the front page, so results do not hide behind the other pages. Each row is one ledger;
   // lanes are research with their own sizing and simulated fills, so the total is simulated dollars, not an account balance.
   function renderAccounts(data) {
     const host = $("all-accounts"), note = $("all-accounts-note");
     if (!data) { empty(host, "Could not load the lanes", "Trades from every lane appear here once the page can reach /api/alltrades."); note.textContent = ""; return; }
-    const kind = (x) => (x.source === "main" ? "Options account" : x.source === "challenge-10x" ? "10x challenge" : x.instrument === "options" ? "Options lane" : "Shares lane");
+    const kind = (x) => (x.source === "main" ? "Options account" : x.source === "challenge-10x" ? "10x challenge" : x.source.indexOf("control") === 0 ? "Negative control" : x.instrument === "options" ? "Options lane" : "Shares lane");
     const sources = data.sources.slice();
     // The paper account always has a row, even before it has taken a trade.
     if (!sources.some((x) => x.source === "main")) sources.push({ source: "main", label: "Options account", instrument: "options", total: 0, open: 0, closed: 0, wins: 0, win_rate_pct: null, realized_pnl: 0, open_pnl: 0 });
@@ -1298,10 +1351,10 @@
   async function refresh() {
     if (!token) { S.connected = false; showPage(); return; }
     try {
-      const [health, status, portfolio, orders, report, decisions, eq, allTrades] = await Promise.all([
+      const [health, status, portfolio, orders, report, decisions, eq, allTrades, objections] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         api("/api/engine/status"), api("/api/portfolio"), api("/api/paper/orders"), api("/api/report"),
-        api("/api/journal?limit=15"), api("/api/equity"), api("/api/alltrades").catch(() => null),
+        api("/api/journal?limit=15"), api("/api/equity"), api("/api/alltrades").catch(() => null), api("/api/objections").catch(() => null),
       ]);
       S.connected = true; S.core = { status, report };
       if (allTrades) S.trades = allTrades;
@@ -1309,6 +1362,8 @@
       renderStrip(health, status, portfolio);
       renderTrust(status);
       renderDesk(portfolio, report, eq, status);
+      renderObjections(objections);
+      renderRisk(allTrades);
       renderAccounts(allTrades);
       renderPositions(report, status.config);
       renderDecisions(decisions);

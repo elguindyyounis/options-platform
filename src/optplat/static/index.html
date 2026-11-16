@@ -100,6 +100,13 @@
   .acct { padding:11px 0; border-bottom:1px solid var(--line-soft); display:grid; gap:3px; } .acct:last-child { border-bottom:none; }
   .acct-top { display:flex; justify-content:space-between; gap:10px; align-items:baseline; } .acct-nums { display:flex; gap:18px; flex-wrap:wrap; font-weight:600; }
   #view-desk > * { min-width:0; }
+  .obj { border:1px solid var(--line); border-radius:8px; background:var(--surface); padding:0; } .obj + .obj { margin-top:8px; }
+  .obj > summary { cursor:pointer; padding:11px 14px; display:flex; gap:10px; align-items:baseline; list-style:none; }
+  .obj > summary::-webkit-details-marker { display:none; }
+  .obj > summary b { font-weight:600; }
+  .obj-body { padding:0 14px 12px; display:grid; gap:6px; font-size:14px; }
+  .obj-body .k { color:var(--mut); font-size:12.5px; }
+  .obj:focus-within { outline:2px solid var(--accent); outline-offset:1px; }
   .hero { padding:22px 24px 16px; display:grid; gap:14px; }
   .hero-top { display:flex; flex-wrap:wrap; gap:18px 44px; align-items:flex-end; justify-content:space-between; }
   .hero-label { color:var(--mut); font-size:13px; }
@@ -292,6 +299,18 @@
             <p id="desk-sub" class="muted" style="margin-top:8px"></p>
             <p id="sample" class="muted"></p>
           </details>
+        </div>
+        <div>
+          <h2 class="sect">What I'd challenge right now</h2>
+          <p class="q">The platform arguing with its own numbers. This is paper money, so it is meant to be wrong cheaply. These are the reasons not to believe a result yet, and what would change them.</p>
+          <div id="objections"></div>
+          <p class="muted" id="objections-note" style="margin-top:8px"></p>
+        </div>
+        <div>
+          <h2 class="sect">Risk budget</h2>
+          <p class="q">What is at stake in the open option positions across every account and lane. Long options only, so the most a position can lose is the premium paid.</p>
+          <div class="panel" style="padding:6px 16px 10px;min-width:0;overflow:hidden"><div class="scroll" id="risk-budget"></div></div>
+          <p class="muted" id="risk-note" style="margin-top:8px"></p>
         </div>
         <div>
           <h2 class="sect">All accounts and lanes</h2>

@@ -16,6 +16,7 @@ requires one) means no entry. A trade that cannot be marked stays open and is re
 from __future__ import annotations
 
 import json
+import random
 import threading
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
@@ -68,6 +69,7 @@ class Params:
     symbols: tuple[str, ...]
     max_per_name: int = 1        # open positions allowed in one name (stacking)
     stack: str = "none"          # "none", "winners" (add only to winners) or "any"
+    signal: str = "rule"         # "rule": the lane's own entry signal. "random": a seeded coin flip (the negative control)
 
 
 EXTRA_SHORT = ("AMD", "META", "AMZN", "MSFT", "GOOGL", "PLTR", "COIN", "SMCI", "MU", "AVGO")
@@ -91,7 +93,15 @@ FLOW = Params("flow-options", "Unusual flow that stuck", "flow",
               "When a contract had a very high volume to open interest ratio and its open interest rose the next day, buy a call (if the read is bullish) or a put (if bearish) on the same name. Double size when the contract had almost no open interest before the flow; add a second position only when the first is winning.",
               5000, 15, 6, 21, 60, 1.0, 15.0, 50, 5, 0.30, 50, 100, 10, True, True, False, (),
               max_per_name=2, stack="winners")
-ALL_PARAMS = (SHORT_BASE, SHORT_AGGR, SWING_BASE, SWING_AGGR, FLOW)
+# The negative control. Same universe, expiry, strike, size, stop, target, holding limit and fee model as "Swing options, base",
+# but the names are drawn at random (a seeded draw, so a re-run gives the same picks) instead of from the pullback rule.
+# If the pullback rule is worth anything it has to beat this lane after costs; if it cannot, its results are luck.
+CONTROL = replace(SWING_BASE, lane="control-random-swing", label="Control: random picks (same exits as Swing, base)",
+                  why="NEGATIVE CONTROL. Buys a call 30 to 60 days out on randomly chosen names, with exactly the sizing, stop, target and holding "
+                      "limit of Swing options, base. It exists to show what this machinery earns with no signal at all. A strategy only counts if it beats this.",
+                  signal="random")
+ALL_PARAMS = (SHORT_BASE, SHORT_AGGR, SWING_BASE, SWING_AGGR, FLOW, CONTROL)
+CONTROL_PICKS_PER_DAY = 2
 
 EXIT_TEXT = {
     "stop": "The option's bid fell to the stop set when the trade opened.",
@@ -452,6 +462,7 @@ class OptionLane:
         for t in list(held):
             self._swing_exit(t, marks.get(t["open_payload"]["contract"]), reads.get(t["symbol"]), now, out, held)
         signals = []
+        fresh = []
         for sym in p.symbols:
             r = reads.get(sym)
             if r is None:
@@ -460,9 +471,16 @@ class OptionLane:
             if self.store.get_state(key, "") == r["day"].isoformat():
                 continue
             self.store.set_state(key, r["day"].isoformat())
+            if p.signal == "random":
+                fresh.append((sym, r))
+                continue
             right = swing_signal(r, p)
             if right:
                 signals.append((r["rsi_dip"] if right == "C" else -r["rsi_peak"], sym, right, r))
+        if fresh:   # the control: a seeded draw from the names that have a new daily bar, calls only like the lane it mirrors
+            rng = random.Random(f"{p.lane}:{fresh[0][1]['day'].isoformat()}")
+            for sym, r in rng.sample(fresh, min(CONTROL_PICKS_PER_DAY, len(fresh))):
+                signals.append((0.0, sym, "C", r))
         signals.sort(key=lambda x: (x[0], x[1]))   # the deepest dip, or the highest bounce, first
         entries = reads_done = 0
         for _, sym, right, r in signals:

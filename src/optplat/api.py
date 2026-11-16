@@ -312,6 +312,17 @@ def create_app(
             return {"mode": engine.config().committee_mode, "fictional": fictional,
                     **committee.scorecard(engine.store, engine.clock(), fictional)}
 
+        @app.get("/api/objections", dependencies=[Depends(auth)])
+        def objections_report() -> dict[str, Any]:
+            from . import objections, tracker
+            from .alltrades import build_all
+            from .scanner import session_day, unusual_criteria
+
+            now, fictional = engine.clock(), engine.provider.fictional
+            rows = build_all(manager, engine.store, fictional, now, engine.option_lanes)["trades"]
+            return objections.build(rows, tracker.report(engine.store, fictional, now, session_day(now), unusual_criteria()),
+                                    engine.status()["clock"], engine.option_lanes.challenge.report(now), fictional, now.isoformat())
+
         @app.get("/api/learning", dependencies=[Depends(auth)])
         def learning_report() -> dict[str, Any]:
             from . import committee, learning, tracker

@@ -435,7 +435,7 @@ def test_the_option_lanes_are_off_by_default_and_the_endpoints_say_so(client):
     assert EngineConfig().option_lanes_enabled is False and engine.maybe_option_lanes() is None
     assert c.get("/api/optlanes").status_code == 401
     body = c.get("/api/optlanes", headers=H).json()
-    assert body["enabled"] is False and body["fictional"] is True and len(body["lanes"]) == 5 and "digest" in body
+    assert body["enabled"] is False and body["fictional"] is True and len(body["lanes"]) == 6 and "digest" in body
     assert {l["lane"] for l in body["lanes"]} == {p.lane for p in ol.ALL_PARAMS}
     assert c.post("/api/optlanes/step", headers=H).status_code == 409
 
@@ -444,7 +444,7 @@ def test_switching_the_lanes_on_runs_them_and_every_trade_is_labelled_fictional_
     c, engine = client
     engine.set_config({"option_lanes_enabled": True, "enforce_market_hours": False})
     res = c.post("/api/optlanes/step", headers=H).json()
-    assert len(res["lanes"]) == 5 and all("errors" in x for x in res["lanes"])
+    assert len(res["lanes"]) == 6 and all("errors" in x for x in res["lanes"])
     body = c.get("/api/optlanes", headers=H).json()
     assert body["enabled"] is True and all(l["fictional"] is True for l in body["lanes"])
     assert all(l["rules"] and l["limitations"] and l["params"] for l in body["lanes"])
@@ -533,3 +533,51 @@ def test_a_lane_remembers_what_its_last_check_did_and_why_it_did_not_trade():
     lane.step(force=True)  # no scan results exist, so the flow lane has nothing to act on
     saved = json.loads(store.get_state(f"optlane_last_result:{lane.p.lane}", ""))
     assert saved["opened"] == 0 and saved["at"] == now.isoformat() and "errors" in saved and "skips" in saved
+
+
+# ------------------------------------------------------------ the negative control
+def downtrend_daily(names):
+    bars = mk([-0.003] * 70)
+    return {s: bars for s in names}, after(bars, len(bars))
+
+
+def test_the_control_lane_mirrors_swing_base_in_everything_but_how_it_picks_names():
+    c, b = ol.CONTROL, ol.SWING_BASE
+    assert c.signal == "random" and b.signal == "rule" and c.lane != b.lane and c in ol.ALL_PARAMS
+    same = ("budget_usd", "max_open", "max_per_sector", "dte_min", "dte_max", "otm_pct", "max_spread_pct", "min_oi", "min_volume",
+            "min_ask", "stop_pct", "target_pct", "max_hold_bars", "experimental", "both_ways", "earnings_gate", "symbols", "max_per_name", "stack")
+    assert all(getattr(c, f) == getattr(b, f) for f in same)       # same size, exits, gates and fees: only the picking differs
+
+
+def test_the_control_buys_calls_with_no_signal_where_the_real_rule_buys_nothing():
+    names = ("SPY", "QQQ", "IWM", "DIA")
+    data, now = downtrend_daily(names)
+    p = replace(ol.CONTROL, symbols=names, budget_usd=20000.0)
+    real, rprov, rstore, _ = make(replace(ol.SWING_BASE, symbols=names, budget_usd=20000.0), daily=data, now=now)
+    real.step(force=True)
+    assert opened(real, rprov, rstore) == []                       # the pullback rule sees nothing in a steady slide
+    ctl, prov, store, _ = make(p, daily=data, now=now)
+    ctl.step(force=True)
+    t = opened(ctl, prov, store)
+    assert len(t) == ol.CONTROL_PICKS_PER_DAY and all(x["open_payload"]["right"] == "C" for x in t)
+    assert all(30 <= x["open_payload"]["dte"] <= 60 and x["open_payload"]["kind"] == "swing" for x in t)
+
+
+def test_the_control_draw_is_seeded_so_a_rerun_picks_the_same_names_and_it_does_not_repeat_a_bar():
+    names = ("SPY", "QQQ", "IWM", "DIA")
+    data, now = downtrend_daily(names)
+    p = replace(ol.CONTROL, symbols=names, budget_usd=20000.0)
+    a, pa, sa, _ = make(p, daily=data, now=now)
+    b, pb, sb, _ = make(p, daily=data, now=now)
+    a.step(force=True), b.step(force=True)
+    assert {x["symbol"] for x in opened(a, pa, sa)} == {x["symbol"] for x in opened(b, pb, sb)}
+    n = len(opened(a, pa, sa))
+    a.step(force=True)                                              # the same daily bars again: no new draw
+    assert len(opened(a, pa, sa)) == n
+
+
+def test_a_control_with_no_bars_or_a_failing_feed_opens_nothing_and_never_raises():
+    names = ("SPY", "QQQ")
+    ctl, prov, store, _ = make(replace(ol.CONTROL, symbols=names), daily={}, now=OPEN)
+    out = ctl.step(force=True)
+    assert opened(ctl, prov, store) == [] and out["opened"] == []
