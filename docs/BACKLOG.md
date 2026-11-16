@@ -44,6 +44,8 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
 
 ## Done
 
+* Promotion-readiness block (`promotion`: never recommended, evidence-missing list) in `/api/results` and a Results row (run 16, challenge 14); display only.
+
 * Exit plan on open positions: `exit_plan` levels in `/api/engine/status.exit_plans` and dashboard columns plus an exits ON/OFF note (run 15, challenge 13); display only.
 
 * Cumulative closed P&L (last 20 trades) and longest losing streak in `/api/results` and the Results panel (run 13); still no chart or open-mark curve.
