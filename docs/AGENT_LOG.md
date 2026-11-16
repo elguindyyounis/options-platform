@@ -118,3 +118,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Weekend scan: Yahoo unreachable (HTTP 000, proxy refused); MONDAY_PLAN updated, no demo data used.
 * Not verified: rendering in a real browser (only `node --check`); behaviour on real chains. The Mac copy is a manual git clone,
   so this is not on the Mac until the owner pulls. PR/merge result: see PR.
+
+## 2026-11-16: glance market/stall lines (scheduled challenger run 10)
+
+* Alerter unchanged at `80672a6`; read `strategy_performance.py`. `buildGlance` now reports market open/closed, warns when the
+  market-hours check is off, and warns when a running loop has not started a cycle in 3x its interval. textContent only. No
+  risk, order, auth, sizing or broker code touched. Existing glance node test extended; 182 pass.
+* No weekend scan (Monday); MONDAY_PLAN unchanged.
+* Not verified: rendering in a real browser (only `node --check` and the node-run test); the stall rule against a real runner.
+  The Mac copy is a manual git clone, so this is not on the Mac until the owner pulls. PR/merge result: see PR.
+

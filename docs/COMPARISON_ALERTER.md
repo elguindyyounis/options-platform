@@ -72,3 +72,20 @@ Extreme rows (ratio >= 20, volume >= 5000) are kept as a per-day high-water mark
 difference: `strategy.py` treated a missing volume/OI as 0 silently (fail-closed, right), but the skip reason lumped it
 in with "too low". Run 9 separates the two in the explanation and shows volume and OI (or "not reported") per candidate.
 The platform has no turnover/anomaly radar and no per-day history; that needs recorded chains (backlog) and is not faked.
+
+## `strategy_performance.py` (read 2026-11-16, run 10; alerter still at `80672a6`)
+
+Mac-only per-strategy-account report (`performance_report`). What it does that the platform does not yet:
+
+* Every account carries `paper_equity_usd` that is `null` when any option mark is missing, stale or unusable, plus a count of
+  `unreliable_option_marks`. The platform's `/api/results` already does the same for unrealized P&L (run 2).
+* The report states its fill model in a field (`order_execution`: modeled ask plus friction on buys, bid minus friction on
+  sells) and sets `source_quote_timestamp_verified` to false. The platform's results payload does not yet say how fills are
+  modeled; its limitations list is free text. Challenge row 7.
+* A closed-trade equity curve (last 90 points) next to a drawdown labelled "closed-trade-only, NOT account max drawdown".
+  The platform has the closed-only drawdown but no curve.
+* Partial exits and "principal recovered" are tracked per position; the platform has single full exits only.
+* A competitor comparison that refuses to name a winner: only user-supplied, explicitly dated trades, matched by contract and
+  entry day, labelled unverified. Worth copying in spirit: never compare against another system's headline numbers.
+* Scope notes say balances of separate virtual accounts must never be summed as real capital.
+
