@@ -117,10 +117,19 @@ def create_app(
             broker = manager.broker.healthcheck()
         except Exception as exc:  # noqa: BLE001
             broker = {"connected": False, "error": type(exc).__name__}
-        body: dict[str, Any] = {"ok": True, "mode": manager.broker.mode.value, "broker": broker}
+        from .deploy import build_id
+
+        body: dict[str, Any] = {"ok": True, "mode": manager.broker.mode.value, "broker": broker, "build_id": build_id()}
         if runner is not None:
             body["runner"] = runner.health()  # counts and flags only; error text stays behind the token
         return body
+
+    @app.post("/api/deployment/check-on-refresh", dependencies=[Depends(auth)])
+    def check_on_refresh() -> dict[str, Any]:
+        """The dashboard calls this once per page load. It takes no input, so it cannot pick a branch or run a command."""
+        from .deploy import request_update
+
+        return request_update()
 
     @app.get("/api/portfolio", dependencies=[Depends(auth)])
     def portfolio() -> dict[str, Any]:

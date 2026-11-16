@@ -241,7 +241,8 @@
     pill("runner", rn.stalled ? "LOOP STALLED: no good cycle for " + rn.seconds_since_success + "s" : (rn.running ? "loop running" : "loop stopped"),
       rn.stalled ? "bad" : (rn.running ? "ok" : ""));
     $("runner").title = rn.last_error ? "Last error: " + rn.last_error : "";
-    $("updated").textContent = "Updated " + new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    $("updated").textContent = "Updated " + new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }) +
+      (health.build_id && health.build_id !== "unknown" ? " - build " + health.build_id : "");
   }
 
   function renderTrust(status) {
@@ -1296,6 +1297,25 @@
     else if (page === "research") await loadResearch();
   }
 
+  // On the first connected load, ask the server to look for a newer tested release, then reload when the build changes.
+  let buildChecked = false;
+  async function checkForNewBuild(previous) {
+    if (buildChecked) return;
+    buildChecked = true;
+    let result;
+    try { result = await api("/api/deployment/check-on-refresh", { method: "POST", body: "{}" }); } catch (e) { return; }
+    if (!result.queued && result.status !== "RECENT_CHECK_OR_IN_PROGRESS") return;
+    let left = 60;
+    const timer = window.setInterval(async () => {
+      left -= 1;
+      if (left <= 0) { window.clearInterval(timer); return; }
+      try {
+        const h = await fetch("/api/health", { cache: "no-store" }).then((r) => r.json());
+        if (h.build_id && previous && h.build_id !== previous) { window.clearInterval(timer); window.location.reload(); }
+      } catch (e) { /* the server restarts during an update; keep polling */ }
+    }, 10000);
+  }
+
   async function refresh() {
     if (!token) { S.connected = false; showPage(); return; }
     try {
@@ -1305,6 +1325,7 @@
         api("/api/journal?limit=15"), api("/api/equity"), api("/api/alltrades").catch(() => null),
       ]);
       S.connected = true; S.core = { status, report };
+      checkForNewBuild(health.build_id);
       if (allTrades) S.trades = allTrades;
       showPage();
       renderStrip(health, status, portfolio);

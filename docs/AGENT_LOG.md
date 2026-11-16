@@ -559,3 +559,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Not done: the "chains read" count, and the owner decision on letting the `flow` agent support a trade.
 * Verified: full test suite, 570 passed (retention test and horizon-due cases for 29, 30, 32 and 33 days added). Not verified: the dashboard in a browser, or any real 30 day marks (they need about six weeks of real scans).
 * Merge status: PR #11 (`agent/integration` into `main`) was opened but NOT merged: GitHub reports it conflicts with `main` (main has commits integration lacks). The repo has no check runs on the branch; local tests (570 passed) were the gate. Left open for the owner or the next run to resolve. No documented path from `main` to the owner's Mac was found, so nothing could reach it.
+
+## 2026-11-16: refresh the page to get the new build (owner request, interactive)
+
+* Owner chose options-platform and a tested `stable` branch. Added `src/optplat/deploy.py` (build id; `request_update`, which launches `deploy/update.sh` only when `OPTPLAT_MANAGED=1`, at most every 5 minutes, with no caller input), `build_id` on `/api/health`, token-protected `POST /api/deployment/check-on-refresh`, dashboard check on first connected load that reloads when the build changes, `deploy/install_mac.sh`, `deploy/update.sh`, `deploy/server-wrapper.sh`, `.github/workflows/promote-stable.yml` and `docs/DEPLOYMENT.md`.
+* Auth is unchanged except for one new endpoint that requires the existing token. No risk, sizing or order code touched.
+* Verified: full test suite, 578 passed (8 new), shell syntax checks, workflow YAML parses. Not verified: anything on macOS (launchd, the installer, the updater), the workflow on GitHub, the dashboard in a browser.
+* Blocker: `agent/integration` still conflicts with `main` (13 files, 36 hunks, tried locally and aborted). Until that is resolved and merged, nothing integrated can reach `stable`.

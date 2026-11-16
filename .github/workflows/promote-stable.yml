@@ -1,0 +1,29 @@
+name: Test and promote stable release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: optplat-release
+  cancel-in-progress: false
+jobs:
+  test-and-promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m compileall -q src
+      - run: python -m pytest -q
+      - name: Refuse to release personal state or credentials
+        run: |
+          if git ls-files | grep -E '(^|/)(config[.]env|[.]env)$|(^|/)(backups|[.]venv)/|[.]db$|[.]pem$|[.]key$'; then echo "Refusing to release personal state."; exit 1; fi
+      - name: Promote the passing commit to stable
+        if: github.ref == 'refs/heads/main'
+        run: git push origin HEAD:refs/heads/stable
