@@ -89,3 +89,17 @@ Mac-only per-strategy-account report (`performance_report`). What it does that t
   entry day, labelled unverified. Worth copying in spirit: never compare against another system's headline numbers.
 * Scope notes say balances of separate virtual accounts must never be summed as real capital.
 
+
+## `entry_quality.py` (read 2026-11-16, run 11)
+
+Strict new-entry gate for real-source paper options ("observation is not authorization"; no score may waive it).
+
+* Spread limit is a share of the ASK (15%); the platform measures spread against its own configured limit. Compare the
+  denominators before comparing numbers.
+* Zero bid fails the entry ("exit price not observable"). The platform's `propose` rejects invalid quotes, but a test pinning a
+  zero-bid case would be worth checking (not done this run).
+* Volume and open interest minimums (20 / 100), missing counts as failure, same as the platform (run 9 pinned it).
+* Per-side concentration caps (same symbol 2, market ETFs 3, growth tech 4). The platform has a same-underlying concentration limit, but no
+  group caps (market ETFs, growth tech). Needs an owner decision (risk policy), logged in CHALLENGES.
+* Strike-distance screen by horizon and a 7-730 DTE window; the platform has a single DTE window.
+* Every failure is a plain-language reason list, which is the pattern the platform's `explain_no_proposal` copies.

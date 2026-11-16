@@ -71,3 +71,4 @@ decision (see `CLAUDE.md`). Move finished items to Done with the PR link.
   held-position quote the engine sees is stored in SQLite (`market_snapshots`, `market_quotes`) with
   recorded-at time, provider `as_of`, source, verified flag and fictional flag. `record_market_data`
   (default on) and `record_retention_days` (default 90, 0 = forever) are engine config.
+* Fill-model label on `/api/results` and the Results panel (run 11, challenge 7/9); no equity curve yet.

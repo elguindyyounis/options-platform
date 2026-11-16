@@ -107,6 +107,7 @@ def test_dashboard_has_results_panel_that_uses_the_results_api():
     html, js = (root / "index.html").read_text(), (root / "app.js").read_text()
     assert 'id="results-status"' in html and "not proof of an edge" in html
     assert '"/api/results"' in js and "renderResults" in js
+    assert "How fills are simulated" in js and "NOT modeled" in js
     assert "innerHTML" not in js
 
 
