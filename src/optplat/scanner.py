@@ -23,7 +23,7 @@ from .marketdata import Bar, MarketDataProvider, MarketSnapshot
 from .models import Right, utcnow
 from .signals import liquidity_tier
 from .store import Store
-from . import tracker
+from . import shadow, tracker
 from .universe import SECTOR_OF, SECTORS, UNIVERSE  # noqa: F401  (UNIVERSE is re-exported for the lanes and tests)
 
 MIN_UNUSUAL_VOLUME = 150
@@ -395,7 +395,7 @@ class Scanner:
         pick += [r["symbol"] for r in ranked[:CHAINS_BY_DOLLAR_VOLUME] if r["symbol"] not in pick]
         surging = sorted((r for r in ranked if r["surge"] and r["symbol"] not in pick), key=lambda r: -(r["relative_volume"] or 0))
         pick += [r["symbol"] for r in surging[:CHAINS_BY_RELATIVE_VOLUME]]
-        scanned = failed = marks_added = 0
+        scanned = failed = marks_added = shadow_followed = shadow_points = 0
         for sym in pick:
             if time.monotonic() - t0 > self.budget_s:
                 out["errors"].append(f"time budget reached after {scanned} chains")
@@ -417,12 +417,19 @@ class Scanner:
                 marks_added += tracker.observe(self.store, checked.snapshot, day, fict, compare_with_prior)
             except Exception as exc:  # noqa: BLE001 - the tracker is research; it must never break a scan
                 out["errors"].append(f"{sym}: tracker ({describe_exc(exc)})")
+            try:
+                sb = shadow.observe(self.store, checked.snapshot, day, now, fict)
+                shadow_followed += sb["followed"]
+                shadow_points += sb["points"]
+            except Exception as exc:  # noqa: BLE001 - research only; it must never break a scan
+                out["errors"].append(f"{sym}: shadow book ({describe_exc(exc)})")
             out["option_names"].append({**option_totals(checked.snapshot, len(rows)), "sector": SECTOR_OF.get(sym)})
             scanned += 1
         annotate_with_history(out["unusual"], prior, self.store, day, fict)
         self.store.record_unusual(day.isoformat(), fict, out["unusual"][:400])
         out["unusual"].sort(key=lambda r: (r["decision"] != "REVIEWABLE", -r["score"], -r["volume"]))
         out["tracker_marks_added"] = marks_added
+        out["shadow_followed"], out["shadow_points"] = shadow_followed, shadow_points
         out["unusual_total"] = len(out["unusual"])
         out["sentiment"] = sentiment(ranked, out["option_names"], out["unusual"])
         out["unusual"] = out["unusual"][:MAX_UNUSUAL_ROWS]

@@ -5,3 +5,4 @@ One line per run. Columns: date, followed candidates, trading days of shadow boo
 | Date | Followed candidates | Shadow-book days | Hypotheses registered / resolved | Best verified improvement |
 | --- | --- | --- | --- | --- |
 | 2026-11-16 | 0 | 0 | 0 / 0 | none (plan adopted; export code written) |
+| 2026-11-16 (run 2) | 0 | 0 | 0 / 0 | none (shadow book code built, not yet running on real data) |
