@@ -137,7 +137,9 @@ const fresh=g({mode:'PAPER'},{...st2,market:{open:true,reason:'Regular session'}
 const srvStalled=g({mode:'PAPER'},{...st2,runner:{running:true,stalled:true,seconds_since_success:1200,consecutive_failures:0}},{kill_switch:false},null,null,now);
 const srvFail=g({mode:'PAPER'},{...st2,runner:{running:true,stalled:false,consecutive_failures:3,last_error:'RuntimeError: x'}},{kill_switch:false},null,null,now);
 const srvOk=g({mode:'PAPER'},{...st2,last_cycle:{...st2.last_cycle,started_at:'2026-11-16T10:00:00Z'},runner:{running:true,stalled:false,consecutive_failures:0}},{kill_switch:false},null,null,now);
-console.log(JSON.stringify({bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
+const mk=(a)=>g({mode:'PAPER'},{config:{}},{kill_switch:false,account:a},null,null,now);
+const riskLow=mk({equity:1000,open_premium:100});const riskHigh=mk({equity:1000,open_premium:600});const riskMissing=mk({equity:0});
+console.log(JSON.stringify({riskLow,riskHigh,riskMissing,bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
 """
     out = subprocess.run([node, "-e", harness, str(root / "app.js")], capture_output=True, text=True, check=True).stdout
     r = json.loads(out)
@@ -161,3 +163,10 @@ console.log(JSON.stringify({bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
     assert any("reports the loop as stalled" in i["text"] and i["level"] == "warn" for i in r["srvStalled"])
     assert any("failed 3 cycle(s) in a row" in i["text"] and i["level"] == "bad" for i in r["srvFail"])
     assert not any("stalled" in i["text"] for i in r["srvOk"])
+    # worst-case money line: shown from account data, warns when most of equity is in open premium, unknown when missing
+    low = [i for i in r["riskLow"] if "Worst case" in i["text"]]
+    assert low and low[0]["level"] == "ok" and "10.0% of equity" in low[0]["text"]
+    high = [i for i in r["riskHigh"] if "Worst case" in i["text"]]
+    assert high and high[0]["level"] == "warn" and "60.0% of equity" in high[0]["text"]
+    assert any("Money at risk unknown" in i["text"] and i["level"] == "warn" for i in r["riskMissing"])
+    assert not any("Worst case" in i["text"] or "Money at risk" in i["text"] for i in r["none"])

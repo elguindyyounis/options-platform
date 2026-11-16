@@ -166,3 +166,12 @@ replay yet (backlog 1) and no intraday-bar strategy; when it gets one, copy the 
   exceeds 10% of reported volume or OI. Status is always `SCENARIO_ONLY`; it says OI/volume are not live depth.
 * `exit_stress` models bid liquidation with extra concession (base, thin, stressed) that grows with spread and participation.
 * Platform: floor on volume/OI and spread only. Run 18 added the 10% participation note (display only). No exit stress yet.
+
+## `goal_sprint.py` (read 2026-11-16, run 19; alerter still at `80672a6`)
+
+* Deadline-aware goal math for the $1K challenge: counts remaining US option sessions (approximate, `calendar_verified: false`), the
+  compound return needed per session, and refuses a precise gap when equity is `UNVERIFIABLE_EQUITY` (stale/missing marks).
+* States that a target shortfall is never turned into extra risk, and that a premium budget is max exposed principal, not a stop
+  (contracts can gap to zero). Shows an illustrative three-full-premium-losses stress per policy.
+* Platform gap: the dashboard showed open premium but never said "this much can be lost outright". Run 19 added a glance line for it.
+  The platform has no goal or required-return math (and should not: a stretch target must not drive risk).

@@ -1,6 +1,6 @@
 # Challenges (platform vs. alerter)
 
-Last alerter commit reviewed: `80672a6` (unchanged at run 18)
+Last alerter commit reviewed: `80672a6` (unchanged at run 19)
 
 ## Open challenges
 
@@ -24,8 +24,14 @@ Last alerter commit reviewed: `80672a6` (unchanged at run 18)
 | 16 | **UX (run 18):** a decision to buy showed quantity but not how big that is against the contract's reported volume and open interest; with confidence-driven sizing a large order in a thin contract would read as fine. Added display-only `size_vs_liquidity` per entry (percent of reported volume/OI, warning over 10%, copied from the alerter's `liquidity.py`) and a "Size check" in the Decisions Why column. It never blocks or resizes anything; a block would be a risk-policy change for the owner. Volume/OI are delayed provider numbers and paper fills ignore size impact. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 | 17 | **Owner request (2026-11-16):** look at unusual single-contract flow (huge volume vs tiny OI, big premium, correlated names like SMH/MU) and fit it to the strategy. Added a display-only radar (`flow.py`, `flow` and `flow_themes` in the cycle report, a dashboard panel) and `docs/FLOW_CRITERIA.md`. It cannot see ask-side or multi-leg share (free chain), so those read "not available". The platform's strategy would not trade any of the examples (far OTM, low OI); making flow a trigger is a strategy/sizing decision. The alerter already has this radar and the accounts are Mac-only, so see `docs/ALERTER_FLOW_HANDOFF.md`. Also asked: both apps reachable by typing a URL with nothing typed in a terminal. The platform needs a running process and its token; an always-on Mac service for it is a one-time owner setup and an auth/start-up decision, not done here. | Yes (flow as trigger; Mac auto-start) |
 | 18 | Flow-following paper strategies exist (`flow-otm`, `flow-near`) but nothing measures them: no replay, no baseline, flagged volume cannot show who bought. They are blocked by the risk gate when under 7 days to expiry or spread over 15%; relaxing that is an owner risk decision. Samples will be tiny. | Yes (risk limits, promotion) |
+| 19 | **UX (run 19):** the glance strip said how much was allowed per order but not how much of the account is sitting in open premium and can go to zero. Added a "Worst case today" line (open premium at cost as % of equity; warns above 50%; unknown if equity/premium missing). Display only; derived from `/api/portfolio`, no sizing or risk change. The alerter's `goal_sprint.py` goes further (three-full-loss stress, required return per session); the platform has no goal math on purpose. Calendar (event source) and per-account tuning (Mac only) still blocked. | No |
 
 ## Run log
+
+* 2026-11-16 (run 19, Monday so no weekend scan): Alerter unchanged (`80672a6`); read `goal_sprint.py` (see COMPARISON_ALERTER).
+  UX challenge: open money at risk was not stated in plain words. Added the "Worst case today" glance line (display only). No risk,
+  order, auth, sizing or broker code touched. Weakness noted: the alerter refuses precise goal gaps on unverifiable equity; the platform's
+  equity uses the same simulated, fee-free fills. Test extended; 205 pass. The Mac copy is a manual git clone: merged code is not on the Mac until the owner pulls.
 
 * 2026-11-16 (run 18c, owner message): Owner wants out-of-the-money flow contracts considered, with a nearer-the-money variant acceptable. Added `FlowFollowStrategy` (`flow-otm`, `flow-near`), selected by `OPTPLAT_STRATEGY`, default unchanged. Risk policy untouched. 5 new tests; 205 pass. Weakness: no evidence flow direction means anything; compare to a do-nothing baseline via replay (backlog 1-2) before trusting it.
 
