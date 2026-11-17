@@ -6,7 +6,7 @@ never touches `main`, and never changes risk limits, lane budgets, defaults or a
 
 The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 
-**Last alerter commit reviewed:** `9210fd8`  (update this line each run)
+**Last alerter commit reviewed:** `9eb85e0`  (update this line each run)
 
 ## Open challenges (oldest first; the agent picks one per run)
 
@@ -22,12 +22,15 @@ The first comparison is in [COMPARISON_ALERTER.md](COMPARISON_ALERTER.md).
 | 4 | Make lane P&L itself use the stressed exit alongside the bid exit (show both) | Headline results are optimistic for large sizes | Done 2026-11-13: option lane summary has `stress_pnl` beside `stress_bid_pnl` over the same trades, shown as "Realized, harder exit". The headline `realized_pnl` is unchanged. Not yet on the 10x challenge panel or the All trades sources table |
 | 5 | Add a signal provenance doc listing each signal, where it came from and its validation status | Alerter's `research_foundations.py` does this; platform does not | Done 2026-11-14: `docs/SIGNALS.md`, with `tests/test_signal_provenance.py` failing if a signal, cause tag or status drifts from the code |
 | 6 | Check whether stacking helps: compare stacked and first entries from the digest once there are enough trades | Owner asked for stacking as an experiment; nothing yet says whether it pays | Waiting for trades |
+| 8 | **The shadow-book gate counts contracts, not independent observations.** Gate says 2,000 followed candidates, but up to 6 strikes per name per day are followed, so 2,000 followed is at best ~333 independent underlying-days. | A hypothesis test on strikes of one name overstates its sample | Display done 2026-11-17: `independent_observations` in `/api/shadow` (`one_per_underlying_day`, fixed rule). The gate threshold itself is the owner's call and was not changed |
+| UX-1 | **The dashboard has no shadow-book or research-progress view.** The owner can see `/api/shadow` only as JSON; nothing on the Desk page says how far the research gate is or that a count overstates the sample. | Owner cannot see on first sight what research is running | Open; next UX run: a Research progress glance line from `/api/shadow` (textContent only). Per-strategy-account tuning pages need alerter data that lives on the Mac, so not faked here |
 | 7 | Do tiny open interest dominate the volume/OI ratio that flags a contract as unusual? The alerter caps scores for volume < 5, OI < 20 and spread > 20%. Add a tracker group split by OI size and compare marks | A ratio over a tiny denominator is easy to hit and may be noise | Done 2026-11-13: tracker feature `oi_size`. Needs real marks before it says anything |
 
 ## Run log (newest first)
 
 | Date | Alerter commit | What was compared | What changed | What was not verified |
 | --- | --- | --- | --- | --- |
+| 2026-11-17 | `9eb85e0` (2 commits: whale thesis, experiment desk) | Read alerter `experiment_desk.py` and `EXPERIMENTS.md` | Challenge 8: `independent_observations` in the shadow report; UX-1 logged | Alerter tests not run; no real data (cloud, Tuesday); dashboard not viewed in a browser |
 | 2026-11-13 (later) | `9210fd8` (no change) | Read `storage.py` and `data_sources.py` | Challenge 7: tracker `oi_size` split (display-only) | Alerter tests not run; no real marks seen; dashboard not checked in a browser |
 | 2026-11-13 | `9210fd8` (no change) | Read `agents.py` and `core.py` | Challenge 4: lane summary shows bid and stressed realized P&L side by side (display-only) | Alerter tests not run; the stressed number is a model, not a fill; no real trades seen; dashboard tile not checked in a browser |
 | 2026-11-12 | `9210fd8` | First full comparison | Ported liquidity tiers and exit stress into post-mortems | Alerter tests not run; several alerter modules not read; live Yahoo data |

@@ -818,3 +818,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Changed: `shadow.py`, two store tables, a scan hook (wrapped so it can never break a scan), `GET /api/shadow` (gate progress; never says the gate passed because the export streak is invisible to it), export allow-list. Entry is the ask, exit the bid on a path point; a contract missing from a later chain leaves a gap, not a guess.
 * Decision made: selection is generic (6 most active liquid contracts per underlying, spread at most 25%, 7 to 120 days to expiry). Per-strategy candidates, IV percentile and days to earnings are NOT recorded yet and are flagged in each row's `missing_features`.
 * Verified: `python -m pytest -q` 657 pass (new `tests/test_shadow.py`). Not verified: real Yahoo chains, scan time cost with the extra writes, the Mac. No risk, order, auth, sizing or broker code touched; no schema deletion of existing data.
+
+## 2026-11-17 (challenger run): independent observations
+
+* Alerter moved `30c64d7` to `9eb85e0` (whale dossiers, experiment desk); read `experiment_desk.py`, see COMPARISON_ALERTER. Tuesday: no weekend scan.
+* Changed: `shadow.one_per_underlying_day` and `independent_observations` in the shadow report (evolution plan Phase 1 item 4). Helps S1 and E1-E5, which need one observation per name per day. Gate thresholds untouched (owner's).
+* UX challenge UX-1 logged: the shadow book/research progress has no dashboard view.
+* Verified: `python -m pytest -q` 659 pass. Not verified: real data, browser, the Mac. Mac copy is a manual git clone; merged code is not there until the owner pulls.
