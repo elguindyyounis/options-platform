@@ -51,9 +51,9 @@ Own data the owner provides stays out of commits and logs, and results are label
 0000. **Owner roadmap (2026-11-17).** Bigger pieces, in order, in `docs/OWNER_ROADMAP.md`. Item 1 (Market context page) is done; take item 2 next.
 
 000. **Evolution plan, Phase 1 (owner priority, 2026-11-16).** See `docs/EVOLUTION_PLAN.md`. Shadow book first slice is built
-   (`shadow.py`, see Done). Still open, in order: (a) follow the top candidates of each strategy and lane, not only the generic
+   (`shadow.py`, see Done). Still open, in order (a and b need strategy plumbing and an earnings source, so (c) was taken first): (a) follow the top candidates of each strategy and lane, not only the generic
    most-active pick; (b) record IV percentile and days to earnings per followed contract (listed in `missing_features`);
-   (c) exit replay harness over `shadow_points`; (d) independent-observation counting: DONE 2026-11-17 (`one_per_underlying_day`, `independent_observations` in `/api/shadow`; not yet used by any test harness).
+   (c) exit replay harness over `shadow_points`: DONE 2026-11-17 (`exit_replay.py`, `GET /api/shadow/exits`; not yet fed real data); (d) independent-observation counting: DONE 2026-11-17 (`one_per_underlying_day`, `independent_observations` in `/api/shadow`; not yet used by any test harness).
 
 00. **Follow-ups from the tracker (owner decisions marked).** Once the tracker has 20 or more marks in a group, check whether any feature
    beats the average; only then consider letting the `flow` agent support a trade (owner decision, since it adds conviction). Add a "chains read" count to the tracker page. Single-stock watchlists need a first real run to see spreads and earnings handling.

@@ -833,3 +833,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Decisions made: reading bins (call-heavy at 1.3 or more, put-heavy at 0.7 or less) fixed in advance and labelled descriptive; index put-heavy is not called bearish (hedging); walls are the largest modeled strike above or below spot.
 * Verified: 664 pytest pass (5 new in `tests/test_context.py`, page list in `test_dashboard.py` extended); headless Chromium on the fictional demo data showed all sections with no script errors.
 * Not verified: real Yahoo chains (unreachable from the cloud), scan time with 12 extra chains, the Mac. Nothing changes what any lane trades. Earnings dates are unknown without a source.
+
+## 2026-11-17 (scheduled improvement run): exit replay harness
+
+* Evolution plan Phase 1 item 3. Helps X1 (take-profit/stop grid), X2 (time stop), X3 (trailing stop) and gives E1-E5 an outcome to compare. Phase 1 gate not met (no real shadow-book data seen), so no hypothesis was registered or resolved.
+* Decision made: took (c) before (a)/(b) of backlog item 000: per-strategy following needs strategy plumbing in the scan hook, and days to earnings has no free source yet; the harness is self-contained and testable now.
+* Changed: `exit_replay.py` (rules, replay over independent observations, summary, paired `compare` with the plan's mechanical bar: later 30% of dates, seeded 95% bootstrap, minus top three), `GET /api/shadow/exits`. Entry ask, exit bid, plus a stressed exit (bid minus half spread); stop checked before take-profit; unresolved paths counted, never guessed. Merged `origin/main` into integration first (clean).
+* Verified: `python -m pytest -q` 676 pass (12 new in `tests/test_exit_replay.py`). Not verified: real data. The private data repository (`options-platform-data`) is not attached to this session, so no real results were read. Every rule in the grid counts towards a stricter bar once hypotheses are registered; the report is exploratory. No risk, order, auth, sizing, broker or schema change.
