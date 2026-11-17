@@ -240,6 +240,27 @@ def create_app(
             return {"status": engine.scanner.status(), "result": engine.scanner.latest(),
                     "interval_s": engine.config().scan_interval_s}
 
+        @app.get("/api/context", dependencies=[Depends(auth)])
+        def market_context() -> dict[str, Any]:
+            """Option sentiment, gamma levels and expected moves for index funds and mega-caps, from the latest scan.
+            Earnings dates come from the event calendar and are None (unknown) when no source is wired."""
+            from . import context
+
+            latest = engine.scanner.latest() or {}
+            ctx = latest.get("market_context") or {"rows": [], "groups": {}, "missing": list(context.CORE), "notes": list(context.NOTES),
+                                                   "errors": [], "as_of": None, "fictional": engine.provider.fictional}
+            today = engine.clock().date()
+            from datetime import timedelta as _td
+
+            earnings = {}
+            for sym in context.MEGA_CAPS:
+                ev = engine.calendar.earnings(sym, today, today + _td(days=45))
+                earnings[sym] = None if ev is None else [e.day.isoformat() for e in ev]
+            macro = engine.calendar.macro(today, today + _td(days=45))
+            return {**ctx, "scan_session_day": latest.get("session_day"),
+                    "earnings": earnings, "earnings_note": "null means the date is unknown (no source or the source failed), not that none is scheduled.",
+                    "macro": None if macro is None else [e.to_dict() for e in macro]}
+
         @app.get("/api/tracker", dependencies=[Depends(auth)])
         def tracker_report() -> dict[str, Any]:
             from . import tracker
