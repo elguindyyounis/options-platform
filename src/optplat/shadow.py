@@ -89,6 +89,25 @@ def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictiona
     return {"followed": followed, "points": points}
 
 
+def one_per_underlying_day(follows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Independent observations (evolution plan Phase 1 item 4): one followed contract per underlying per day.
+
+    Several strikes of one name on one day move together, so counting each as a separate trade overstates the sample.
+    The rule is fixed before any result exists: keep the most active contract (highest volume), ties broken by the
+    contract symbol. Rows without a symbol or day are skipped, never guessed.
+    """
+    best: dict[tuple[str, str], dict[str, Any]] = {}
+    for f in follows:
+        sym, day = f.get("symbol"), f.get("followed_day")
+        if not sym or not day:
+            continue
+        key = (sym, day)
+        rank = (-(f.get("volume") or 0), str(f.get("contract")))
+        if key not in best or rank < (-(best[key].get("volume") or 0), str(best[key].get("contract"))):
+            best[key] = f
+    return [best[k] for k in sorted(best)]
+
+
 def report(store: Any, fictional: bool, today: date) -> dict[str, Any]:
     """Progress towards the Phase 1 gate. 'Complete' means the path reaches the 30 trading day mark or the contract has expired."""
     follows = store.shadow_all_follows(fictional)
@@ -103,8 +122,10 @@ def report(store: Any, fictional: bool, today: date) -> dict[str, Any]:
     pct = round(complete / len(follows) * 100, 1) if follows else None
     status = {"trading_days": days, "followed": len(follows), "underlyings": syms, "complete_pct": pct}
     met = {k: (status[k] is not None and status[k] >= GATE[k]) for k in status}
-    return {"fictional": fictional, **status, "points": sum(1 for _ in ages), "gate": GATE, "gate_met": met,
+    independent = len(one_per_underlying_day(follows))
+    return {"fictional": fictional, **status, "independent_observations": independent, "points": sum(1 for _ in ages), "gate": GATE, "gate_met": met,
             "gate_met_except_export": all(met.values()),  # the export streak is not visible from here
             "note": "Gate also needs the export to run five days in a row, which this report cannot see; the owner or the weekly agent confirms it. "
+                    "The 'followed' count includes several strikes of one name per day; 'independent_observations' (one per underlying per day) is the sample any hypothesis test can claim. "
                     "Selection is generic (most active liquid contracts per underlying); per-strategy candidates are not followed yet.",
             "missing_features": MISSING_FEATURES}

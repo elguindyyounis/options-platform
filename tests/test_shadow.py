@@ -116,3 +116,20 @@ def test_api_endpoint_and_export_allow_list():
         assert c.get("/api/shadow").status_code == 401
         body = c.get("/api/shadow", headers={"X-API-Token": "t" * 24}).json()
     assert body["followed"] == 0 and body["gate_met_except_export"] is False and body["fictional"] is True
+
+
+def test_one_per_underlying_day_keeps_most_active_and_is_deterministic():
+    f = lambda sym, day, c, vol: {"symbol": sym, "followed_day": day, "contract": c, "volume": vol}
+    follows = [f("AAA", "2026-11-09", "AAA2", 100), f("AAA", "2026-11-09", "AAA1", 900), f("AAA", "2026-11-09", "AAA0", 900),
+               f("AAA", "2026-11-10", "AAA3", None), f("BBB", "2026-11-09", "BBB1", 5), {"symbol": "", "followed_day": "2026-11-09"}]
+    got = shadow.one_per_underlying_day(follows)
+    assert [(g["symbol"], g["followed_day"], g["contract"]) for g in got] == [
+        ("AAA", "2026-11-09", "AAA0"), ("AAA", "2026-11-10", "AAA3"), ("BBB", "2026-11-09", "BBB1")]
+    assert shadow.one_per_underlying_day(list(reversed(follows))) == got
+
+
+def test_report_counts_independent_observations_below_followed():
+    s = Store(":memory:")
+    shadow.observe(s, snap([row(100, vol=900), row(101, vol=800), row(102, vol=700)]), D0, T0, True)
+    rep = shadow.report(s, True, D0)
+    assert rep["followed"] == 3 and rep["independent_observations"] == 1

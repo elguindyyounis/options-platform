@@ -91,3 +91,13 @@ These are challenges raised by reading the alerter. None is proven.
   the same kind of guess and are labelled as inferences.
 * **Refuses biased GEX.** Over the row cap, or with missing call/put sides, the scan declines to publish a partial net exposure.
 * **Still not read:** `server.py`, other skill files, the alerter's tests.
+
+## Addendum 2026-11-17: `experiment_desk.py` (alerter at `9eb85e0`)
+
+* **Refuses to leak the future.** A scorecard at a past cutoff blocks equity and realized P&L if the ledger has rows after the cutoff
+  (`BLOCKED_FUTURE_LEDGER_ROWS`). The platform's replay/evaluation reads recorded snapshots, so no equivalent leak check was found.
+* **Says no winner exists.** `winning_strategy` is None, `verified_profitability` False, `comparison_status` NO_MATCHED_FORWARD_COHORT, and
+  raw dollar P&L of independent capital pools is explicitly not used to rank arms. The platform's frozen-baseline lane is the same idea.
+* **Weekend "What were we wrong about?"** flags high-score losses, wins with incomplete entry evidence, and the largest win as a share of
+  gross profit. The platform's results panel has no largest-win share; candidate for a later display-only change.
+* Also in range: `whale_thesis.py` (volume/OI dossiers; same caveat as the platform that volume/OI is not signed flow). Not read in full.
