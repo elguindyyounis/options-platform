@@ -825,3 +825,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Changed: `shadow.one_per_underlying_day` and `independent_observations` in the shadow report (evolution plan Phase 1 item 4). Helps S1 and E1-E5, which need one observation per name per day. Gate thresholds untouched (owner's).
 * UX challenge UX-1 logged: the shadow book/research progress has no dashboard view.
 * Verified: `python -m pytest -q` 659 pass. Not verified: real data, browser, the Mac. Mac copy is a manual git clone; merged code is not there until the owner pulls.
+
+## 2026-11-17 (challenger run, larger change at the owner's request)
+
+* Owner asked for larger improvements instead of one small change: market sentiment (call/put ratio, volumes, bull/bear reading) on index funds and mega-caps, spot gamma, net-GEX heat map, GEX chart with flip, call wall and put wall, earnings with expected moves, and a UI where they can see how strategies and agents work.
+* Changed: `context.py` (sentiment by volume, premium and open interest; per-strike modeled gamma; walls; flip; ATM-straddle expected move), scanner always reads the 12 core tickers and stores `market_context`, `GET /api/context`, a Context page (textContent and SVG only), `docs/OWNER_ROADMAP.md` with the next items.
+* Decisions made: reading bins (call-heavy at 1.3 or more, put-heavy at 0.7 or less) fixed in advance and labelled descriptive; index put-heavy is not called bearish (hedging); walls are the largest modeled strike above or below spot.
+* Verified: 664 pytest pass (5 new in `tests/test_context.py`, page list in `test_dashboard.py` extended); headless Chromium on the fictional demo data showed all sections with no script errors.
+* Not verified: real Yahoo chains (unreachable from the cloud), scan time with 12 extra chains, the Mac. Nothing changes what any lane trades. Earnings dates are unknown without a source.

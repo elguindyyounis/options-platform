@@ -23,7 +23,7 @@ from .marketdata import Bar, MarketDataProvider, MarketSnapshot
 from .models import Right, utcnow
 from .signals import liquidity_tier
 from .store import Store
-from . import shadow, tracker
+from . import context, shadow, tracker
 from .universe import SECTOR_OF, SECTORS, UNIVERSE  # noqa: F401  (UNIVERSE is re-exported for the lanes and tests)
 
 MIN_UNUSUAL_VOLUME = 150
@@ -395,6 +395,8 @@ class Scanner:
         pick += [r["symbol"] for r in ranked[:CHAINS_BY_DOLLAR_VOLUME] if r["symbol"] not in pick]
         surging = sorted((r for r in ranked if r["surge"] and r["symbol"] not in pick), key=lambda r: -(r["relative_volume"] or 0))
         pick += [r["symbol"] for r in surging[:CHAINS_BY_RELATIVE_VOLUME]]
+        pick = [c for c in context.CORE if c in self.universe and c not in pick] + pick  # index funds and mega-caps are always read
+        core_snaps: list[MarketSnapshot] = []
         scanned = failed = marks_added = shadow_followed = shadow_points = 0
         for sym in pick:
             if time.monotonic() - t0 > self.budget_s:
@@ -410,6 +412,8 @@ class Scanner:
                 failed += 1
                 out["errors"].append(f"{sym}: chain rejected by the data-quality gate ({checked.issues[-1].kind if checked.issues else 'unknown'})")
                 continue
+            if sym in context.CORE:
+                core_snaps.append(checked.snapshot)
             rows = unusual_contracts(checked.snapshot, now)
             out["unusual"].extend(rows)
             out["follow_ups"].extend(follow_ups(checked.snapshot, prior, now, day))
@@ -425,6 +429,7 @@ class Scanner:
                 out["errors"].append(f"{sym}: shadow book ({describe_exc(exc)})")
             out["option_names"].append({**option_totals(checked.snapshot, len(rows)), "sector": SECTOR_OF.get(sym)})
             scanned += 1
+        out["market_context"] = context.build(core_snaps, now, fict)
         annotate_with_history(out["unusual"], prior, self.store, day, fict)
         self.store.record_unusual(day.isoformat(), fict, out["unusual"][:400])
         out["unusual"].sort(key=lambda r: (r["decision"] != "REVIEWABLE", -r["score"], -r["volume"]))

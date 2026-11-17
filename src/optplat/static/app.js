@@ -2,7 +2,7 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
   const phone = window.matchMedia("(max-width:860px)");
-  const PAGES = ["desk", "trades", "options", "swing", "shortterm", "market", "tracker", "agents", "research", "system"];
+  const PAGES = ["desk", "trades", "options", "swing", "shortterm", "market", "context", "tracker", "agents", "research", "system"];
   let token = "";
   try { token = sessionStorage.getItem("optplat_token") || ""; } catch (e) { /* storage unavailable */ }
   // The launcher opens /#token=... . A URL fragment is never sent to the server. Read it once, keep it for this
@@ -104,7 +104,7 @@
     document.querySelectorAll("a.nav").forEach((a) => {
       if (a.getAttribute("data-page") === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
-    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", tracker: "Tracker", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
+    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
   }
 
   // ---------------------------------------------------------------- equity chart (unchanged behaviour)
@@ -1028,6 +1028,115 @@
       { label: "Unusual contracts", right: true, get: (r) => r.unusual_count }, { label: "Contracts read", right: true, get: (r) => r.contracts },
     ], res.option_names, "No option chains were read", (res.errors || [])[0] || "");
   }
+
+  // ---------------------------------------------------------------- market context: sentiment, gamma levels, expected moves
+  const READ = { CALL_HEAVY: "▲ Call-heavy", PUT_HEAVY: "▼ Put-heavy", BALANCED: "◆ Balanced", UNKNOWN: "Unknown" };
+  const ratioText = (v) => (v === null || v === undefined ? "n/a" : Number(v).toFixed(2));
+  async function loadContext() { S.ctx = await api("/api/context"); renderContext(); }
+  function levelLines(lv, spot) {
+    return [{ v: spot, label: "spot", cls: "spot" }, { v: lv.call_wall, label: "call wall", cls: "call" }, { v: lv.put_wall, label: "put wall", cls: "put" }, { v: lv.gamma_flip, label: "flip", cls: "flip" }].filter((l) => l.v !== null && l.v !== undefined);
+  }
+  function drawGex(host, row) {
+    host.replaceChildren();
+    const lv = row.levels, prof = lv.profile;
+    if (!prof.length) { empty(host, "No gamma profile", "No strikes near the price had open interest and implied volatility."); return; }
+    const W = 720, H = 270, m = { l: 48, r: 12, t: 46, b: 34 };
+    const lo = prof[0].strike, hi = prof[prof.length - 1].strike, span_ = Math.max(hi - lo, 1e-9);
+    const X = (k) => m.l + ((k - lo) / span_) * (W - m.l - m.r);
+    const mx = Math.max.apply(null, prof.map((p) => Math.max(p.call_musd, -p.put_musd, 1e-9)));
+    const mid = m.t + (H - m.t - m.b) / 2, half = (H - m.t - m.b) / 2;
+    const root = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": row.symbol + " modeled gamma by strike" });
+    root.appendChild(svg("line", { class: "grid", x1: m.l, x2: W - m.r, y1: mid, y2: mid }));
+    const bw = Math.max(2, Math.min(18, (W - m.l - m.r) / prof.length * 0.7));
+    prof.forEach((p) => {
+      const up = (p.call_musd / mx) * half, dn = (-p.put_musd / mx) * half;
+      const t = svg("rect", { x: X(p.strike) - bw / 2, y: mid - up, width: bw, height: Math.max(up, 0), fill: "var(--gain)", opacity: 0.8 });
+      t.appendChild(svg("title", {}, "strike " + p.strike + ": calls " + p.call_musd + " M, puts " + p.put_musd + " M"));
+      root.appendChild(t);
+      root.appendChild(svg("rect", { x: X(p.strike) - bw / 2, y: mid, width: bw, height: Math.max(dn, 0), fill: "var(--loss)", opacity: 0.8 }));
+    });
+    levelLines(lv, row.spot).forEach((l, i) => {
+      if (l.v < lo || l.v > hi) return;
+      const x = X(l.v);
+      root.appendChild(svg("line", { x1: x, x2: x, y1: 14 + (i % 4) * 11, y2: H - m.b, stroke: "var(--fg)", "stroke-width": 1, "stroke-dasharray": l.cls === "spot" ? "" : "4 3" }));
+      root.appendChild(svg("text", { x: x, y: 11 + (i % 4) * 11, "text-anchor": "start", dx: 4, fill: "var(--mut)", "font-size": 11 }, l.label + " " + l.v));
+    });
+    root.appendChild(svg("text", { x: m.l, y: H - 10, fill: "var(--mut)", "font-size": 11 }, "strike " + lo));
+    root.appendChild(svg("text", { x: W - m.r, y: H - 10, "text-anchor": "end", fill: "var(--mut)", "font-size": 11 }, "strike " + hi));
+    root.appendChild(svg("text", { x: 4, y: mid - half + 10, fill: "var(--mut)", "font-size": 11 }, "calls"));
+    root.appendChild(svg("text", { x: 4, y: mid + half - 2, fill: "var(--mut)", "font-size": 11 }, "puts"));
+    host.appendChild(root);
+  }
+  function drawLevelsOnPrice(host, row) {
+    host.replaceChildren();
+    const c = row.closes || [];
+    if (c.length < 2) { empty(host, "No price history", "The chain snapshot carried no daily closes."); return; }
+    const lines = levelLines(row.levels, row.spot);
+    const vals = c.concat(lines.map((l) => l.v));
+    const lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals), pad = (hi - lo || 1) * 0.06;
+    const W = 720, H = 220, m = { l: 12, r: 90, t: 10, b: 10 };
+    const X = (i) => m.l + (i / (c.length - 1)) * (W - m.l - m.r), Y = (v) => H - m.b - ((v - (lo - pad)) / (hi - lo + 2 * pad)) * (H - m.t - m.b);
+    const root = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": row.symbol + " recent closes with gamma levels" });
+    root.appendChild(svg("polyline", { points: c.map((v, i) => X(i) + "," + Y(v)).join(" "), fill: "none", stroke: "var(--series-1)", "stroke-width": 2 }));
+    lines.forEach((l) => {
+      root.appendChild(svg("line", { x1: m.l, x2: W - m.r, y1: Y(l.v), y2: Y(l.v), stroke: l.cls === "call" ? "var(--gain)" : l.cls === "put" ? "var(--loss)" : "var(--warn)", "stroke-dasharray": l.cls === "spot" ? "" : "5 4" }));
+      root.appendChild(svg("text", { x: W - m.r + 4, y: Y(l.v) + 4, fill: "var(--mut)", "font-size": 11 }, l.label + " " + l.v));
+    });
+    host.appendChild(root);
+  }
+  function renderContext() {
+    const d = S.ctx || { rows: [], groups: {}, missing: [], notes: [] };
+    $("ctx-lede").textContent = d.rows.length
+      ? "From the scan of " + (d.as_of ? fmtTime(d.as_of) : "n/a") + (d.fictional ? " (FICTIONAL demo data, the numbers are invented)" : "") + ". " + d.rows.length + " of " + (d.rows.length + d.missing.length) + " core tickers were read."
+      : "No scan has read these tickers yet. Run a scan on the Market page; nothing is shown until real chains are read.";
+    const g = d.groups || {};
+    const gf = (key, name) => {
+      const x = g[key];
+      return x && x.names ? fig(READ[x.reading] || x.reading, name + ": calls per put " + ratioText(x.call_put_volume_ratio), num(x.call_volume) + " calls, " + num(x.put_volume) + " puts; by premium " + ratioText(x.call_put_premium_ratio) + "; " + x.call_heavy_names + " call-heavy, " + x.put_heavy_names + " put-heavy of " + x.names) : null;
+    };
+    $("ctx-groups").replaceChildren();
+    kids($("ctx-groups"), [gf("index", "Index funds"), gf("mega", "Mega-caps")]);
+    table($("ctx-table"), [
+      { label: "Ticker", get: (r) => el("b", r.symbol) }, { label: "Price", right: true, get: (r) => money(r.spot) },
+      { label: "Call volume", right: true, get: (r) => num(r.sentiment.call_volume) }, { label: "Put volume", right: true, get: (r) => num(r.sentiment.put_volume) },
+      { label: "Calls per put (volume)", right: true, get: (r) => ratioText(r.sentiment.call_put_volume_ratio) },
+      { label: "Calls per put (premium)", right: true, get: (r) => ratioText(r.sentiment.call_put_premium_ratio) },
+      { label: "Calls per put (open interest)", right: true, get: (r) => ratioText(r.sentiment.call_put_oi_ratio) },
+      { label: "Reading", get: (r) => READ[r.sentiment.reading] || r.sentiment.reading },
+    ], d.rows, "No tickers read yet", "Run a scan on the Market page.");
+    const heat = $("ctx-heat");
+    heat.replaceChildren();
+    d.rows.forEach((r) => {
+      const v = r.net_share_of_gross, t = el("div", null, "tile " + (v === null ? "" : v >= 0 ? "up" : "down"));
+      if (v !== null) t.style.setProperty("--k", Math.min(60, Math.abs(v) * 60 + 6) + "%");
+      t.title = r.symbol + (r.flip_distance_pct === null ? "" : ", flip " + signed(r.flip_distance_pct) + " from the price");
+      kids(t, [el("b", r.symbol), el("small", v === null ? "n/a" : (v >= 0 ? "▲ +" : "▼ ") + (v * 100).toFixed(0) + "% net")]);
+      heat.appendChild(t);
+    });
+    if (!d.rows.length) empty(heat, "No tickers read yet", "");
+    if (!d.rows.some((r) => r.symbol === S.ctxPick)) S.ctxPick = d.rows.length ? d.rows[0].symbol : null;
+    chips($("ctx-pick"), d.rows.map((r) => ({ id: r.symbol, label: r.symbol })), S.ctxPick, (id) => { S.ctxPick = id; renderContext(); }, "tab");
+    const sel = d.rows.find((r) => r.symbol === S.ctxPick);
+    if (sel) { drawGex($("ctx-gex"), sel); drawLevelsOnPrice($("ctx-price"), sel); } else { empty($("ctx-gex"), "No gamma chart", ""); $("ctx-price").replaceChildren(); }
+    const ev = d.earnings || {};
+    const evRows = d.rows.filter((r) => r.symbol in ev || r.expected_move);
+    table($("ctx-events"), [
+      { label: "Ticker", get: (r) => el("b", r.symbol) },
+      { label: "Next earnings", get: (r) => { const e = ev[r.symbol]; return e === undefined ? "n/a (fund)" : e === null ? "unknown" : e.length ? e[0] : "none in 45 days"; } },
+      { label: "Expected move", right: true, get: (r) => (r.expected_move && r.expected_move.pct !== null ? "±" + r.expected_move.pct + "%" : "n/a") },
+      { label: "Move horizon", get: (r) => { const m = r.expected_move; if (!m || m.pct === null) return ""; const e = ev[r.symbol]; return "to " + m.expiry + (e && e.length && e[0] <= m.expiry ? " (includes earnings)" : ""); } },
+    ], evRows, "Nothing to show yet", "Needs a scan that read the core tickers.");
+    const mac = $("ctx-macro");
+    mac.replaceChildren();
+    if (d.macro === null || d.macro === undefined) mac.appendChild(el("li", "FOMC dates: unknown for this period (the table does not cover it)."));
+    else if (!d.macro.length) mac.appendChild(el("li", "No FOMC decision in the next 45 days."));
+    else d.macro.forEach((e) => mac.appendChild(el("li", "FOMC decision " + e.day + (e.tentative ? " (tentative)" : ""))));
+    const notes = $("ctx-notes");
+    notes.replaceChildren();
+    (d.notes || []).forEach((x) => notes.appendChild(el("li", x)));
+    if (d.fictional) notes.appendChild(el("li", "This data is fictional demo data.", "warn"));
+    if (d.errors && d.errors.length) notes.appendChild(el("li", "Problems: " + d.errors.join("; ")));
+  }
   async function loadMarket() { const [scan, rot] = await Promise.all([api("/api/scan"), api("/api/rotation")]); S.scan = scan; S.rotation = rot; renderMarket(); renderRotation(rot); }
 
   // Where trading is concentrating between sectors, from the daily scans the platform has stored.
@@ -1297,6 +1406,7 @@
     else if (page === "swing") await loadSwing();
     else if (page === "shortterm") await loadShortterm();
     else if (page === "market") await loadMarket();
+    else if (page === "context") await loadContext();
     else if (page === "tracker") await loadTracker();
     else if (page === "agents") await loadAgents();
     else if (page === "research") await loadResearch();

@@ -244,6 +244,7 @@
     <a class="nav" href="#/swing" data-page="swing">Swing</a>
     <a class="nav" href="#/shortterm" data-page="shortterm">Short-term</a>
     <a class="nav" href="#/market" data-page="market">Market</a>
+    <a class="nav" href="#/context" data-page="context">Context</a>
     <a class="nav" href="#/tracker" data-page="tracker">Tracker</a>
     <a class="nav" href="#/agents" data-page="agents">Agents</a>
     <a class="nav" href="#/research" data-page="research">Research</a>
@@ -456,6 +457,22 @@
         <details class="notes panel">
           <summary>What this can and cannot tell you</summary>
           <ul class="plain" id="scan-notes" style="margin-top:10px"></ul>
+        </details>
+      </section>
+
+      <section id="view-context" data-page="context" data-question="What are options traders doing on the index funds and mega-caps, and where are the gamma levels?" hidden>
+        <div>
+          <h1>Market context</h1>
+          <p id="ctx-lede" class="lede"></p>
+        </div>
+        <div class="figures" id="ctx-groups"></div>
+        <div class="panel"><h2>Calls against puts</h2><p class="q">Option volume and premium on the index funds and mega-caps. Read it as who is buying which side, not as a forecast.</p><div class="scroll" id="ctx-table"></div></div>
+        <div class="panel"><h2>Net gamma heat map</h2><p class="q">Modeled net gamma as a share of gross, per ticker. A plus or minus sign and an arrow carry the direction; the shading only adds weight. The sign is a convention, not observed dealer positions.</p><div class="tiles" id="ctx-heat"></div></div>
+        <div class="panel"><h2>Gamma chart</h2><p class="q">Pick a ticker. Bars are modeled gamma per strike (calls up, puts down); lines mark spot, the call wall, the put wall and the gamma flip.</p><div class="chips" id="ctx-pick" role="tablist" aria-label="Ticker"></div><div id="ctx-gex"></div><p class="q" style="margin-top:14px">Recent daily closes with the same levels drawn across.</p><div id="ctx-price"></div></div>
+        <div class="panel"><h2>Upcoming events and expected moves</h2><p class="q">The expected move is the at-the-money straddle of the nearest expiry, as a percent of the price: what the options market charges, not a forecast. An earnings date of unknown means no source answered.</p><div class="scroll" id="ctx-events"></div><ul class="plain" id="ctx-macro" style="margin-top:10px"></ul></div>
+        <details class="notes panel">
+          <summary>What this can and cannot tell you</summary>
+          <ul class="plain" id="ctx-notes" style="margin-top:10px"></ul>
         </details>
       </section>
 

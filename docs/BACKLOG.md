@@ -48,6 +48,8 @@ Own data the owner provides stays out of commits and logs, and results are label
 
 ## Next up
 
+0000. **Owner roadmap (2026-11-17).** Bigger pieces, in order, in `docs/OWNER_ROADMAP.md`. Item 1 (Market context page) is done; take item 2 next.
+
 000. **Evolution plan, Phase 1 (owner priority, 2026-11-16).** See `docs/EVOLUTION_PLAN.md`. Shadow book first slice is built
    (`shadow.py`, see Done). Still open, in order: (a) follow the top candidates of each strategy and lane, not only the generic
    most-active pick; (b) record IV percentile and days to earnings per followed contract (listed in `missing_features`);
