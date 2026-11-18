@@ -1,4 +1,4 @@
-"""Scheduled events that can move an option's price regardless of the trend: earnings and FOMC decisions.
+"""Scheduled earnings, FOMC decisions and selected US economic releases.
 
 Unknown never means safe. A calendar answers with a list (possibly empty: "confirmed none") or with None
 ("could not find out"). The events agent treats None for a single stock as a veto.
@@ -9,7 +9,8 @@ Sources, and what is NOT verified:
   preceding it"). A date after 2027 is unknown here, so the macro answer is None. Add a year only from that page.
 * Earnings dates: no official free feed exists. `yahoo_earnings_dates` uses Yahoo's unofficial calendar through yfinance;
   those dates are often estimates and the call has not been verified against the live service from this environment.
-Not covered: CPI, jobs reports and other macro releases, dividends, index rebalances, company-specific news.
+BLS coverage for CPI and the Employment Situation is limited to November–December 2026.
+Other macro releases, dividends, index rebalances and company-specific news are outside this calendar.
 """
 from __future__ import annotations
 
@@ -26,6 +27,14 @@ FOMC_DECISION_DAYS: dict[int, tuple[date, ...]] = {
     2027: tuple(date(2027, m, d) for m, d in ((1, 27), (3, 17), (4, 28), (6, 9), (7, 28), (9, 15), (10, 27), (12, 8))),
 }
 TENTATIVE_YEARS = frozenset({2027})
+BLS_SOURCE = "https://www.bls.gov/schedule/2026/home.htm"
+BLS_START, BLS_END = date(2026, 11, 1), date(2026, 12, 31)
+BLS_RELEASES = (
+    (date(2026, 11, 6), "US jobs"),
+    (date(2026, 11, 10), "US CPI"),
+    (date(2026, 12, 4), "US jobs"),
+    (date(2026, 12, 10), "US CPI"),
+)
 
 # Funds have no earnings. Anything not listed here is treated as a single stock whose earnings date must be known.
 ETFS = frozenset({
@@ -36,7 +45,7 @@ ETFS = frozenset({
 
 @dataclass(frozen=True)
 class Event:
-    kind: str  # "FOMC" | "EARNINGS"
+    kind: str
     day: date
     source: str
     tentative: bool = False
@@ -51,6 +60,8 @@ class EventView:
     macro: Optional[tuple[Event, ...]]
     earnings: Optional[tuple[Event, ...]]
     is_etf: bool
+    economic_releases: tuple[Event, ...] = ()
+    economic_window_covered: bool = False
 
 
 EarningsSource = Callable[[str], Optional[list[date]]]
@@ -95,8 +106,10 @@ class EventCalendar:
             earnings = self.earnings(symbol, start, end)
         except Exception:  # noqa: BLE001
             macro = earnings = None
+        economic = tuple(Event(kind, day, BLS_SOURCE) for day, kind in BLS_RELEASES if start <= day <= end)
+        near_end = min(end, start + timedelta(days=1))
         return EventView(None if macro is None else tuple(macro), None if earnings is None else tuple(earnings),
-                         symbol.upper() in ETFS)
+                         symbol.upper() in ETFS, economic, BLS_START <= start <= near_end <= BLS_END)
 
 
 def yahoo_earnings_dates(symbol: str) -> Optional[list[date]]:

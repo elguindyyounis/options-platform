@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional, Sequence
 
+from .market_clock import NY
 from .events import EventView
 from .marketdata import ChainRow, MarketSnapshot
 from .models import Account, Position, Right
@@ -220,22 +221,24 @@ def exposure(ctx: Context) -> Verdict:
 
 
 EARNINGS_NEAR_DAYS = 5  # a report this close is mostly an implied-volatility trade, not a trend trade
-FOMC_NEAR_DAYS = 1
+MACRO_NEAR_DAYS = 1
 
 
 def events(ctx: Context) -> Verdict:
-    """Earnings and FOMC decisions. Unknown earnings for a single stock is a hard veto: fail closed."""
+    """Earnings gates and advisory FOMC and BLS release proximity."""
     ev = ctx.events
     if ev is None:
         return Verdict("events", GATE, OPPOSE, 1.0, ("no event calendar was consulted",), hard_veto=True)
-    today = ctx.now.date()
+    today = ctx.now.astimezone(NY).date()
     evidence: dict[str, Any] = {"is_etf": ev.is_etf, "earnings": [e.to_dict() for e in ev.earnings or []],
                                 "fomc": [e.to_dict() for e in ev.macro or []][:3]}
+    evidence["economic_releases"] = [e.to_dict() for e in ev.economic_releases]
+    evidence["economic_window_covered"] = ev.economic_window_covered
     if ev.earnings is None:
         return Verdict("events", GATE, OPPOSE, 1.0, ("earnings date unknown for a single stock: a report can gap the price and crush implied volatility",),
                        evidence, hard_veto=True)
     reasons: list[str] = []
-    veto, conf = False, 0.0
+    conf = 0.0
     if ev.earnings:
         nxt = min(ev.earnings, key=lambda e: e.day)
         days = (nxt.day - today).days
@@ -247,13 +250,19 @@ def events(ctx: Context) -> Verdict:
     if ev.macro is None:
         reasons.append("FOMC calendar does not cover these dates")
     else:
-        soon = [e for e in ev.macro if 0 <= (e.day - today).days <= FOMC_NEAR_DAYS]
+        soon = [e for e in ev.macro if 0 <= (e.day - today).days <= MACRO_NEAR_DAYS]
         if soon:
             conf = max(conf, 0.4)
             reasons.append(f"FOMC decision on {soon[0].day.isoformat()}" + (" (tentative)" if soon[0].tentative else ""))
+    for release in ev.economic_releases:
+        if 0 <= (release.day - today).days <= MACRO_NEAR_DAYS:
+            conf = max(conf, 0.4)
+            reasons.append(f"{release.kind} release on {release.day.isoformat()}")
+    if not ev.economic_window_covered:
+        reasons.append("the BLS table does not cover the full near-term window")
     if conf > 0:
         return Verdict("events", GATE, OPPOSE, conf, tuple(reasons), evidence)
-    return Verdict("events", GATE, ABSTAIN, reasons=tuple(reasons) or ("no scheduled earnings or FOMC decision in the way",), evidence=evidence)
+    return Verdict("events", GATE, ABSTAIN, reasons=tuple(reasons) or ("no scheduled event flagged in the entry window",), evidence=evidence)
 
 
 def skeptic(ctx: Context) -> Verdict:
@@ -285,7 +294,9 @@ def skeptic(ctx: Context) -> Verdict:
     if ctx.events is None:
         objections.append(("major", "no event calendar was consulted: earnings and FOMC dates are unchecked"))
     else:
-        objections.append(("minor", "CPI, jobs data, dividends and company news are not checked"))
+        objections.append(("minor", "dividends and company news are not checked"))
+        if not ctx.events.economic_window_covered:
+            objections.append(("minor", "the BLS table does not cover the full near-term window"))
         if ctx.events.macro is None:
             objections.append(("minor", "the FOMC table does not cover these dates"))
     objections.append(("minor", "the baseline strategy has no demonstrated edge"))

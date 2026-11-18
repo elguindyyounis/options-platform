@@ -20,7 +20,7 @@ from . import committee as cmt
 from .agents import Context
 from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
-from .market_clock import session_status, upcoming_closures
+from .market_clock import NY, session_status, upcoming_closures
 from .events import EventCalendar
 from .dataquality import MAX_FUTURE_SKEW_S, check_snapshot, frozen_issue, quote_fingerprint
 from .diagnostics import clock_status
@@ -492,7 +492,7 @@ class TradingEngine:
             if cap < 1:
                 continue
             try:
-                view = self.calendar.view(symbol, now.date(), p.contract.expiry)
+                view = self.calendar.view(symbol, now.astimezone(NY).date(), p.contract.expiry)
                 ctx = Context(snap, p, now, account, self.manager.policy, tuple(positions), cap,
                               cfg.min_dte_to_hold, cfg.stop_loss_pct, view, self._flow_view(symbol, now))
                 d = cmt.decide(ctx, weights, trust)
