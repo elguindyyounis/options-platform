@@ -8,3 +8,4 @@ One line per run. Columns: date, followed candidates, trading days of shadow boo
 | 2026-11-16 (run 2) | 0 | 0 | 0 / 0 | none (shadow book code built, not yet running on real data) |
 | 2026-11-17 | 0 (no real data from cloud) | 0 | 0 / 0 | none (independent-observation counter added) |
 | 2026-11-17 (run 2) | unknown (data repo not attached) | unknown | 0 / 0 | none (exit replay harness added) |
+| 2026-11-18 | unknown (data repo not attachable) | unknown | 0 / 0 | none (IV percentile added to shadow book for E2) |
