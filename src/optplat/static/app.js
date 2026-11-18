@@ -1361,9 +1361,32 @@
       { label: "Evaluations", right: true, get: (h) => h.evaluations },
     ], list, "No experiments registered", "Register one with: python -m optplat.research register. The baseline stays frozen.");
   }
+  function renderLab(rep) {
+    const LV = { NOT_PROVEN: "◇ Not proven", NOT_REFUTED_YET: "◆ Not refuted yet" };
+    $("lab-note").textContent = rep ? rep.note + " Window " + rep.from + " to " + rep.to + ", " + rep.symbols.length + " symbols, " + rep.strategies_tried + " strategies tried (the bar per strategy is p at most " + rep.alpha_per_strategy + ")." : "";
+    const rows = rep ? rep.results : [];
+    const pc = (v) => (v === null || v === undefined ? "n/a" : v + "%");
+    table($("lab-table"), [
+      { label: "Strategy", get: (r) => kids(el("div"), [el("b", r.name), el("div", r.description, "muted")]) },
+      { label: "Trades (days)", right: true, get: (r) => r.all.trades + " (" + r.all.independent_days + ")" },
+      { label: "Win rate", right: true, get: (r) => pc(r.all.win_rate_pct) + (r.all.win_rate_ci95 ? " [" + r.all.win_rate_ci95[0] + "-" + r.all.win_rate_ci95[1] + "]" : "") },
+      { label: "Mean trade", right: true, get: (r) => pc(r.all.mean_pct) },
+      { label: "Later dates mean", right: true, get: (r) => pc(r.later.mean_pct) + " (" + r.later.trades + ")" },
+      { label: "Random entries mean", right: true, get: (r) => pc(r.random.mean_pct) + ", p " + (r.random.p_value === null ? "n/a" : r.random.p_value) },
+      { label: "Windows up", right: true, get: (r) => r.windows_positive + " of " + r.windows_with_trades },
+      { label: "Verdict", get: (r) => kids(el("div"), [el("b", LV[r.verdict] || r.verdict)].concat(r.reasons.map((w) => el("div", w, "muted")))) },
+    ], rows, "The lab has not run yet", "Choose Run the lab now, or run python -m optplat.lab --data yahoo --save-db <your database> on the computer that runs the platform.");
+    const rg = [];
+    rows.forEach((r) => Object.keys(r.by_regime).forEach((g) => rg.push({ name: r.name, g: g, x: r.by_regime[g] })));
+    table($("lab-regime"), [
+      { label: "Strategy", get: (r) => r.name }, { label: "Market", get: (r) => r.g === "UP" ? "▲ SPY above its 50 day average" : r.g === "DOWN" ? "▼ SPY below it" : "Unknown" },
+      { label: "Trades", right: true, get: (r) => r.x.trades }, { label: "Win rate", right: true, get: (r) => pc(r.x.win_rate_pct) },
+      { label: "Mean trade", right: true, get: (r) => pc(r.x.mean_pct) }, { label: "Sample", get: (r) => (r.x.enough ? "" : "too few to judge") },
+    ], rg, "No regime split yet", "");
+  }
   async function loadResearch() {
-    const [hyp, learn] = await Promise.all([api("/api/research/hypotheses"), api("/api/learning")]);
-    renderResearch(hyp); renderLearning(learn);
+    const [hyp, learn, lab] = await Promise.all([api("/api/research/hypotheses"), api("/api/learning"), api("/api/lab")]);
+    renderResearch(hyp); renderLearning(learn); renderLab(lab);
   }
   const VERDICT = { IMPROVING: ["▲ Improving", "gain"], WORSENING: ["▼ Getting worse", "loss"], NO_CLEAR_CHANGE: ["◆ No clear change", ""], TOO_EARLY: ["◇ Too early to say", ""] };
   function renderLearning(l) {
@@ -1748,6 +1771,7 @@
     t.hidden = !showing; $("equity-chart").hidden = showing;
     $("btn-table").textContent = showing ? "Show as chart" : "Show as table";
   });
+  $("btn-lab").addEventListener("click", async () => { $("lab-status").textContent = "Running"; try { renderLab(await api("/api/lab/run", { method: "POST" })); $("lab-status").textContent = "Done"; } catch (e) { $("lab-status").textContent = "Could not run: " + e.message; } });
   $("btn-cycle").addEventListener("click", () => act(() => api("/api/engine/cycle", { method: "POST" })));
   $("btn-start").addEventListener("click", () => act(() => api("/api/engine/start", { method: "POST" })));
   $("btn-stop").addEventListener("click", () => act(() => api("/api/engine/stop", { method: "POST" })));

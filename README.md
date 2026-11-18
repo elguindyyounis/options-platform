@@ -130,6 +130,11 @@ subclass `BrokerConformance`, make the tests pass, then run it against a paper a
 
 ## Open the dashboard
 
+**Nothing at http://127.0.0.1:8800?** The dashboard only exists while the platform is running, and the platform stops when its Terminal
+window closes. Double-click `start-platform.command` (or run `python -m optplat`) and keep that window open. Type the address with
+`http://` at the start, or Firefox searches the web for it. If port 8800 is taken by another program the platform moves to the next
+free port and prints it, so use the address it prints. The options-alerter is a different app on port 8787.
+
 `python -m optplat` serves a dashboard at http://127.0.0.1:8800. Paste your `OPTPLAT_API_TOKEN`, then
 **Run one cycle**. With the default demo market you can tick *Automatic entries* and *Save settings*
 to watch positions open and close. The token is kept in `sessionStorage` for the tab only. Each panel is headed

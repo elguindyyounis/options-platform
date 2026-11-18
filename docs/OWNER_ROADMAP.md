@@ -7,6 +7,7 @@ control, no weakened test, no fake data). Items are ordered; take the first not 
 | # | Item | Status |
 | --- | --- | --- |
 | 1 | **Market context page**: calls vs puts (volume, premium, open interest) for index funds and mega-caps with a fixed, declared reading; modeled gamma per strike, call wall, put wall, gamma flip; net-gamma heat map per ticker; gamma chart and price chart with the levels; expected move from the ATM straddle; upcoming earnings and FOMC | Done 2026-11-17 (`context.py`, `/api/context`, Context page). Real Yahoo data not seen from the cloud; unvalidated |
+| 0 | **Strategy lab** (owner, 2026-11-18): fixed entry rules re-tested over many symbols and windows, with win rate and interval, later-30% check, random-entry comparison, market regime split | Done 2026-11-18 (`lab.py`, `python -m optplat.lab`, Research page). Needs real Yahoo bars from the Mac; options not modelled |
 | 2 | **Context history**: store the per-ticker context each scan (already in `scan_results`) and chart sentiment and net-gamma over days, so the owner sees change, not a snapshot | Open |
 | 3 | **Strategy accounts page**: each option lane and the 10x challenge side by side: equity, trades, hit rate with the sample warning, harder-exit P&L, what is currently being tuned. Platform data only; alerter data lives on the Mac | Open |
 | 4 | **Agent conversation page**: per decision, what each committee agent said (vote, reason, veto), where they disagreed, and what happened after. Reads `decisions` and the committee output | Open |
