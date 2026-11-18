@@ -308,6 +308,22 @@ def test_calendar_dates_match_the_fed_table_and_mark_2027_tentative():
     assert [(e.day, e.tentative) for e in got] == [(date(2027, 1, 27), True)]
 
 
+def test_official_bls_dates_are_evidenced_at_entry_and_missing_coverage_is_explicit():
+    cal = EventCalendar()
+    view = cal.view("QQQ", date(2026, 12, 3), date(2027, 1, 8))
+    assert view.economic_window_covered
+    assert [(e.kind, e.day) for e in view.economic_releases] == [
+        ("US jobs", date(2026, 12, 4)), ("US CPI", date(2026, 12, 10))
+    ]
+    vote = events(ctx(ev=view, now=NOW.replace(month=12, day=3)))
+    assert vote.stance == OPPOSE
+    assert "US jobs release on 2026-12-04" in vote.reasons
+    assert vote.evidence["economic_releases"][0]["source"].startswith("https://www.bls.gov/")
+    uncovered = cal.view("QQQ", date(2026, 12, 31), date(2027, 1, 8))
+    assert not uncovered.economic_window_covered
+    assert not uncovered.economic_releases
+
+
 def test_earnings_calendar_etfs_unknown_cache_and_failures():
     calls = []
 
