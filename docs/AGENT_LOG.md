@@ -833,3 +833,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Decisions made: reading bins (call-heavy at 1.3 or more, put-heavy at 0.7 or less) fixed in advance and labelled descriptive; index put-heavy is not called bearish (hedging); walls are the largest modeled strike above or below spot.
 * Verified: 664 pytest pass (5 new in `tests/test_context.py`, page list in `test_dashboard.py` extended); headless Chromium on the fictional demo data showed all sections with no script errors.
 * Not verified: real Yahoo chains (unreachable from the cloud), scan time with 12 extra chains, the Mac. Nothing changes what any lane trades. Earnings dates are unknown without a source.
+
+## 2026-11-18 (owner asked: why is 127.0.0.1:8800 unreachable, and build repeatable strategy tests)
+
+* Port 8800: a clean start of current `main` serves the dashboard on 8800 (checked in the cloud: health 200). The Mac copy is a manual clone started by hand, so the page only exists while a terminal runs `python -m optplat`; Firefox also searches the web unless `http://` is typed. Not verified on the Mac. Added `start-platform.command` (creates the venv, opens the browser) and a README note.
+* Changed: `lab.py` (four pre-declared daily-close strategies, win rate with Wilson interval, later-30% check, three-best-removed, 4 windows, regime split by SPY vs its 50 day average, 300 random-entry repeats with p-value, Bonferroni bar), `python -m optplat.lab`, `/api/lab`, `/api/lab/run`, a Research page panel.
+* Verified: 672 pytest pass (8 new, including no-look-ahead, determinism, and a planted edge that passes while pure random walks do not). Fictional demo walks show every rule NOT_PROVEN, as they should.
+* Not verified: real Yahoo bars (unreachable from the cloud), the Mac. Underlying not options; stops on closes only; a pass would mean "not refuted yet", never an edge. Nothing here changes any lane.

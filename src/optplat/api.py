@@ -261,6 +261,23 @@ def create_app(
                     "earnings": earnings, "earnings_note": "null means the date is unknown (no source or the source failed), not that none is scheduled.",
                     "macro": None if macro is None else [e.to_dict() for e in macro]}
 
+        @app.get("/api/lab", dependencies=[Depends(auth)])
+        def lab_latest() -> Optional[dict[str, Any]]:
+            import json as _json
+
+            raw = engine.store.get_state("lab_latest", "")
+            return _json.loads(raw) if raw else None
+
+        @app.post("/api/lab/run", dependencies=[Depends(auth)])
+        def lab_run() -> dict[str, Any]:
+            """Re-run the strategy lab on the core tickers' daily bars from the current data source. Research only."""
+            from . import context, lab
+
+            try:
+                return lab.run_and_store(engine.provider, engine.store, context.CORE, months=24)
+            except Exception as exc:  # noqa: BLE001 - say why, never invent results
+                raise HTTPException(status_code=502, detail=f"The lab could not run: {type(exc).__name__}: {str(exc)[:120]}") from exc
+
         @app.get("/api/tracker", dependencies=[Depends(auth)])
         def tracker_report() -> dict[str, Any]:
             from . import tracker
