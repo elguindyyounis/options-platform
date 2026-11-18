@@ -784,6 +784,7 @@ class TradingEngine:
                         "symbol": symbol,
                         "contract": cand.contract.occ_symbol.strip(),
                         "score": cand.score,
+                        "opportunity": cand.rationale.get("opportunity"),
                         "limit_price": cand.limit_price,
                         "trend": cand.rationale.get("trend"),
                         "spread_pct": cand.rationale.get("spread_pct"),
