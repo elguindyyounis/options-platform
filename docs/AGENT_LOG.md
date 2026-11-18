@@ -840,3 +840,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Changed: `lab.py` (four pre-declared daily-close strategies, win rate with Wilson interval, later-30% check, three-best-removed, 4 windows, regime split by SPY vs its 50 day average, 300 random-entry repeats with p-value, Bonferroni bar), `python -m optplat.lab`, `/api/lab`, `/api/lab/run`, a Research page panel.
 * Verified: 672 pytest pass (8 new, including no-look-ahead, determinism, and a planted edge that passes while pure random walks do not). Fictional demo walks show every rule NOT_PROVEN, as they should.
 * Not verified: real Yahoo bars (unreachable from the cloud), the Mac. Underlying not options; stops on closes only; a pass would mean "not refuted yet", never an edge. Nothing here changes any lane.
+## 2026-11-17 (scheduled improvement run): exit replay harness
+
+* Evolution plan Phase 1 item 3. Helps X1 (take-profit/stop grid), X2 (time stop), X3 (trailing stop) and gives E1-E5 an outcome to compare. Phase 1 gate not met (no real shadow-book data seen), so no hypothesis was registered or resolved.
+* Decision made: took (c) before (a)/(b) of backlog item 000: per-strategy following needs strategy plumbing in the scan hook, and days to earnings has no free source yet; the harness is self-contained and testable now.
+* Changed: `exit_replay.py` (rules, replay over independent observations, summary, paired `compare` with the plan's mechanical bar: later 30% of dates, seeded 95% bootstrap, minus top three), `GET /api/shadow/exits`. Entry ask, exit bid, plus a stressed exit (bid minus half spread); stop checked before take-profit; unresolved paths counted, never guessed. Merged `origin/main` into integration first (clean).
+* Verified: `python -m pytest -q` 676 pass (12 new in `tests/test_exit_replay.py`). Not verified: real data. The private data repository (`options-platform-data`) is not attached to this session, so no real results were read. Every rule in the grid counts towards a stricter bar once hypotheses are registered; the report is exploratory. No risk, order, auth, sizing, broker or schema change.
+
+## 2026-11-18 (challenger run): research progress panel
+
+* Alerter unchanged at `9eb85e0`; read `sizing.py` (see COMPARISON_ALERTER). Wednesday: no weekend scan.
+* Changed: Desk page "Research progress" panel built by `buildResearchProgress` from `/api/shadow`: gate progress per line, the independent sample next to the followed count, a note that the export streak is invisible here, and an unknown or fictional state shown as a note. textContent only. Display-only; nothing a lane trades changed.
+* Logged: UX-3 (per-strategy-account performance needs alerter data on the Mac, not faked), UX-4 (one why-taken-or-skipped feed).
+* Verified: `python -m pytest -q` 677 pass (1 new node-harness test). Not verified: real shadow data, the panel in a real browser, the Mac. The Mac copy is a manual git clone: the owner must pull; arrival is not confirmed.
