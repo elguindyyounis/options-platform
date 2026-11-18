@@ -1656,6 +1656,36 @@
     box.appendChild(ul);
   }
 
+  // "Research progress": how far the shadow book is from its gate, and what sample a test could really claim.
+  // Pure function of /api/shadow. Items are {level, text}; missing data is reported as unknown, never as fine.
+  function buildResearchProgress(sh) {
+    const out = [];
+    const add = (level, text) => out.push({ level, text });
+    if (!sh || typeof sh.followed !== "number" || !sh.gate) {
+      add("warn", "Research progress unknown: the shadow-book report could not be read.");
+      return out;
+    }
+    if (sh.fictional) add("warn", "The shadow book is following FICTIONAL demo data: none of this counts towards the research gate.");
+    const g = sh.gate;
+    const pct = (sh.complete_pct === null || sh.complete_pct === undefined) ? "n/a" : sh.complete_pct + "%";
+    if (sh.followed === 0) add("warn", "Nothing is being followed yet, so no hypothesis can be tested. Candidates are recorded when a scan runs.");
+    else add("ok", "Research gate (every line must hold): " + sh.trading_days + " of " + g.trading_days + " trading days, " +
+      sh.underlyings + " of " + g.underlyings + " underlyings, " + sh.followed + " of " + g.followed + " followed contracts, " +
+      pct + " of paths complete (need " + g.complete_pct + "%).");
+    if (typeof sh.independent_observations === "number" && sh.followed > 0) add("warn", "Real sample size: " + sh.independent_observations +
+      " independent observation(s) (one per name per day), not " + sh.followed + ". Several strikes of one name move together, so the larger count overstates the evidence.");
+    add("ok", "The gate also needs the nightly export to run " + g.export_days_in_a_row + " days in a row. This page cannot see that; no hypothesis is registered until the owner confirms the gate.");
+    return out;
+  }
+
+  function renderResearch(items) {
+    const box = $("research-progress");
+    box.replaceChildren();
+    const ul = el("ul");
+    items.forEach((i) => ul.appendChild(el("li", (i.level === "ok" ? "OK: " : "Note: ") + i.text, i.level)));
+    box.appendChild(ul);
+  }
+
   function planFor(plans, contract, key) {
     const p = (plans || []).find((x) => x.contract === contract);
     return !p || p[key] === null || p[key] === undefined ? "unknown" : p[key];
@@ -1670,11 +1700,12 @@
   async function refresh() {
     if (!token) { S.connected = false; showPage(); return; }
     try {
-      const [health, status, portfolio, orders, report, decisions, eq, allTrades, results, policy] = await Promise.all([
+      const [health, status, portfolio, orders, report, decisions, eq, allTrades, results, policy, shadowRep] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         api("/api/engine/status"), api("/api/portfolio"), api("/api/paper/orders"), api("/api/report"),
         api("/api/journal?limit=15"), api("/api/equity"), api("/api/alltrades").catch(() => null),
         api("/api/results").catch(() => null), api("/api/risk/policy").catch(() => null),
+        api("/api/shadow").catch(() => null),
       ]);
       S.connected = true; S.core = { status, report };
       checkForNewBuild(health.build_id);
@@ -1689,6 +1720,7 @@
       renderOrders(orders);
       syncControls(status, status.config);
       renderGlance(buildGlance(health, status, portfolio, results, policy));
+      renderResearch(buildResearchProgress(shadowRep));
       if (results) renderResults(results);
       renderCycleDecisions(status.last_cycle, status.recent_outcomes);
       renderCandidates(status.last_cycle);
@@ -1773,6 +1805,7 @@
     resizeTimer = setTimeout(() => { if (route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); }, 150);
   });
   window.optplatGlanceOrder = orderGlance;
+  window.optplatResearch = buildResearchProgress;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   showPage();
   refresh();

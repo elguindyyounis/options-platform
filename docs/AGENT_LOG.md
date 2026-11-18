@@ -840,3 +840,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Decision made: took (c) before (a)/(b) of backlog item 000: per-strategy following needs strategy plumbing in the scan hook, and days to earnings has no free source yet; the harness is self-contained and testable now.
 * Changed: `exit_replay.py` (rules, replay over independent observations, summary, paired `compare` with the plan's mechanical bar: later 30% of dates, seeded 95% bootstrap, minus top three), `GET /api/shadow/exits`. Entry ask, exit bid, plus a stressed exit (bid minus half spread); stop checked before take-profit; unresolved paths counted, never guessed. Merged `origin/main` into integration first (clean).
 * Verified: `python -m pytest -q` 676 pass (12 new in `tests/test_exit_replay.py`). Not verified: real data. The private data repository (`options-platform-data`) is not attached to this session, so no real results were read. Every rule in the grid counts towards a stricter bar once hypotheses are registered; the report is exploratory. No risk, order, auth, sizing, broker or schema change.
+
+## 2026-11-18 (challenger run): research progress panel
+
+* Alerter unchanged at `9eb85e0`; read `sizing.py` (see COMPARISON_ALERTER). Wednesday: no weekend scan.
+* Changed: Desk page "Research progress" panel built by `buildResearchProgress` from `/api/shadow`: gate progress per line, the independent sample next to the followed count, a note that the export streak is invisible here, and an unknown or fictional state shown as a note. textContent only. Display-only; nothing a lane trades changed.
+* Logged: UX-3 (per-strategy-account performance needs alerter data on the Mac, not faked), UX-4 (one why-taken-or-skipped feed).
+* Verified: `python -m pytest -q` 677 pass (1 new node-harness test). Not verified: real shadow data, the panel in a real browser, the Mac. The Mac copy is a manual git clone: the owner must pull; arrival is not confirmed.

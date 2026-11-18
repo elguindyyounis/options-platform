@@ -101,3 +101,11 @@ These are challenges raised by reading the alerter. None is proven.
 * **Weekend "What were we wrong about?"** flags high-score losses, wins with incomplete entry evidence, and the largest win as a share of
   gross profit. The platform's results panel has no largest-win share; candidate for a later display-only change.
 * Also in range: `whale_thesis.py` (volume/OI dossiers; same caveat as the platform that volume/OI is not signed flow). Not read in full.
+
+## Addendum 2026-11-18: `sizing.py` (alerter at `9eb85e0`, unchanged since the last run)
+
+* **Size follows an evidence index, and says it is not a probability.** Index = base + 0.006 x score +/- trend match, volume >= OI bonus, spread penalty, IV penalty, small learning nudge, clamped to 0.10-0.90. `calibrated_probability` is always `None`. The platform has no equivalent index; its sizing is the fixed `RiskPolicy` caps, and this run did not touch them (owner decision).
+* **Honest caps on thin evidence.** With fewer than 20 real-source closed outcomes the index is capped at 0.78, and with fewer than 10 the profile fraction is capped. Learning only counts real-source outcomes, so demo results cannot inflate sizes. The platform's analogue is the sample-size gate on the Results panel.
+* **Skip, do not shrink.** Below a lane's conviction gate the quantity is 0 and the reason is written ("skipped rather than sized small"). Drawdown of 10% and 20% cuts the fraction by 35% and 50%. Goals never raise size (`goal_affects_size: False`).
+* **Weakness to keep in mind on the alerter side (not ours to fix):** the index weights are hand-set constants, never fitted; with aggressive paper sizes (owner's choice) a high index only means "more evidence items lined up", so lane P&L judged on few trades says little.
+* Platform side: no change. Logged as UX-3 that per-strategy-account sizing and tuning live in the alerter on the Mac and cannot be shown here without faking them.

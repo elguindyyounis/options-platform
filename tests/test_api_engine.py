@@ -216,3 +216,34 @@ console.log(JSON.stringify({halt,ordered,stable,cal,strat,riskLow,riskHigh,riskM
     s = [i for i in r["strat"] if "Strategy in use" in i["text"]]
     assert s and "flow-otm 1.0" in s[0]["text"] and "not split by strategy" in s[0]["text"] and "no demonstrated edge" in s[0]["text"]
     assert any("strategy is running is unknown" in i["text"] and i["level"] == "warn" for i in r["none"])
+
+
+def test_research_progress_line_is_text_only_and_honest_about_sample_size():
+    """UX-1: the Desk shows shadow-book gate progress and the independent sample, never a missing report as fine."""
+    import json, shutil, subprocess
+    from pathlib import Path
+    node = shutil.which("node")
+    if not node:
+        import pytest
+        pytest.skip("node not installed")
+    root = Path(__file__).resolve().parents[1] / "src" / "optplat" / "static"
+    assert 'id="research-progress"' in (root / "index.html").read_text()
+    assert '"/api/shadow"' in (root / "app.js").read_text() and "innerHTML" not in (root / "app.js").read_text()
+    harness = """
+const stub=()=>new Proxy(function(){},{get:(t,k)=>k==='matches'?false:(k==='style'||k==='classList'||k==='dataset')?stub():stub(),set:()=>true,apply:()=>stub()});
+global.document={getElementById:()=>stub(),createElement:()=>stub(),querySelectorAll:()=>[],addEventListener(){},createTextNode:()=>stub()};
+global.window={matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(){}};global.location={hash:''};global.history={replaceState(){}};
+global.sessionStorage={getItem:()=>'',setItem(){},removeItem(){}};global.fetch=()=>new Promise(()=>{});global.setInterval=()=>0;global.setTimeout=()=>0;
+require(process.argv[1]);
+const r=window.optplatResearch;
+const gate={trading_days:20,followed:2000,underlyings:50,complete_pct:80,export_days_in_a_row:5};
+const real={fictional:false,trading_days:3,followed:240,underlyings:12,complete_pct:null,independent_observations:36,gate};
+console.log(JSON.stringify({none:r(null),real:r(real),fake:r({...real,fictional:true}),empty:r({...real,followed:0,independent_observations:0})}));
+"""
+    out = json.loads(subprocess.run([node, "-e", harness, str(root / "app.js")], capture_output=True, text=True, check=True).stdout)
+    assert out["none"][0]["level"] == "warn" and "unknown" in out["none"][0]["text"]
+    real = " ".join(i["text"] for i in out["real"])
+    assert "3 of 20 trading days" in real and "240 of 2000 followed" in real and "n/a of paths complete" in real
+    assert "36 independent observation(s)" in real and "not 240" in real and "export" in real
+    assert any("FICTIONAL" in i["text"] and i["level"] == "warn" for i in out["fake"])
+    assert any("Nothing is being followed" in i["text"] for i in out["empty"])

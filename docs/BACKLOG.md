@@ -121,6 +121,7 @@ Existing items, in order:
 
 ## Done
 
+* Research progress panel on the Desk page (UX-1, 2026-11-18): gate progress, independent sample and export caveat from `/api/shadow`; `tests/test_api_engine.py`. New UX items UX-3, UX-4 are in `docs/CHALLENGES.md`.
 * Shadow book, first slice (evolution plan Phase 1.1): `shadow.py`, tables `shadow_follows`/`shadow_points`, hooked into the scan after the tracker, `/api/shadow` gate progress, tables added to the export allow-list. Follows up to 6 liquid contracts per underlying per day with features at entry, then records the bid path (every scan for 10 trading days, daily to 30). Research only.
 * Nightly secret-free paper-data export (`export.py`, `deploy/export_push.sh`, a third LaunchAgent in `install_mac.sh`): allow-listed tables, redaction, read-only, pushes only to a repository confirmed private. Needs the owner to create the private repository and set `OPTPLAT_EXPORT_REPO`.
 * Refresh-to-update (owner request 2026-11-16): `deploy.py` build id on `/api/health`, token-protected `/api/deployment/check-on-refresh`, `deploy/` installer and fast-forward-only updater for the `stable` branch, `promote-stable.yml`, dashboard reload on a new build. See `docs/DEPLOYMENT.md`. Reaches the Mac only after integration is merged to `main`; untested on macOS.
