@@ -853,3 +853,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Changed: Desk page "Research progress" panel built by `buildResearchProgress` from `/api/shadow`: gate progress per line, the independent sample next to the followed count, a note that the export streak is invisible here, and an unknown or fictional state shown as a note. textContent only. Display-only; nothing a lane trades changed.
 * Logged: UX-3 (per-strategy-account performance needs alerter data on the Mac, not faked), UX-4 (one why-taken-or-skipped feed).
 * Verified: `python -m pytest -q` 677 pass (1 new node-harness test). Not verified: real shadow data, the panel in a real browser, the Mac. The Mac copy is a manual git clone: the owner must pull; arrival is not confirmed.
+
+## 2026-11-18 (scheduled improvement run): IV percentile in the shadow book
+
+* Evolution plan Phase 1 item 1(b). Helps E2 (low IV vs high IV for that name), which cannot be tested without it. Gate not met and no real data seen, so no hypothesis registered or resolved.
+* Merged `origin/main` into integration first (clean). Decision made: a name's IV level is the median IV of contracts within 5% of spot and 7 to 120 days out, stored as `name_iv` on each follow; `iv_percentile` is the share of that name's earlier daily levels below today's, written only with at least 20 prior days (before that it stays listed in `missing_features`, never zero). Past days only, so no look-ahead.
+* Verified: `python -m pytest -q` 689 pass (3 new in `tests/test_shadow.py`). Not verified: real chains, the 20-day warm-up on real data (history window is about 35 trading days, enough for the minimum). The private data repo `options-platform-data` was not attachable from this session, so no real results were read. Days to earnings is still missing. No risk, order, auth, sizing, broker or schema change.

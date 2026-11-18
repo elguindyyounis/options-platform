@@ -52,7 +52,7 @@ Own data the owner provides stays out of commits and logs, and results are label
 
 000. **Evolution plan, Phase 1 (owner priority, 2026-11-16).** See `docs/EVOLUTION_PLAN.md`. Shadow book first slice is built
    (`shadow.py`, see Done). Still open, in order (a and b need strategy plumbing and an earnings source, so (c) was taken first): (a) follow the top candidates of each strategy and lane, not only the generic
-   most-active pick; (b) record IV percentile and days to earnings per followed contract (listed in `missing_features`);
+   most-active pick; (b) record IV percentile and days to earnings per followed contract (listed in `missing_features`): IV percentile DONE 2026-11-18 (`name_iv`, `iv_percentile`; appears once a name has 20 prior days, so unknown until then), days to earnings still open (no free verified source);
    (c) exit replay harness over `shadow_points`: DONE 2026-11-17 (`exit_replay.py`, `GET /api/shadow/exits`; not yet fed real data); (d) independent-observation counting: DONE 2026-11-17 (`one_per_underlying_day`, `independent_observations` in `/api/shadow`; not yet used by any test harness).
 
 00. **Follow-ups from the tracker (owner decisions marked).** Once the tracker has 20 or more marks in a group, check whether any feature

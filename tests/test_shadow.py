@@ -133,3 +133,34 @@ def test_report_counts_independent_observations_below_followed():
     shadow.observe(s, snap([row(100, vol=900), row(101, vol=800), row(102, vol=700)]), D0, T0, True)
     rep = shadow.report(s, True, D0)
     assert rep["followed"] == 3 and rep["independent_observations"] == 1
+
+
+def _iv_row(strike, iv):
+    return ChainRow(OptionContract("AAA", EXP, Right.CALL, strike), 2.0, 2.1, 500, 300, iv)
+
+
+def test_name_iv_is_median_of_near_money_and_needs_three():
+    near = [_iv_row(98, 0.2), _iv_row(100, 0.3), _iv_row(102, 0.5)]
+    assert shadow.name_iv(snap(near + [_iv_row(130, 0.9)]), D0) == 0.3  # far strike ignored
+    assert shadow.name_iv(snap(near[:2]), D0) is None
+    assert shadow.name_iv(snap([_iv_row(100, 0.0)] * 3), D0) is None  # no usable IV is unknown, not zero
+
+
+def test_iv_percentile_unknown_until_history_then_share_below():
+    assert shadow.iv_percentile(0.3, {f"d{i}": 0.2 for i in range(shadow.MIN_IV_HISTORY - 1)}) is None
+    hist = {f"d{i}": 0.1 + i / 100 for i in range(20)}
+    assert shadow.iv_percentile(0.15, hist) == 25.0 and shadow.iv_percentile(None, hist) is None
+
+
+def test_follow_gets_iv_percentile_after_enough_prior_days_and_uses_past_days_only():
+    s = Store(":memory:")
+    rows = [_iv_row(98, 0.3), _iv_row(100, 0.3), _iv_row(102, 0.3)]
+    day, now = D0, T0
+    for i in range(shadow.MIN_IV_HISTORY + 1):
+        day, now = D0 + timedelta(days=i), T0 + timedelta(days=i)
+        shadow.observe(s, snap(rows, now=now), day, now, True)
+    last = [f for f in s.shadow_all_follows(True) if f["followed_day"] == day.isoformat()]
+    first = [f for f in s.shadow_all_follows(True) if f["followed_day"] == D0.isoformat()]
+    assert first and "iv_percentile" not in first[0] and "iv_percentile" in first[0]["missing_features"]
+    assert last and last[0]["iv_percentile"] == 0.0 and "iv_percentile" not in last[0]["missing_features"]
+    assert last[0]["name_iv"] == 0.3

@@ -27,7 +27,9 @@ MAX_SPREAD_PCT = 25.0     # wider than this is not a price anyone would pay; it 
 DENSE_DAYS = 10           # a path point at every scan for this many trading days, then one per day
 MAX_AGE = 30              # trading days followed
 SLACK = 2
-MISSING_FEATURES = ["iv_percentile", "days_to_earnings"]
+MISSING_FEATURES = ["iv_percentile", "days_to_earnings"]  # iv_percentile is dropped from a row once its name has MIN_IV_HISTORY prior days
+MIN_IV_HISTORY = 20       # prior days of a name's own IV level needed before a percentile means anything
+ATM_BAND_PCT = 5.0        # contracts within this moneyness band define the name's IV level
 GATE = {"trading_days": 20, "followed": 2000, "underlyings": 50, "complete_pct": 80.0, "export_days_in_a_row": 5}
 
 
@@ -49,7 +51,25 @@ def select(snap: MarketSnapshot, day: date) -> list[ChainRow]:
     return [t[3] for t in ok[:PER_UNDERLYING]]
 
 
-def features(snap: MarketSnapshot, row: ChainRow, day: date, now: datetime) -> dict[str, Any]:
+def name_iv(snap: MarketSnapshot, day: date) -> Optional[float]:
+    """The name's IV level now: median IV of near-the-money contracts 7 to 120 days out. None when the chain gives too few."""
+    u = snap.underlying
+    vals = sorted(r.iv for r in snap.rows if r.iv and r.iv > 0 and u > 0 and abs(r.contract.strike / u - 1) * 100 <= ATM_BAND_PCT
+                  and MIN_DTE <= (r.contract.expiry - day).days <= MAX_DTE)
+    if len(vals) < 3:
+        return None
+    mid = len(vals) // 2
+    return round(vals[mid] if len(vals) % 2 else (vals[mid - 1] + vals[mid]) / 2, 4)
+
+
+def iv_percentile(current: Optional[float], history: dict[str, float]) -> Optional[float]:
+    """Share (0 to 100) of this name's earlier daily IV levels that sit below today's. None until MIN_IV_HISTORY days exist."""
+    if current is None or len(history) < MIN_IV_HISTORY:
+        return None
+    return round(sum(1 for v in history.values() if v < current) / len(history) * 100, 1)
+
+
+def features(snap: MarketSnapshot, row: ChainRow, day: date, now: datetime, nv: Optional[float] = None, ivp: Optional[float] = None) -> dict[str, Any]:
     c, u = row.contract, snap.underlying
     local = now.astimezone(NY)
     return {"symbol": snap.symbol, "contract": c.occ_symbol.strip(), "right": c.right.value, "strike": c.strike, "expiry": c.expiry.isoformat(),
@@ -58,7 +78,9 @@ def features(snap: MarketSnapshot, row: ChainRow, day: date, now: datetime) -> d
             "volume": row.volume, "open_interest": row.open_interest,
             "trend_pct": round((u / (sum(snap.closes) / len(snap.closes)) - 1) * 100, 2) if snap.closes and sum(snap.closes) > 0 else None,
             "sector": SECTOR_OF.get(snap.symbol), "hour_et": round(local.hour + local.minute / 60, 2), "followed_at": now.isoformat(),
-            "source": snap.source, "verified": snap.timestamp_verified, "missing_features": MISSING_FEATURES}
+            "source": snap.source, "verified": snap.timestamp_verified, "name_iv": nv,
+            "missing_features": [m for m in MISSING_FEATURES if not (m == "iv_percentile" and ivp is not None)],
+            **({"iv_percentile": ivp} if ivp is not None else {})}
 
 
 def point_due(age: int, observed_days: set[str], day: date) -> bool:
@@ -71,8 +93,14 @@ def point_due(age: int, observed_days: set[str], day: date) -> bool:
 def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictional: bool) -> dict[str, int]:
     """Follow new candidates from this chain and extend the paths of contracts already followed. Never raises on bad rows."""
     followed = points = 0
+    nv = name_iv(snap, day)
+    history: dict[str, float] = {}  # earlier days only, one level per day (the first recorded that day)
+    for f in sorted(store.shadow_follows(snap.symbol, day.isoformat(), fictional), key=lambda f: f["followed_at"]):
+        if f["followed_day"] < day.isoformat() and f.get("name_iv"):
+            history.setdefault(f["followed_day"], f["name_iv"])
+    ivp = iv_percentile(nv, history)
     for row in select(snap, day):
-        if store.record_shadow_follow(row.contract.occ_symbol.strip(), day.isoformat(), fictional, features(snap, row, day, now)):
+        if store.record_shadow_follow(row.contract.occ_symbol.strip(), day.isoformat(), fictional, features(snap, row, day, now, nv, ivp)):
             followed += 1
     by_contract = {r.contract.occ_symbol.strip(): r for r in snap.rows}
     seen = store.shadow_observed_days(snap.symbol, fictional)
