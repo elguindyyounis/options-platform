@@ -109,3 +109,12 @@ These are challenges raised by reading the alerter. None is proven.
 * **Skip, do not shrink.** Below a lane's conviction gate the quantity is 0 and the reason is written ("skipped rather than sized small"). Drawdown of 10% and 20% cuts the fraction by 35% and 50%. Goals never raise size (`goal_affects_size: False`).
 * **Weakness to keep in mind on the alerter side (not ours to fix):** the index weights are hand-set constants, never fitted; with aggressive paper sizes (owner's choice) a high index only means "more evidence items lined up", so lane P&L judged on few trades says little.
 * Platform side: no change. Logged as UX-3 that per-strategy-account sizing and tuning live in the alerter on the Mac and cannot be shown here without faking them.
+
+## Addendum 2026-11-19: `matched_research.py`, `event_risk.py` (alerter at `5dca972`, 11 commits since `9eb85e0`)
+
+* **Pre-registers, then splits samples by registration time.** `matched_research.py` fixes rules (`liquid-trend-fixed-horizons-v1`, registered 2026-11-18 18:00 UTC) and reports observations captured before that as `exploratory` and after it as `forward`. The platform's `exit_replay.py` has a later-30% check but no registration timestamp, so nothing separates "rule written first" from "rule fitted to this data". Worth copying when a hypothesis is registered here.
+* **Matched cohorts, one observation per name per session.** Each arm is judged on the same opportunities, with cash counted as zero when a filter skips one (`net_per_opportunity_usd`). The platform's lane comparison does not share a denominator.
+* **Unknown stays unknown.** Cases are `PENDING`, `UNOBSERVABLE` or `MEASURED`; forward exits need a time-stamped two-sided quote with spread at most 20%. Both sides pay 0.5% slippage and $0.65 per contract. The platform's exit replay uses ask in, bid out plus a stressed exit, and counts unresolved paths, so it is close in spirit; fees are not modeled there.
+* **Calendar coverage is explicit** in `event_risk.py` (`MACRO_START`/`MACRO_END`; outside it the entry is blocked as "coverage unknown"). Platform `events.py` also limits BLS coverage to Nov-Dec 2026 but a lane is not blocked by it; worth checking whether outside-coverage reads as "no events".
+* **Weakness on the alerter side:** `SHOCK` percentages are hand-set scenario inputs (labelled illustrative, not betas); the premium-cap and low-OI exceptions are experiments that deliberately loosen entry filters on paper.
+* **Still not read:** `server.py`, `handoff_challenge.py`, `opportunity.py`, the alerter's tests.
