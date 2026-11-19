@@ -23,7 +23,7 @@ from .marketdata import Bar, MarketDataProvider, MarketSnapshot
 from .models import Right, utcnow
 from .signals import liquidity_tier
 from .store import Store
-from . import context, shadow, tracker
+from . import callouts, context, shadow, tracker
 from .universe import SECTOR_OF, SECTORS, UNIVERSE  # noqa: F401  (UNIVERSE is re-exported for the lanes and tests)
 
 MIN_UNUSUAL_VOLUME = 150
@@ -396,6 +396,10 @@ class Scanner:
         surging = sorted((r for r in ranked if r["surge"] and r["symbol"] not in pick), key=lambda r: -(r["relative_volume"] or 0))
         pick += [r["symbol"] for r in surging[:CHAINS_BY_RELATIVE_VOLUME]]
         pick = [c for c in context.CORE if c in self.universe and c not in pick] + pick  # index funds and mega-caps are always read
+        try:  # names with a logged callout are read even outside the universe, so their bid path keeps growing
+            pick = [c for c in callouts.open_symbols(self.store, day, fict) if c not in pick] + pick
+        except Exception as exc:  # noqa: BLE001 - research only
+            out["errors"].append(f"callouts ({describe_exc(exc)})")
         core_snaps: list[MarketSnapshot] = []
         scanned = failed = marks_added = shadow_followed = shadow_points = 0
         for sym in pick:

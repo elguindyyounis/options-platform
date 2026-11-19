@@ -66,6 +66,18 @@ class EngineConfigBody(BaseModel):
     option_lanes_enabled: Optional[bool] = None
 
 
+class CalloutBody(BaseModel):
+    symbol: str
+    expiry: date
+    right: str = "C"
+    strike: float
+    price: float
+    size: str
+    source: str
+    day: date
+    note: str = ""
+
+
 class KillSwitchBody(BaseModel):
     active: bool
     reason: str = Field(default="", max_length=200)
@@ -292,6 +304,26 @@ def create_app(
             from .scanner import session_day
 
             return shadow.report(engine.store, engine.provider.fictional, session_day(engine.clock()))
+
+        @app.get("/api/callouts", dependencies=[Depends(auth)])
+        def callouts_summary() -> dict[str, Any]:
+            from . import callouts
+            from .scanner import session_day
+
+            return callouts.summary(engine.store, engine.provider.fictional, session_day(engine.clock()))
+
+        @app.post("/api/callouts", dependencies=[Depends(auth)])
+        def callouts_add(body: CalloutBody) -> dict[str, Any]:
+            from . import callouts
+
+            if engine.provider.fictional:
+                raise HTTPException(status_code=409, detail="Callouts are real posts; they are not logged while the fictional demo provider is active")
+            try:
+                added = callouts.record(engine.store, symbol=body.symbol, expiry=body.expiry, right=body.right, strike=body.strike, price=body.price,
+                                        size=body.size, source=body.source, day=body.day, note=body.note)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            return {"logged": added}
 
         @app.get("/api/shadow/exits", dependencies=[Depends(auth)])
         def shadow_exits() -> dict[str, Any]:

@@ -33,6 +33,11 @@ ATM_BAND_PCT = 5.0        # contracts within this moneyness band define the name
 GATE = {"trading_days": 20, "followed": 2000, "underlyings": 50, "complete_pct": 80.0, "export_days_in_a_row": 5}
 
 
+def is_callout(follow: dict[str, Any]) -> bool:
+    """A follow entered by hand from another person's alert (see callouts.py), not picked by the scan."""
+    return str(follow.get("source", "")).startswith("callout:")
+
+
 def spread_pct(row: ChainRow) -> Optional[float]:
     mid = (row.bid + row.ask) / 2
     return None if row.bid <= 0 or row.ask <= 0 or row.ask < row.bid or mid <= 0 else round((row.ask - row.bid) / mid * 100, 2)
@@ -127,7 +132,7 @@ def one_per_underlying_day(follows: list[dict[str, Any]]) -> list[dict[str, Any]
     best: dict[tuple[str, str], dict[str, Any]] = {}
     for f in follows:
         sym, day = f.get("symbol"), f.get("followed_day")
-        if not sym or not day:
+        if not sym or not day or is_callout(f):  # callouts are reported separately, never mixed into the generic sample
             continue
         key = (sym, day)
         rank = (-(f.get("volume") or 0), str(f.get("contract")))
@@ -138,7 +143,8 @@ def one_per_underlying_day(follows: list[dict[str, Any]]) -> list[dict[str, Any]
 
 def report(store: Any, fictional: bool, today: date) -> dict[str, Any]:
     """Progress towards the Phase 1 gate. 'Complete' means the path reaches the 30 trading day mark or the contract has expired."""
-    follows = store.shadow_all_follows(fictional)
+    all_follows = store.shadow_all_follows(fictional)
+    follows = [f for f in all_follows if not is_callout(f)]  # callouts do not count towards the gate
     ages: dict[tuple[str, str], int] = {}
     for p in store.shadow_all_points(fictional):
         k = (p["contract"], p["followed_day"])
@@ -151,7 +157,7 @@ def report(store: Any, fictional: bool, today: date) -> dict[str, Any]:
     status = {"trading_days": days, "followed": len(follows), "underlyings": syms, "complete_pct": pct}
     met = {k: (status[k] is not None and status[k] >= GATE[k]) for k in status}
     independent = len(one_per_underlying_day(follows))
-    return {"fictional": fictional, **status, "independent_observations": independent, "points": sum(1 for _ in ages), "gate": GATE, "gate_met": met,
+    return {"fictional": fictional, "callouts_logged": len(all_follows) - len(follows), **status, "independent_observations": independent, "points": sum(1 for _ in ages), "gate": GATE, "gate_met": met,
             "gate_met_except_export": all(met.values()),  # the export streak is not visible from here
             "note": "Gate also needs the export to run five days in a row, which this report cannot see; the owner or the weekly agent confirms it. "
                     "The 'followed' count includes several strikes of one name per day; 'independent_observations' (one per underlying per day) is the sample any hypothesis test can claim. "
