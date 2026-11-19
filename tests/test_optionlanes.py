@@ -581,3 +581,58 @@ def test_a_control_with_no_bars_or_a_failing_feed_opens_nothing_and_never_raises
     ctl, prov, store, _ = make(replace(ol.CONTROL, symbols=names), daily={}, now=OPEN)
     out = ctl.step(force=True)
     assert opened(ctl, prov, store) == [] and out["opened"] == []
+
+
+# ------------------------------------------------------------ a data failure must not use up the day's signal
+class FlakyFeed(ol.Feed):
+    """Fails the chain read the first `fails` times, then behaves normally. `window` is the chain read."""
+    def __init__(self, inner, fails):
+        self.__dict__.update(inner.__dict__)
+        self.fails, self.calls = fails, 0
+
+    def window(self, *a, **k):
+        self.calls += 1
+        if self.calls <= self.fails:
+            raise RuntimeError("chain feed hiccup")
+        return super().window(*a, **k)
+
+
+def flaky_control(fails, **over):
+    names = ("SPY",)
+    data, now = downtrend_daily(names)
+    lane, prov, store, box = make(replace(ol.CONTROL, symbols=names, **{"budget_usd": 20000.0, **over}), daily=data, now=now)
+    lane.feed = FlakyFeed(lane.feed, fails)
+    return lane, prov, store
+
+
+def test_a_swing_signal_whose_chain_could_not_be_read_is_retried_instead_of_lost_for_the_day():
+    lane, prov, store = flaky_control(fails=1)
+    first = lane.step(force=True)
+    assert opened(lane, prov, store) == [] and first["errors"] and "tried again" in " ".join(first["skips"])
+    lane.step(force=True)
+    assert len(opened(lane, prov, store)) == 1            # before the fix the day's bar was already used up and nothing happened
+    lane.step(force=True)
+    assert len(opened(lane, prov, store)) == 1            # and a success is still used up: no second entry on the same bar
+
+
+def test_a_definitive_no_is_not_retried_so_the_lane_does_not_hammer_the_chain_feed():
+    lane, prov, store = flaky_control(fails=0, budget_usd=1.0)   # one contract always costs more than the budget
+    lane.step(force=True)
+    reads = lane.feed.calls
+    out = lane.step(force=True)
+    assert reads == 1 and lane.feed.calls == 1 and opened(lane, prov, store) == [] and out["errors"] == []
+
+
+def test_a_flow_follow_up_survives_a_failed_chain_read_and_is_used_once_it_trades():
+    now = datetime(2026, 11, 12, 15, 0, tzinfo=timezone.utc)
+    fu = {"symbol": "AAPL", "contract": "AAPL  261218C00300000", "prior_day": "2026-11-11", "prior_volume": 800, "prior_oi": 40, "oi_change": 520,
+          "oi_verdict": "OI_ROSE", "position_read": "BUY_TO_OPEN", "lean": "BULLISH", "prior_low_oi": True, "prior_ratio": 20.0, "sector": "Mega-cap tech"}
+    lane, prov, store, box = make(replace(ol.FLOW, budget_usd=20000.0), now=now)
+    store.record_scan(now, True, {"as_of": now.isoformat(), "session_day": "2026-11-12", "follow_ups": [fu]})
+    lane.feed = FlakyFeed(lane.feed, 1)
+    lane.step(force=True)
+    assert opened(lane, prov, store) == []
+    lane.step(force=True)
+    assert len(opened(lane, prov, store)) == 1
+    lane.step(force=True)
+    assert len(opened(lane, prov, store)) == 1

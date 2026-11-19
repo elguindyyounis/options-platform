@@ -5,6 +5,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-19: why the option lanes made so few trades
+
+* Owner asked why short-term base, swing base/aggressive, unusual flow and the control had no trades. Read the owner's live `optplat.db` (read-only):
+  * The platform only ran on 11-11, 11-12 and 11-13 (plus pre-market today). It was off for the 11-16 to 11-18 sessions. The option lanes last ran 11-13 20:55 UTC.
+  * 850+ `FUTURE_TIMESTAMP` data-quality rejects over those days, and still 8 s ahead today. 346 of 470 snapshots on 11-12 were rejected. The Mac clock is behind the data by more than the 5 s tolerance, so chain reads are refused. Every lane enters through that gate. Only `shortterm-options-aggr` got 9 trades (on moments when the skew was inside 5 s); the others got none.
+  * The share swing lane (same rule as swing options base) made 9 trades while the options version made 0: the signal exists, the option entry fails.
+* Bug found and fixed: swing lanes (and the control) marked the day's bar as used before trying to enter, and the flow lane marked a follow-up as seen before trying. A chain read that failed or was rejected therefore used up the signal for good. Now a failed chain read (an error, not a "no contract met the limits" verdict) releases the signal for the next check. The data-quality gate and the 5 s tolerance are unchanged. Tests: three added (swing retry, definitive no is not retried, flow retry).
+* Not changed, owner decision: `MAX_FUTURE_SKEW_S`. The proper fix is a synced Mac clock.
+* Not verified: that the short-term base lane's tighter contract limits (2 to 10 days to expiry, at the money, $1,000 budget) are not also blocking it. The lanes keep only their last check's reasons, so this needs one live session after the clock is fixed.
+
 ## 2026-11-17: principles, a random-pick negative control, and a Challenge board and Risk budget on the Desk
 
 * Owner asked the platform to challenge them instead of agreeing, to be speculative and allowed to make deliberate mistakes on paper,

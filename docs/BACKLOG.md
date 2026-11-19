@@ -21,6 +21,8 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 ## Next up
 
+0000. **Persist the reason each option lane did not trade.** Today only the last check's skips are kept, and nothing is kept when the market is closed. Keep a per-day tally by reason (no signal, chain rejected, no contract met the limits, over budget, caps) per lane and show it beside each lane, so "why no trades" has a recorded answer. After the owner syncs the Mac clock, check whether `shortterm-options-base` is also blocked by its own limits.
+
 000. **More negative controls (from `docs/PRINCIPLES.md`).** A frozen-baseline lane that is never edited, a stressed-cost lane (double spread and
    slippage), and a lane that takes the opposite side of the pullback rule. Judge the rule only against these. Then check whether `control-random-swing`
    and `swing-options-base` each reach 20 closed trades and read the Desk objection about them. Do not change lane sizes or exits to speed this up (owner decision).

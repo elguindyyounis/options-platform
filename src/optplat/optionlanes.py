@@ -495,11 +495,17 @@ class OptionLane:
                 out["skipped"] += 1
                 continue
             reads_done += 1
+            errors_before = len(out["errors"])
             made = self._enter(sym, right, now, out, {"bar_day": r["day"].isoformat(), "close": round(r["close"], 4), "rsi": r["rsi"],
                                                        "sma_slow": round(r["sma_slow"], 4), "direction": "up" if right == "C" else "down"},
                                held, {"bar_day": r["day"].isoformat(), "earnings_state": state})
             if made:
                 entries += 1
+            elif len(out["errors"]) > errors_before:
+                # The chain could not be read or failed the data-quality gate. That is a data problem, not a verdict on the
+                # trade, so the day's signal is kept for the next check instead of being used up. The gate itself is unchanged.
+                self.store.set_state(f"optlane_bar:{p.lane}:{sym}", "")
+                out["skips"].append(f"{sym}: the chain was not usable, so this signal will be tried again at the next check")
 
     def _long_exit(self, t: dict[str, Any], mark: Optional[tuple[float, float]], r: Optional[dict[str, Any]], now: datetime, out: dict[str, Any],
                    held: list[dict[str, Any]], trend_rule: bool) -> None:
@@ -567,6 +573,7 @@ class OptionLane:
                 continue
             # conviction sizing: a contract that was very thin before the flow, and whose open interest then grew, gets double size
             conviction = 2.0 if f.get("prior_low_oi") else 1.0
+            errors_before = len(out["errors"])
             made = self._enter(sym, "C" if f["lean"] == "BULLISH" else "P", now, out,
                                {"from_contract": f["contract"], "prior_day": f["prior_day"], "prior_volume": f["prior_volume"], "prior_oi": f["prior_oi"],
                                 "oi_change": f["oi_change"], "position_read": f["position_read"], "prior_ratio": f.get("prior_ratio"),
@@ -574,6 +581,9 @@ class OptionLane:
                                {"earnings_state": self._earnings_state(sym, now.date())}, budget_mult=conviction)
             if made:
                 entries += 1
+            elif len(out["errors"]) > errors_before:
+                self.store.set_state(seen, "")          # a chain that could not be read does not use up the follow-up (the gate is unchanged)
+                out["skips"].append(f"{sym}: the chain was not usable, so this follow-up will be tried again at the next check")
 
 
 # ------------------------------------------------------------ all five together
