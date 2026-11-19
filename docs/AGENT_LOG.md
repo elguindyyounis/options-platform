@@ -860,6 +860,24 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Merged `origin/main` into integration first (clean). Decision made: a name's IV level is the median IV of contracts within 5% of spot and 7 to 120 days out, stored as `name_iv` on each follow; `iv_percentile` is the share of that name's earlier daily levels below today's, written only with at least 20 prior days (before that it stays listed in `missing_features`, never zero). Past days only, so no look-ahead.
 * Verified: `python -m pytest -q` 689 pass (3 new in `tests/test_shadow.py`). Not verified: real chains, the 20-day warm-up on real data (history window is about 35 trading days, enough for the minimum). The private data repo `options-platform-data` was not attachable from this session, so no real results were read. Days to earnings is still missing. No risk, order, auth, sizing, broker or schema change.
 
+## 2026-11-19 (interactive, owner asked to log two Discord callouts and learn from them)
+
+* Callouts: BABA 90C and NBIS 150C, both Dec 24 2026, posted 19 Nov (size Large and Medium, entry $3.50 and $3.90) by a Discord poster. Added `callouts.py` (record, summary, CLI), `GET/POST /api/callouts`, a scanner hook that reads chains for names with an open callout (they are outside the universe), and a shadow-book split so callouts never count towards the gate or the independent sample. Registered E6 (post-earnings entries, split by pre-event run-up) and C1 (size label) in the plan with criteria before any result.
+* Decision: the posted price is stored as the entry ask and flagged as unverified; the size label is an ordinal, never a sizing input. The posting time zone is unknown and recorded as missing.
+* Source quality, said plainly: the BABA figures come from a Reuters report; the Nvidia chip rule, the Microsoft oversight and the Nvidia board stories reached me through aggregator summaries and were not checked against primary sources; two sources gave different BABA prices. None of it feeds the model.
+* Verified: `python -m pytest -q` 702 pass (13 new in `tests/test_callouts.py`). Not verified: real chains for BABA or NBIS, the scanner hook against a live provider, the Mac. The two callouts are NOT in any database yet: this cloud session cannot reach the owner's `state.db`; they must be logged on the Mac (command in the PR).
+
+## 2026-11-19 (interactive): dashboard kept showing Connect
+
+* Cause: the token was kept in `sessionStorage` (one tab only), the managed install never opened a tokened link, and a one-off token changed every run. A plain URL in any other tab or browser showed Connect.
+* Changed: token kept in `localStorage` for 127.0.0.1 (moved over from the old session copy, dropped when the server rejects it, and a tokened link pasted into an open tab now works); installer opens the tokened dashboard and writes `Open Options Dashboard.webloc`; `start-platform.command` keeps one token between runs; double-click `Install-On-Mac.command`.
+* Decision NOT taken: a server endpoint that hands the token to any local page would make a plain URL connect on its own, but it loosens auth, which CLAUDE.md rule 7 forbids without the owner changing that rule. Left for the owner.
+* Verified: headless Chromium against a real server: plain first visit shows Connect; one tokened visit connects; a new tab and a refresh on the plain URL stay connected; a stale token is dropped. `python -m pytest -q` passes. Not verified: macOS (installer, webloc, launchd), the Claude desktop browser's storage, an update arriving on the Mac.
+
+## 2026-11-19 (interactive, owner decision): automatic connection
+
+* Owner said losing authentication is fine for now (local, paper only, cloud later) and wants no manual steps. Done in the narrowest way: `GET /api/session` returns the token only to the same machine (client 127.0.0.1 or ::1, local Host, a custom page header, no cross-site Sec-Fetch-Site, matching Origin). The dashboard calls it when it has no token or the saved one is rejected, so a plain URL connects and a server restart recovers by itself. All other routes still check the token. Recorded as a dated owner exception under CLAUDE.md rule 7, with the condition that it is removed before any non-local use. `OPTPLAT_REQUIRE_PASTED_TOKEN=1` switches it off.
+* Verified: pytest; headless Chromium (see PR). Not verified: macOS, the Claude desktop browser.
 ## 2026-11-19 (challenger run): taken-or-skipped feed
 
 * Alerter moved `9eb85e0` to `5dca972` (11 commits: matched paper research, event readiness, Mac updater keeps the ledger on rollback, technical entry challenge). Read `matched_research.py` and `event_risk.py`; see COMPARISON_ALERTER. Thursday: no weekend scan.

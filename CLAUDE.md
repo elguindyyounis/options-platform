@@ -19,6 +19,10 @@ money, risk limits, brokers, or credentials. Agents improve the code around thos
    push it, and open a pull request for the human to review. Never force-push.
 7. **Do not change auth.** Token checks, host checks and security headers in `api.py` may only be
    made stricter.
+   *Owner exception, 2026-11-19 (the owner said: fine to lose authentication for now, keep everything automatic, moving to a cloud later):*
+   `GET /api/session` gives the token to a same-machine dashboard page so the page connects without typing. It is the ONLY loosening: every
+   other route still checks the token, the Host check stays, and `OPTPLAT_REQUIRE_PASTED_TOKEN=1` switches it off. It must be removed or put
+   behind real sign-in before this runs anywhere other than the owner's own computer. Do not widen it without a new owner decision.
 
 ## Direction (owner, 2026-11-16)
 
