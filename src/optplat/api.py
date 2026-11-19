@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import os
 import re
 from datetime import date
 from typing import Any
@@ -9,7 +10,7 @@ from typing import Any
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -94,9 +95,13 @@ def create_app(
     engine: Optional[TradingEngine] = None,
     runner: Optional[Runner] = None,
     allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost", "testserver"),
+    local_autoconnect: Optional[bool] = None,  # None: on unless OPTPLAT_REQUIRE_PASTED_TOKEN=1
+    local_clients: tuple[str, ...] = ("127.0.0.1", "::1"),
 ) -> FastAPI:
     if not api_token or len(api_token) < 16:
         raise ValueError("api_token must be at least 16 characters")
+    if local_autoconnect is None:
+        local_autoconnect = os.environ.get("OPTPLAT_REQUIRE_PASTED_TOKEN") != "1"
     app = FastAPI(title="options-platform", docs_url=None, redoc_url=None)
     # Reject unexpected Host headers (DNS-rebinding protection for a localhost service).
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts))
@@ -123,6 +128,21 @@ def create_app(
     def auth(x_api_token: str = Header(default="")) -> None:
         if not hmac.compare_digest(x_api_token.encode(), api_token.encode()):
             raise HTTPException(status_code=401, detail="Invalid or missing API token")
+
+    @app.get("/api/session", include_in_schema=False)
+    def session(request: Request, x_optplat_page: str = Header(default="")) -> dict[str, str]:
+        """Owner decision 2026-11-19: this local, paper-only dashboard connects itself, so the token is handed to the
+        dashboard page of the same machine. Every other route still checks the token. Hands it out only when ALL hold:
+        the switch is on, the caller is this machine, the Host header is local (middleware above), the request comes from
+        this page's own script (custom header, so another site's page cannot ask without a CORS preflight, which is never
+        answered) and the browser does not say it is cross-site. Set OPTPLAT_REQUIRE_PASTED_TOKEN=1 to switch it off."""
+        client = request.client.host if request.client else ""
+        origin = request.headers.get("origin")
+        site = request.headers.get("sec-fetch-site", "same-origin")
+        if (not local_autoconnect or client not in local_clients or x_optplat_page != "1" or site not in ("same-origin", "none")
+                or (origin is not None and origin.split("://", 1)[-1] != request.headers.get("host"))):
+            raise HTTPException(status_code=403, detail="Automatic connection is not available for this request")
+        return {"token": api_token}
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:

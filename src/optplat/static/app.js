@@ -1738,7 +1738,21 @@
     return p.expiry_exit_within_days + " days before " + p.expiry + " (" + p.days_to_expiry + " days left)";
   }
 
+  // This is a local, paper-only dashboard: the server hands its token to this page when the page is on the same machine
+  // (see /api/session). Falls back to the Connect screen when the server says no (for example OPTPLAT_REQUIRE_PASTED_TOKEN=1).
+  async function autoConnect() {
+    try {
+      const r = await fetch("/api/session", { headers: { "X-Optplat-Page": "1" }, cache: "no-store" });
+      if (!r.ok) return false;
+      const j = await r.json();
+      if (typeof j.token !== "string" || j.token.length < 16) return false;
+      token = j.token; saveToken(token); return true;
+    } catch (e) { return false; }
+  }
+
+  let retriedAutoConnect = false;
   async function refresh() {
+    if (!token) await autoConnect();
     if (!token) { S.connected = false; showPage(); return; }
     try {
       const [health, status, portfolio, orders, report, decisions, eq, allTrades, results, policy, shadowRep] = await Promise.all([
@@ -1770,7 +1784,7 @@
       await loadPage();
       setMsg("");
     } catch (e) {
-      if (e.status === 401 || e.status === 403) { forgetToken(); token = ""; S.connected = false; showPage(); setMsg("The saved token was not accepted (the server may have been set up again). Open the dashboard from the \"Open Options Dashboard\" link, or paste the token.", "loss"); }
+      if (e.status === 401 || e.status === 403) { forgetToken(); token = ""; if (!retriedAutoConnect) { retriedAutoConnect = true; if (await autoConnect()) return refresh(); } S.connected = false; showPage(); setMsg("The saved token was not accepted (the server may have been set up again). Open the dashboard from the \"Open Options Dashboard\" link, or paste the token.", "loss"); }
       else if (S.connected) { $("updated").textContent = "Could not refresh: " + e.message; }
       else setMsg("Error: " + e.message, "loss");
     }
