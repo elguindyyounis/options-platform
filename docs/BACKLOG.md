@@ -48,6 +48,8 @@ Own data the owner provides stays out of commits and logs, and results are label
 
 ## Next up
 
+00000. **Callouts follow-up (2026-11-19).** `callouts.py` is built; still open: record `days_to_earnings` and the 5-day pre-event return in the shadow book so E6 can run, then evaluate E6/C1 only after 30 resolved callouts.
+
 0000. **Owner roadmap (2026-11-17).** Bigger pieces, in order, in `docs/OWNER_ROADMAP.md`. Item 1 (Market context page) is done; take item 2 next.
 
 000. **Evolution plan, Phase 1 (owner priority, 2026-11-16).** See `docs/EVOLUTION_PLAN.md`. Shadow book first slice is built

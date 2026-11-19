@@ -44,12 +44,16 @@ with complete marks, and the export running five days in a row.
 | X1 | Another take-profit/stop pair beats 40/30 (grid 20, 40, 80 by 20, 30, 50) | Current 40/30 |
 | X2 | A time stop (5 or 10 days) beats holding to a level | No time stop |
 | X3 | A trailing stop after +30% beats a fixed take-profit | Fixed take-profit |
+| E6 | Buying calls 1 to 3 trading days AFTER an earnings report beats buying within 7 days BEFORE it. Reported separately for names that ran up more than 10% in the 5 days before the report (buy the rumor, sell the news) and names that fell more than 10% (bad news priced in). Added 2026-11-19 at the owner's request. | Entries within 7 days before earnings |
+| C1 | The size label (Small, Medium, Large) on an external callout ranks outcomes: Large beats Small after costs. Needs at least 30 resolved callouts per source before any statement (`callouts.py`). Added 2026-11-19. | Same callouts, ignoring the label |
 
 **Pass criteria for all:** independent observations, ask in and bid out plus a stressed exit; the improvement over the frozen
 baseline is positive on the **later 30% of dates** (not used to pick the idea) and its 95% bootstrap interval excludes zero; still
 positive after removing the three best observations; every extra hypothesis tried makes the bar stricter (count them). Most will
 fail, and that is a result. If nothing passes, the next step is a different structure (for example defined-risk spreads), never
 looser criteria.
+
+E6 and C1 use the same pass criteria as every row above (independent observations, ask in and bid out plus a stressed exit, later 30% of dates, bootstrap interval excludes zero, still positive without the three best). They need `days_to_earnings` and the 5-day pre-event return, which the shadow book does not record yet; until then they cannot be run. News is never a model input as text: only measurable facts (price moves, dates, volume) are, and a claim from a secondary source is graded below a company filing or a wire report before it is used.
 
 ## Phase 3: where AI goes
 
