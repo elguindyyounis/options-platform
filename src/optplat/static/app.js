@@ -3,16 +3,34 @@
   const $ = (id) => document.getElementById(id);
   const phone = window.matchMedia("(max-width:860px)");
   const PAGES = ["desk", "trades", "options", "swing", "shortterm", "market", "context", "tracker", "agents", "research", "system"];
-  let token = "";
-  try { token = sessionStorage.getItem("optplat_token") || ""; } catch (e) { /* storage unavailable */ }
-  // The launcher opens /#token=... . A URL fragment is never sent to the server. Read it once, keep it for this
-  // tab only, then remove it from the address bar so it is not left in the URL or copied by accident.
-  const fromUrl = /^#token=([A-Za-z0-9_-]{16,200})$/.exec(location.hash);
-  if (fromUrl) {
-    token = fromUrl[1];
-    try { sessionStorage.setItem("optplat_token", token); } catch (e) { /* storage unavailable */ }
-    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* ignore */ }
+  // The token is kept in this browser's local storage for this address (127.0.0.1 only), so a new tab, a refresh or a restart of
+  // the browser stays connected. It is never sent anywhere except as the API header. An older session-only copy is moved over.
+  const TOKEN_KEY = "optplat_token";
+  function loadToken() {
+    try { const t = localStorage.getItem(TOKEN_KEY); if (t) return t; } catch (e) { /* storage unavailable */ }
+    try { const t = sessionStorage.getItem(TOKEN_KEY); if (t) { saveToken(t); return t; } } catch (e) { /* storage unavailable */ }
+    return "";
   }
+  function saveToken(t) {
+    try { localStorage.setItem(TOKEN_KEY, t); } catch (e) { /* storage unavailable: this tab still works until it closes */ }
+    try { sessionStorage.setItem(TOKEN_KEY, t); } catch (e) { /* ignore */ }
+  }
+  function forgetToken() {
+    try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+  }
+  let token = loadToken();
+  // The launcher opens /#token=... . A URL fragment is never sent to the server. Read it once, keep it, then remove it
+  // from the address bar so it is not left in the URL or copied by accident.
+  function takeTokenFromUrl() {
+    const m = /^#token=([A-Za-z0-9_-]{16,200})$/.exec(location.hash);
+    if (!m) return false;
+    token = m[1];
+    saveToken(token);
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* ignore */ }
+    return true;
+  }
+  takeTokenFromUrl();
   const S = {
     killState: false, lastPoints: [], core: null, connected: false,
     trades: null, filter: "all", kind: "all", source: "all", query: "", sort: { key: "opened_at", dir: -1 }, shown: 100, tkH: "3", openTrade: null, opener: null,
@@ -1752,7 +1770,7 @@
       await loadPage();
       setMsg("");
     } catch (e) {
-      if (e.status === 401 || e.status === 403) { S.connected = false; showPage(); setMsg("The token was not accepted. Paste the one the server printed.", "loss"); }
+      if (e.status === 401 || e.status === 403) { forgetToken(); token = ""; S.connected = false; showPage(); setMsg("The saved token was not accepted (the server may have been set up again). Open the dashboard from the \"Open Options Dashboard\" link, or paste the token.", "loss"); }
       else if (S.connected) { $("updated").textContent = "Could not refresh: " + e.message; }
       else setMsg("Error: " + e.message, "loss");
     }
@@ -1762,7 +1780,7 @@
 
   $("btn-connect").addEventListener("click", () => {
     token = $("token").value.trim();
-    try { sessionStorage.setItem("optplat_token", token); } catch (e) { /* ignore */ }
+    saveToken(token);
     $("token").value = "";
     refresh();
   });
@@ -1821,7 +1839,7 @@
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeTrade(); trapFocus(ev); });
   const onBreak = () => { if (S.trades && route() === "trades") renderTrades(); if (route() === "shortterm") loadShortterm().catch(() => {}); if (route() === "swing") loadSwing().catch(() => {}); if (route() === "options" && S.opt) renderOptions(); };
   if (phone.addEventListener) phone.addEventListener("change", onBreak); else if (phone.addListener) phone.addListener(onBreak);
-  window.addEventListener("hashchange", () => { showPage(); if (S.connected && route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); if (S.connected) loadPage().catch((e) => { $("updated").textContent = "Error: " + e.message; }); });
+  window.addEventListener("hashchange", () => { if (takeTokenFromUrl()) { refresh(); return; } showPage(); if (S.connected && route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); if (S.connected) loadPage().catch((e) => { $("updated").textContent = "Error: " + e.message; }); });
 
   let resizeTimer = null;
   window.addEventListener("resize", () => {

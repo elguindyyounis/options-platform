@@ -37,3 +37,13 @@ for l in com.optionsplatform.server com.optionsplatform.autoupdate com.optionspl
   launchctl bootstrap "gui/$(id -u)" "$AGENTS/$l.plist"
 done
 echo "Installed. Dashboard: http://127.0.0.1:8800  (token is in: $DATA/config.env)"
+# One-click link that carries the token in the URL fragment (never sent to the server). Opening it once connects that browser for good.
+TOKEN="$(sed -n 's/^OPTPLAT_API_TOKEN=//p' "$DATA/config.env" | head -n1)"
+if printf '%s' "$TOKEN" | grep -Eq '^[A-Za-z0-9_-]{16,200}$'; then
+  LINK="$HOME/Applications/Open Options Dashboard.webloc"
+  umask 077
+  printf '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>URL</key><string>http://127.0.0.1:8800/#token=%s</string></dict></plist>\n' "$TOKEN" >"$LINK"
+  echo "Double-click 'Open Options Dashboard' in $(dirname "$APP") to connect any browser. It is already opening now."
+  for _ in $(seq 1 30); do curl -fs -o /dev/null http://127.0.0.1:8800/api/health && break; sleep 1; done
+  command -v open >/dev/null && open "http://127.0.0.1:8800/#token=$TOKEN" || true
+fi

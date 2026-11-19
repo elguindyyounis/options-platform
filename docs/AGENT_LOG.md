@@ -866,3 +866,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Decision: the posted price is stored as the entry ask and flagged as unverified; the size label is an ordinal, never a sizing input. The posting time zone is unknown and recorded as missing.
 * Source quality, said plainly: the BABA figures come from a Reuters report; the Nvidia chip rule, the Microsoft oversight and the Nvidia board stories reached me through aggregator summaries and were not checked against primary sources; two sources gave different BABA prices. None of it feeds the model.
 * Verified: `python -m pytest -q` 702 pass (13 new in `tests/test_callouts.py`). Not verified: real chains for BABA or NBIS, the scanner hook against a live provider, the Mac. The two callouts are NOT in any database yet: this cloud session cannot reach the owner's `state.db`; they must be logged on the Mac (command in the PR).
+
+## 2026-11-19 (interactive): dashboard kept showing Connect
+
+* Cause: the token was kept in `sessionStorage` (one tab only), the managed install never opened a tokened link, and a one-off token changed every run. A plain URL in any other tab or browser showed Connect.
+* Changed: token kept in `localStorage` for 127.0.0.1 (moved over from the old session copy, dropped when the server rejects it, and a tokened link pasted into an open tab now works); installer opens the tokened dashboard and writes `Open Options Dashboard.webloc`; `start-platform.command` keeps one token between runs; double-click `Install-On-Mac.command`.
+* Decision NOT taken: a server endpoint that hands the token to any local page would make a plain URL connect on its own, but it loosens auth, which CLAUDE.md rule 7 forbids without the owner changing that rule. Left for the owner.
+* Verified: headless Chromium against a real server: plain first visit shows Connect; one tokened visit connects; a new tab and a refresh on the plain URL stay connected; a stale token is dropped. `python -m pytest -q` passes. Not verified: macOS (installer, webloc, launchd), the Claude desktop browser's storage, an update arriving on the Mac.
