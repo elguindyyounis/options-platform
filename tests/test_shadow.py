@@ -164,3 +164,39 @@ def test_follow_gets_iv_percentile_after_enough_prior_days_and_uses_past_days_on
     assert first and "iv_percentile" not in first[0] and "iv_percentile" in first[0]["missing_features"]
     assert last and last[0]["iv_percentile"] == 0.0 and "iv_percentile" not in last[0]["missing_features"]
     assert last[0]["name_iv"] == 0.3
+
+
+class _Strat:
+    def __init__(self, name, picks, boom=False):
+        self.name, self.version, self._picks, self._boom = name, "1", picks, boom
+
+    def propose(self, snapshot, now):
+        from optplat.strategy import Proposal
+        if self._boom:
+            raise RuntimeError("bad")
+        return [Proposal(r.contract, r.ask, 10.0 - i, {}) for i, r in enumerate(self._picks)]
+
+
+def test_strategy_picks_are_followed_and_tagged(tmp_path):
+    store = Store(tmp_path / "s.db")
+    generic = [row(100 + i, vol=900 - i) for i in range(6)]
+    odd = row(150, bid=1.0, ask=1.1, vol=1)  # not in the generic top six, only a strategy picks it
+    s = snap(generic + [odd])
+    a = _Strat("alpha", [odd, generic[0]])
+    out = shadow.observe(store, s, D0, T0, False, [a, _Strat("broken", [], boom=True)])
+    assert out["followed"] == 7
+    by = {f["contract"]: f for f in store.shadow_all_follows(False)}
+    assert by[occ(odd)]["chosen_by"] == [{"strategy": "alpha", "version": "1", "rank": 1, "score": 10.0}]
+    assert by[occ(generic[0])]["chosen_by"][0]["rank"] == 2  # a generic follow also gets the tag
+    assert "chosen_by" not in by[occ(generic[1])]
+    shadow.observe(store, s, D0, T0, False, [a])  # a second scan the same day adds nothing and never duplicates a tag
+    assert len(store.shadow_all_follows(False)) == 7
+    assert len({f["contract"]: f for f in store.shadow_all_follows(False)}[occ(odd)]["chosen_by"]) == 1
+
+
+def test_strategy_picks_outside_chain_are_skipped(tmp_path):
+    store = Store(tmp_path / "s.db")
+    ghost = row(500)
+    s = snap([row(100)])
+    out = shadow.observe(store, s, D0, T0, False, [_Strat("alpha", [ghost])])
+    assert out["followed"] == 1 and not any("chosen_by" in f for f in store.shadow_all_follows(False))

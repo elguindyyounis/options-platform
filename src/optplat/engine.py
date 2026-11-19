@@ -37,7 +37,7 @@ from .universe import SECTORS
 from .shortterm import ShortTermLane
 from .swing import SwingLane
 from .optionlanes import OptionLanes
-from .strategy import Strategy
+from .strategy import FlowFollowStrategy, LiquidTrendStrategy, Strategy
 
 SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
 
@@ -166,7 +166,10 @@ class TradingEngine:
         self._cycle_market_open: bool = False
         self._journal_seen: dict[tuple[str, str, str], datetime] = {}
         self._last_fingerprint: dict[str, tuple[str, int]] = {}
-        self.scanner = Scanner(provider, self.store, clock=clock)
+        followed: dict[str, Strategy] = {strategy.name: strategy}  # the shadow book follows every strategy's top picks, not only the active one
+        for extra in (LiquidTrendStrategy(), FlowFollowStrategy(mode="flagged"), FlowFollowStrategy(mode="nearer")):
+            followed.setdefault(extra.name, extra)
+        self.scanner = Scanner(provider, self.store, clock=clock, strategies=tuple(followed.values()))
         self.shortterm = ShortTermLane(provider, self.store, clock=clock)
         self.swing = SwingLane(provider, self.store, clock=clock, calendar=self.calendar)
         self.option_lanes = OptionLanes(provider, self.store, clock=clock, calendar=self.calendar)

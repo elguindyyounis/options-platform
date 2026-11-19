@@ -21,6 +21,7 @@ from .marketdata import ChainRow, MarketSnapshot
 from .tracker import trading_days_between
 from .universe import SECTOR_OF
 
+TOP_PER_STRATEGY = 3      # each strategy's best-ranked proposals followed per underlying per scan (Phase 1 item 1a)
 PER_UNDERLYING = 6        # contracts followed per underlying per day
 MIN_DTE, MAX_DTE = 7, 120
 MAX_SPREAD_PCT = 25.0     # wider than this is not a price anyone would pay; it would only add noise
@@ -95,8 +96,33 @@ def point_due(age: int, observed_days: set[str], day: date) -> bool:
     return age <= DENSE_DAYS or day.isoformat() not in observed_days
 
 
-def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictional: bool) -> dict[str, int]:
-    """Follow new candidates from this chain and extend the paths of contracts already followed. Never raises on bad rows."""
+def strategy_picks(strategies: Any, snap: MarketSnapshot, now: datetime) -> list[tuple[ChainRow, dict[str, Any]]]:
+    """The top TOP_PER_STRATEGY proposals of each strategy on this chain, with the strategy, version, rank and score that chose them.
+
+    Evolution plan Phase 1 item 1(a): follow what each strategy would have bought whether or not anything was bought, so
+    S1 (does the ranking score predict anything) has the ranked list to compare against a random pick. A strategy that
+    raises is skipped; a proposal whose contract is not in the chain is skipped, never guessed.
+    """
+    by_contract = {r.contract.occ_symbol.strip(): r for r in snap.rows}
+    out: list[tuple[ChainRow, dict[str, Any]]] = []
+    for strat in strategies:
+        try:
+            props = list(strat.propose(snap, now))[:TOP_PER_STRATEGY]
+        except Exception:  # noqa: BLE001 - research only
+            continue
+        for rank, p in enumerate(props, 1):
+            r = by_contract.get(p.contract.occ_symbol.strip())
+            if r is not None:
+                out.append((r, {"strategy": strat.name, "version": strat.version, "rank": rank, "score": p.score}))
+    return out
+
+
+def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictional: bool, strategies: Any = ()) -> dict[str, int]:
+    """Follow new candidates from this chain and extend the paths of contracts already followed. Never raises on bad rows.
+
+    ``strategies`` (optional) adds each strategy's top proposals to the followed set and tags every followed contract that a
+    strategy chose with ``chosen_by``; the generic most-active selection still runs as before.
+    """
     followed = points = 0
     nv = name_iv(snap, day)
     history: dict[str, float] = {}  # earlier days only, one level per day (the first recorded that day)
@@ -107,6 +133,11 @@ def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictiona
     for row in select(snap, day):
         if store.record_shadow_follow(row.contract.occ_symbol.strip(), day.isoformat(), fictional, features(snap, row, day, now, nv, ivp)):
             followed += 1
+    for row, tag in strategy_picks(strategies, snap, now):
+        sym = row.contract.occ_symbol.strip()
+        if store.record_shadow_follow(sym, day.isoformat(), fictional, features(snap, row, day, now, nv, ivp)):
+            followed += 1
+        store.tag_shadow_follow(sym, day.isoformat(), fictional, tag)
     by_contract = {r.contract.occ_symbol.strip(): r for r in snap.rows}
     seen = store.shadow_observed_days(snap.symbol, fictional)
     for f in store.shadow_follows(snap.symbol, day.isoformat(), fictional):
@@ -161,5 +192,5 @@ def report(store: Any, fictional: bool, today: date) -> dict[str, Any]:
             "gate_met_except_export": all(met.values()),  # the export streak is not visible from here
             "note": "Gate also needs the export to run five days in a row, which this report cannot see; the owner or the weekly agent confirms it. "
                     "The 'followed' count includes several strikes of one name per day; 'independent_observations' (one per underlying per day) is the sample any hypothesis test can claim. "
-                    "Selection is generic (most active liquid contracts per underlying); per-strategy candidates are not followed yet.",
+                    "Selection is the most active liquid contracts per underlying plus the top proposals of each strategy (tagged chosen_by); the five options lanes are not followed separately yet.",
             "missing_features": MISSING_FEATURES}

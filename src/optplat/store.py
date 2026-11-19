@@ -455,6 +455,21 @@ class Store:
             self._db.commit()
             return cur.rowcount == 1
 
+    def tag_shadow_follow(self, contract: str, day: str, fictional: bool, tag: dict[str, Any]) -> bool:
+        """Add a strategy tag to ``chosen_by`` of an existing follow (the same strategy and day is stored once, first rank wins)."""
+        with self._lock:
+            row = self._db.execute("SELECT payload FROM shadow_follows WHERE contract=? AND followed_day=? AND fictional=?", (contract, day, int(fictional))).fetchone()
+            if row is None:
+                return False
+            payload = json.loads(row["payload"])
+            tags = payload.setdefault("chosen_by", [])
+            if any(t.get("strategy") == tag.get("strategy") for t in tags):
+                return False
+            tags.append(tag)
+            self._db.execute("UPDATE shadow_follows SET payload=? WHERE contract=? AND followed_day=? AND fictional=?", (json.dumps(payload, default=str), contract, day, int(fictional)))
+            self._db.commit()
+            return True
+
     def record_shadow_point(self, contract: str, followed_day: str, fictional: bool, ts: str, observed_day: str, payload: dict[str, Any]) -> bool:
         with self._lock:
             cur = self._db.execute("INSERT OR IGNORE INTO shadow_points (contract, followed_day, fictional, ts, observed_day, payload) VALUES (?,?,?,?,?,?)",
