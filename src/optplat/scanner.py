@@ -339,9 +339,10 @@ LIMITATIONS = (
 
 class Scanner:
     def __init__(self, provider: MarketDataProvider, store: Store, *, clock: Callable[[], datetime] = utcnow,
-                 universe: Sequence[str] = UNIVERSE, budget_s: float = SCAN_BUDGET_S) -> None:
+                 universe: Sequence[str] = UNIVERSE, budget_s: float = SCAN_BUDGET_S, strategies: Sequence[Any] = ()) -> None:
         self.provider, self.store, self.clock = provider, store, clock
         self.universe, self.budget_s = tuple(universe), budget_s
+        self.strategies: tuple[Any, ...] = tuple(strategies)  # followed by the shadow book (research only)
         self._lock = threading.Lock()
         self._thread: Optional[threading.Thread] = None
         self.last_error: Optional[str] = None
@@ -426,7 +427,7 @@ class Scanner:
             except Exception as exc:  # noqa: BLE001 - the tracker is research; it must never break a scan
                 out["errors"].append(f"{sym}: tracker ({describe_exc(exc)})")
             try:
-                sb = shadow.observe(self.store, checked.snapshot, day, now, fict)
+                sb = shadow.observe(self.store, checked.snapshot, day, now, fict, self.strategies)
                 shadow_followed += sb["followed"]
                 shadow_points += sb["points"]
             except Exception as exc:  # noqa: BLE001 - research only; it must never break a scan
