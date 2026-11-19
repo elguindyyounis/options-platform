@@ -426,20 +426,43 @@
     if (p.risk_failures && p.risk_failures.length) return p.risk_failures.join("; ");
     return p.why || p.reason || (p.reasons && p.reasons.join("; ")) || (p.score !== undefined ? "score " + Number(p.score).toFixed(2) : "");
   }
+  // One plain verdict per journal line so "taken or skipped, and why" reads in one feed. Pure function of the record.
+  // Anything not recognised is shown as "Other" with its raw name, never as taken or fine.
+  function decisionVerdict(d) {
+    const disp = String((d && d.disposition) || ""), kind = String((d && d.kind) || "");
+    if (kind === "EXIT") return /FILLED|SUBMITTED/.test(disp) ? { id: "exit", text: "Exit placed (paper)" } : { id: "skipped", text: "Exit not placed" };
+    if (disp === "FILLED") return { id: "taken", text: "Taken (paper fill)" };
+    if (disp === "WOULD_ENTER") return { id: "opinion", text: "Committee would enter (opinion, no order)" };
+    if (disp === "WOULD_REJECT") return { id: "blocked", text: "Committee would reject" };
+    if (/REJECTED|ERROR/.test(disp)) return { id: "blocked", text: "Blocked" };
+    if (/^SKIPPED|^NOT_CHOSEN|^KEY_CONFLICT/.test(disp)) return { id: "skipped", text: "Skipped" };
+    if (/SUBMITTED|PARTIALLY_FILLED|RISK_APPROVED/.test(disp)) return { id: "pending", text: "Order in progress" };
+    return { id: "other", text: "Other: " + (disp || "unknown") };
+  }
+  function decisionTally(list) {
+    const c = {};
+    (list || []).forEach((d) => { const v = decisionVerdict(d).id; c[v] = (c[v] || 0) + 1; });
+    const names = { taken: "taken", exit: "exits placed", blocked: "blocked", skipped: "skipped", opinion: "opinion only", pending: "in progress", other: "other" };
+    const parts = Object.keys(names).filter((k) => c[k]).map((k) => c[k] + " " + names[k]);
+    return parts.length ? "Latest " + list.length + ": " + parts.join(", ") + "." : "";
+  }
   function renderDecisions(list) {
     const host = $("decisions");
     if (!list.length) { empty(host, "No decisions recorded yet", "Run one cycle from Controls to see what it considers."); return; }
     host.replaceChildren();
+    const tally = decisionTally(list);
+    if (tally) host.appendChild(el("p", tally, "muted"));
     const feed = el("div", null, "feed");
     list.forEach((d) => {
       const item = el("div", null, "feed-item");
       const who = el("div", null, "ticket");
       who.appendChild(el("span", words(d.kind), "muted"));
       if (d.contract) who.appendChild(ticketOcc(d.contract)); else if (d.symbol) who.appendChild(el("b", d.symbol));
-      const out = words(d.disposition);
-      kids(item, [el("span", fmtTime(d.ts), "feed-time"), who, el("span", out, "tag " + (/ENTER|ENTRY|SUBMIT|FILL|EXIT|CLOSE/.test(d.disposition || "") && !/REJECT/.test(d.disposition || "") ? "info" : ""))]);
+      const v = decisionVerdict(d);
+      const tag = el("span", v.text + (d.fictional ? " (fictional)" : ""), "tag " + (v.id === "taken" || v.id === "exit" ? "info" : ""));
+      kids(item, [el("span", fmtTime(d.ts), "feed-time"), who, tag]);
       const why = whyOf(d);
-      if (why) item.appendChild(el("div", why, "feed-why"));
+      item.appendChild(el("div", why ? "Rule: " + why : "No reason was recorded for this line (" + words(d.disposition) + ").", "feed-why"));
       feed.appendChild(item);
     });
     host.appendChild(feed);
@@ -1862,6 +1885,8 @@
   });
   window.optplatGlanceOrder = orderGlance;
   window.optplatResearch = buildResearchProgress;
+  window.optplatVerdict = decisionVerdict;
+  window.optplatTally = decisionTally;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   showPage();
   refresh();
