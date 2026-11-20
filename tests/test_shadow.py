@@ -200,3 +200,43 @@ def test_strategy_picks_outside_chain_are_skipped(tmp_path):
     s = snap([row(100)])
     out = shadow.observe(store, s, D0, T0, False, [_Strat("alpha", [ghost])])
     assert out["followed"] == 1 and not any("chosen_by" in f for f in store.shadow_all_follows(False))
+
+
+class FakeCalendar:
+    def __init__(self, result):
+        self.result = result
+        self.calls = []
+
+    def earnings(self, symbol, start, end):
+        self.calls.append((symbol, start, end))
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+def test_earnings_context_known_etf_empty_and_unknown():
+    from optplat.events import Event
+    ev = [Event("EARNINGS", D0 + timedelta(days=12), "x", True), Event("EARNINGS", D0 + timedelta(days=5), "x", True)]
+    got = shadow.earnings_context(FakeCalendar(ev), "AAA", D0)
+    assert got["earnings_status"] == "known" and got["days_to_earnings"] == 5 and got["next_earnings"] == (D0 + timedelta(days=5)).isoformat()
+    assert got["earnings_source"] == "unofficial estimate"
+    assert shadow.earnings_context(FakeCalendar([]), "SPY", D0) == {"earnings_status": "etf", "days_to_earnings": None, "next_earnings": None}
+    assert shadow.earnings_context(FakeCalendar([]), "AAA", D0)["earnings_status"] == "none_in_window"
+    assert shadow.earnings_context(FakeCalendar(None), "AAA", D0) is None  # source could not say: unknown, never zero
+    assert shadow.earnings_context(FakeCalendar(RuntimeError("boom")), "AAA", D0) is None
+    assert shadow.earnings_context(None, "AAA", D0) is None
+
+
+def test_observe_records_days_to_earnings_and_keeps_missing_list_honest(tmp_path):
+    from optplat.events import Event
+    store = Store(str(tmp_path / "e.db"))
+    r = row(100, vol=900)
+    cal = FakeCalendar([Event("EARNINGS", D0 + timedelta(days=9), "x", True)])
+    shadow.observe(store, snap([r]), D0, T0, False, (), cal)
+    f = store.shadow_follows("AAA", D0.isoformat(), False)[0]
+    assert f["days_to_earnings"] == 9 and "days_to_earnings" not in f["missing_features"]
+    assert cal.calls and cal.calls[0][2] == D0 + timedelta(days=shadow.MAX_DTE)
+    store2 = Store(str(tmp_path / "e2.db"))
+    shadow.observe(store2, snap([r]), D0, T0, False, (), FakeCalendar(None))
+    g = store2.shadow_follows("AAA", D0.isoformat(), False)[0]
+    assert "days_to_earnings" not in g and "days_to_earnings" in g["missing_features"]
