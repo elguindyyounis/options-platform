@@ -531,6 +531,11 @@ class Store:
             self._db.commit()
             return cur.rowcount == 1
 
+    def lane_trades_in_other_mode(self, fictional: bool) -> int:
+        """Lane trades recorded in the other data mode (real vs fictional demo): kept in the database but hidden from this view."""
+        with self._lock:
+            return int(self._db.execute("SELECT COUNT(*) FROM lane_trades WHERE fictional=?", (int(not fictional),)).fetchone()[0])
+
     def lane_trades(self, lane: str, fictional: bool, limit: int = 300) -> list[dict[str, Any]]:
         with self._lock:
             rows = self._db.execute("SELECT * FROM lane_trades WHERE lane=? AND fictional=? ORDER BY id DESC LIMIT ?",
