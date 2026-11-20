@@ -123,6 +123,8 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-20: UX-5 Desk feed filter ("Orders placed (paper)", "Blocked or skipped", "Opinions only", "Other"). New: challenge 9 (do open lane trades keep entry-time exit rules?).
+
 * "Taken or skipped, and why" feed on the Desk (UX-4, 2026-11-19): `decisionVerdict`/`decisionTally` in `app.js`, one plain verdict per journal line, unknown shown as Other; node-harness test in `tests/test_api_engine.py`. UX-5 logged in `docs/CHALLENGES.md`.
 * Research progress panel on the Desk page (UX-1, 2026-11-18): gate progress, independent sample and export caveat from `/api/shadow`; `tests/test_api_engine.py`. New UX items UX-3, UX-4 are in `docs/CHALLENGES.md`.
 * Shadow book, first slice (evolution plan Phase 1.1): `shadow.py`, tables `shadow_follows`/`shadow_points`, hooked into the scan after the tracker, `/api/shadow` gate progress, tables added to the export allow-list. Follows up to 6 liquid contracts per underlying per day with features at entry, then records the bid path (every scan for 10 trading days, daily to 30). Research only.

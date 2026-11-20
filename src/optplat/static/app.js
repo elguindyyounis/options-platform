@@ -34,7 +34,7 @@
   const S = {
     killState: false, lastPoints: [], core: null, connected: false,
     trades: null, filter: "all", kind: "all", source: "all", query: "", sort: { key: "opened_at", dir: -1 }, shown: 100, tkH: "3", openTrade: null, opener: null,
-    scan: null, marketTab: "heat", unusualFilter: "all", opt: null, optLane: "shortterm-options-base",
+    decFilter: "all", decisions: [], scan: null, marketTab: "heat", unusualFilter: "all", opt: null, optLane: "shortterm-options-base",
   };
 
   // ---------------------------------------------------------------- DOM helpers (textContent only)
@@ -446,12 +446,28 @@
     const parts = Object.keys(names).filter((k) => c[k]).map((k) => c[k] + " " + names[k]);
     return parts.length ? "Latest " + list.length + ": " + parts.join(", ") + "." : "";
   }
-  function renderDecisions(list) {
+  // Filter groups for the feed. "Orders placed" is the only group that is a paper order; opinions never count as one.
+  const DEC_FILTERS = [
+    { id: "all", label: "All", ids: null }, { id: "placed", label: "Orders placed (paper)", ids: ["taken", "exit", "pending"] },
+    { id: "notaken", label: "Blocked or skipped", ids: ["blocked", "skipped"] }, { id: "opinion", label: "Opinions only", ids: ["opinion"] },
+    { id: "other", label: "Other", ids: ["other"] },
+  ];
+  function filterDecisions(list, filterId) {
+    const f = DEC_FILTERS.find((x) => x.id === filterId) || DEC_FILTERS[0];
+    return (list || []).filter((d) => !f.ids || f.ids.indexOf(decisionVerdict(d).id) >= 0);
+  }
+  function renderDecisions(all) {
     const host = $("decisions");
-    if (!list.length) { empty(host, "No decisions recorded yet", "Run one cycle from Controls to see what it considers."); return; }
+    if (!all.length) { empty(host, "No decisions recorded yet", "Run one cycle from Controls to see what it considers."); return; }
+    S.decisions = all;
     host.replaceChildren();
-    const tally = decisionTally(list);
+    const bar = el("div", null, "chips");
+    chips(bar, DEC_FILTERS.map((f) => ({ id: f.id, label: f.label + " " + filterDecisions(all, f.id).length })), S.decFilter, (id) => { S.decFilter = id; renderDecisions(S.decisions); });
+    host.appendChild(bar);
+    const tally = decisionTally(all);
     if (tally) host.appendChild(el("p", tally, "muted"));
+    const list = filterDecisions(all, S.decFilter);
+    if (!list.length) host.appendChild(el("p", "Nothing in this group among the latest " + all.length + " lines.", "muted"));
     const feed = el("div", null, "feed");
     list.forEach((d) => {
       const item = el("div", null, "feed-item");
@@ -1886,6 +1902,7 @@
   window.optplatGlanceOrder = orderGlance;
   window.optplatResearch = buildResearchProgress;
   window.optplatVerdict = decisionVerdict;
+  window.optplatDecisionFilter = filterDecisions;
   window.optplatTally = decisionTally;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   showPage();

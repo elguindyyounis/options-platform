@@ -277,3 +277,32 @@ console.log(JSON.stringify({v:L.map(v),tally:t(L),none:t([])}));
     assert out["v"][8]["text"] == "Other: MYSTERY" and out["v"][9]["text"] == "Other: unknown"
     assert "1 taken" in out["tally"] and "1 opinion only" in out["tally"] and "2 other" in out["tally"]
     assert out["none"] == ""
+
+
+def test_decision_feed_filter_groups_never_count_an_opinion_as_an_order():
+    """UX-5: "Orders placed" holds only paper orders; opinions, blocks, skips and unknown lines each sit in their own group."""
+    import json, shutil, subprocess
+    from pathlib import Path
+    node = shutil.which("node")
+    if not node:
+        import pytest
+        pytest.skip("node not installed")
+    root = Path(__file__).resolve().parents[1] / "src" / "optplat" / "static"
+    js = (root / "app.js").read_text()
+    assert "innerHTML" not in js and "Orders placed (paper)" in js
+    harness = """
+const stub=()=>new Proxy(function(){},{get:(t,k)=>k==='matches'?false:(k==='style'||k==='classList'||k==='dataset')?stub():stub(),set:()=>true,apply:()=>stub()});
+global.document={getElementById:()=>stub(),createElement:()=>stub(),querySelectorAll:()=>[],addEventListener(){},createTextNode:()=>stub()};
+global.window={matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(){}};global.location={hash:''};global.history={replaceState(){}};
+global.sessionStorage={getItem:()=>'',setItem(){},removeItem(){}};global.fetch=()=>new Promise(()=>{});global.setInterval=()=>0;global.setTimeout=()=>0;
+require(process.argv[1]);
+const f=window.optplatDecisionFilter;
+const L=[{kind:'ENTRY',disposition:'FILLED'},{kind:'EXIT',disposition:'FILLED'},{kind:'COMMITTEE',disposition:'WOULD_ENTER'},
+ {kind:'ENTRY',disposition:'RISK_REJECTED'},{kind:'ENTRY',disposition:'SKIPPED_HELD'},{kind:'ENTRY',disposition:'SUBMITTED'},{kind:'ENTRY',disposition:'MYSTERY'}];
+const n=(id)=>f(L,id).map((d)=>d.disposition);
+console.log(JSON.stringify({all:n('all'),placed:n('placed'),notaken:n('notaken'),opinion:n('opinion'),other:n('other'),bad:n('nope'),none:f(null,'placed')}));
+"""
+    out = json.loads(subprocess.run([node, "-e", harness, str(root / "app.js")], capture_output=True, text=True, check=True).stdout)
+    assert len(out["all"]) == 7 and out["bad"] == out["all"] and out["none"] == []
+    assert out["placed"] == ["FILLED", "FILLED", "SUBMITTED"] and "WOULD_ENTER" not in out["placed"]
+    assert out["notaken"] == ["RISK_REJECTED", "SKIPPED_HELD"] and out["opinion"] == ["WOULD_ENTER"] and out["other"] == ["MYSTERY"]
