@@ -118,3 +118,16 @@ These are challenges raised by reading the alerter. None is proven.
 * **Calendar coverage is explicit** in `event_risk.py` (`MACRO_START`/`MACRO_END`; outside it the entry is blocked as "coverage unknown"). Platform `events.py` also limits BLS coverage to Nov-Dec 2026 but a lane is not blocked by it; worth checking whether outside-coverage reads as "no events".
 * **Weakness on the alerter side:** `SHOCK` percentages are hand-set scenario inputs (labelled illustrative, not betas); the premium-cap and low-OI exceptions are experiments that deliberately loosen entry filters on paper.
 * **Still not read:** `server.py`, `handoff_challenge.py`, `opportunity.py`, the alerter's tests.
+
+## Addendum 2026-11-20: `position_plans.py` and the $5K swing account (alerter at `8aa674d`, 7 commits since `5dca972`)
+
+* **An exit level is shown only when the quote is current.** `position_plans.py` gives a modeled exit price for an open position only if the
+  quote is not demo, not stale, is a two-sided bid/ask that matches the candidate's fetch time, and (for lane positions) falls inside a US
+  session and a maximum age. Otherwise the price is `None` and the status says why (`OBSOLETE_BID`, etc.). It never fills in a guess.
+  Platform comparison: `exit_plans` shows stop/target levels computed from entry, which is a rule, not a quote, so it is fine; but the
+  dashboard's open-position "mark" should say how old its quote is. Not checked line by line here.
+* **Exit rules are saved at entry** (`Saved at entry` vs `Lane defaults`): a later settings change does not silently move the exit of a trade
+  already open. Platform lanes read their rules at exit time; whether that can shift an open trade's exit was not checked. Logged as challenge 9.
+* **New account, not a resize.** The owner added `$5K paper swing` (5 to 10% per idea, 10% total premium cap, 3x in 30 days stretch goal) as a
+  separate account beside the aggressive ones, as CLAUDE.md asks. Platform: no change; sizing there remains the owner's call.
+* **Still not read:** `server.py`, `handoff_challenge.py`, `opportunity.py`, the alerter's tests (none run).

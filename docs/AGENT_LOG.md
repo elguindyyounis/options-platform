@@ -905,3 +905,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Changed: the Trades page now says how many lane trades sit in the other data mode and that nothing was deleted (`hidden_other_mode`); `Restore-History.command` (double-click, file picker, accepts the zip) with `deploy/restore_db.py` copies a chosen database into the installed platform, parks the previous one as `optplat.db.before-restore-<time>` and restarts the server.
 * Mistake to record: I told the owner to run the installer without warning that history lives in a different file and would start empty. The migration in PR #48 was the first fix; this is the second.
 * Verified: pytest; restore run on the owner's real file into a temp folder, then the server on it in demo mode reports 39 hidden real-data trades. Not verified: macOS, the picker dialog, restarting the launchd server, the dashboard on real data (Yahoo unreachable from the cloud).
+
+## 2026-11-20: filter for the "Taken or skipped, and why" feed (daily challenger, UX-5)
+
+* Alerter moved `5dca972` to `8aa674d` (7 commits). Read `position_plans.py` and the $5K swing account (notes in `docs/COMPARISON_ALERTER.md`).
+* Change: Desk feed gets filter chips with counts. "Orders placed (paper)" holds only filled entries, placed exits and orders in progress; committee opinions, blocks, skips and unrecognised lines each have their own group, so an opinion is never read as an order. Pure JS function, textContent only, test through the node harness. No backend, risk, sizing or auth change.
+* Verified: `python -m pytest -q` 716 passed (715 baseline + 1 new). Not verified: alerter tests, a real browser, real data (cloud, Friday, no weekend scan).
+* Logged challenge 9 (exit rules saved at entry). The platform Mac copy is a manual git clone: merging does not deliver it; the owner pulls it.
