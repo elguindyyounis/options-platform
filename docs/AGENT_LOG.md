@@ -898,3 +898,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Changed: `deploy/migrate_db.py` (run by `install_mac.sh` after stopping the server) searches Downloads, Documents, Desktop and the home folder two levels deep for `optplat.db`, picks the one with the most orders and COPIES it (SQLite backup) into the data folder. It never overwrites a database that has orders, parks an empty one as `optplat.db.empty-<time>`, ignores the alerter's `state.db`, and lists other candidates without touching them.
 * Not done: the alerter's JSON reports and `state.db` use a different layout and are not imported into the platform. A restore from the private data repository is not built.
 * Verified: pytest (4 new in `tests/test_migrate_db.py`: most-orders wins, existing history kept, empty parked, unreadable ignored). Not verified: macOS, folder-permission prompts for Downloads/Documents/Desktop, the owner's real files.
+
+
+## 2026-11-20: filter for the "Taken or skipped, and why" feed (daily challenger, UX-5)
+
+* Alerter moved `5dca972` to `8aa674d` (7 commits). Read `position_plans.py` and the $5K swing account (notes in `docs/COMPARISON_ALERTER.md`).
+* Change: Desk feed gets filter chips with counts. "Orders placed (paper)" holds only filled entries, placed exits and orders in progress; committee opinions, blocks, skips and unrecognised lines each have their own group, so an opinion is never read as an order. Pure JS function, textContent only, test through the node harness. No backend, risk, sizing or auth change.
+* Verified: `python -m pytest -q` 716 passed (715 baseline + 1 new). Not verified: alerter tests, a real browser, real data (cloud, Friday, no weekend scan).
+* Logged challenge 9 (exit rules saved at entry). The platform Mac copy is a manual git clone: merging does not deliver it; the owner pulls it.
