@@ -169,7 +169,7 @@ class TradingEngine:
         followed: dict[str, Strategy] = {strategy.name: strategy}  # the shadow book follows every strategy's top picks, not only the active one
         for extra in (LiquidTrendStrategy(), FlowFollowStrategy(mode="flagged"), FlowFollowStrategy(mode="nearer")):
             followed.setdefault(extra.name, extra)
-        self.scanner = Scanner(provider, self.store, clock=clock, strategies=tuple(followed.values()))
+        self.scanner = Scanner(provider, self.store, clock=clock, strategies=tuple(followed.values()), calendar=self.calendar)
         self.shortterm = ShortTermLane(provider, self.store, clock=clock)
         self.swing = SwingLane(provider, self.store, clock=clock, calendar=self.calendar)
         self.option_lanes = OptionLanes(provider, self.store, clock=clock, calendar=self.calendar)

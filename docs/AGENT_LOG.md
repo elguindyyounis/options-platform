@@ -906,3 +906,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Change: Desk feed gets filter chips with counts. "Orders placed (paper)" holds only filled entries, placed exits and orders in progress; committee opinions, blocks, skips and unrecognised lines each have their own group, so an opinion is never read as an order. Pure JS function, textContent only, test through the node harness. No backend, risk, sizing or auth change.
 * Verified: `python -m pytest -q` 716 passed (715 baseline + 1 new). Not verified: alerter tests, a real browser, real data (cloud, Friday, no weekend scan).
 * Logged challenge 9 (exit rules saved at entry). The platform Mac copy is a manual git clone: merging does not deliver it; the owner pulls it.
+
+## 2026-11-21 (scheduled improvement run): days to earnings in the shadow book
+
+* Evolution plan Phase 1 item 1(b). Helps E4 (skip entries within 7 days of earnings), E2/E6 (need earnings context per follow). Phase 1 gate not met and the private data repo `options-platform-data` is not attached to this session, so no real results were read and no hypothesis was registered or resolved.
+* Merged `origin/main` into integration first (clean). Decisions made: look MAX_DTE (120) days ahead; `earnings_status` is `known`, `etf` or `none_in_window`; a source that cannot answer leaves `days_to_earnings` in `missing_features` (never zero); dates labelled `unofficial estimate`. Calendar is cached 12h per symbol, one lookup per chain per scan, failures swallowed.
+* Changed: `shadow.earnings_context`, `features(earn=)`, `observe(calendar=)`, `Scanner(calendar=)`, engine passes its calendar. No risk, order, auth, sizing, broker or schema change.
+* Verified: `python -m pytest -q` 718 pass (2 new). Not verified: real Yahoo responses, scan time with the extra lookups, the Mac. Still open: days since earnings and the 5-day pre-event return (E6), following the five options lanes separately.

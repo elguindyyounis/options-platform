@@ -8,14 +8,15 @@ point, so any exit rule can be replayed later over the recorded bids (the replay
 
 Research only. Nothing here places an order, changes a threshold or feeds a strategy. The selection is deliberately
 simple and generic (most active liquid contracts per underlying): following the top candidates of each strategy and lane
-is a later step. IV percentile and days to earnings are not recorded yet and are listed in ``missing_features`` so no
-analysis can mistake them for zero.
+is a later step. A feature that could not be measured is listed in ``missing_features`` so no analysis can mistake it for
+zero. Days to earnings comes from the event calendar (Yahoo's unofficial dates, often estimates) and is labelled as such.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
+from .events import ETFS
 from .market_clock import NY
 from .marketdata import ChainRow, MarketSnapshot
 from .tracker import trading_days_between
@@ -28,7 +29,7 @@ MAX_SPREAD_PCT = 25.0     # wider than this is not a price anyone would pay; it 
 DENSE_DAYS = 10           # a path point at every scan for this many trading days, then one per day
 MAX_AGE = 30              # trading days followed
 SLACK = 2
-MISSING_FEATURES = ["iv_percentile", "days_to_earnings"]  # iv_percentile is dropped from a row once its name has MIN_IV_HISTORY prior days
+MISSING_FEATURES = ["iv_percentile", "days_to_earnings"]  # each is dropped from a row once it is measured (iv_percentile needs MIN_IV_HISTORY prior days)
 MIN_IV_HISTORY = 20       # prior days of a name's own IV level needed before a percentile means anything
 ATM_BAND_PCT = 5.0        # contracts within this moneyness band define the name's IV level
 GATE = {"trading_days": 20, "followed": 2000, "underlyings": 50, "complete_pct": 80.0, "export_days_in_a_row": 5}
@@ -75,7 +76,31 @@ def iv_percentile(current: Optional[float], history: dict[str, float]) -> Option
     return round(sum(1 for v in history.values() if v < current) / len(history) * 100, 1)
 
 
-def features(snap: MarketSnapshot, row: ChainRow, day: date, now: datetime, nv: Optional[float] = None, ivp: Optional[float] = None) -> dict[str, Any]:
+def earnings_context(calendar: Any, symbol: str, day: date) -> Optional[dict[str, Any]]:
+    """Point-in-time earnings facts for hypotheses E2/E4/E6, or None when they could not be measured (never a guess).
+
+    Looks MAX_DTE days ahead. ``earnings_status`` is "known" (next date and days to it), "etf" (no earnings by nature) or
+    "none_in_window" (a source answered but nothing falls inside the window). The dates are unofficial estimates.
+    """
+    if calendar is None:
+        return None
+    try:
+        events = calendar.earnings(symbol, day, day + timedelta(days=MAX_DTE))
+    except Exception:  # noqa: BLE001 - research only
+        return None
+    if events is None:
+        return None
+    if symbol.upper() in ETFS:
+        return {"earnings_status": "etf", "days_to_earnings": None, "next_earnings": None}
+    if not events:
+        return {"earnings_status": "none_in_window", "days_to_earnings": None, "next_earnings": None}
+    nxt = min(e.day for e in events)
+    return {"earnings_status": "known", "days_to_earnings": (nxt - day).days, "next_earnings": nxt.isoformat(),
+            "earnings_source": "unofficial estimate"}
+
+
+def features(snap: MarketSnapshot, row: ChainRow, day: date, now: datetime, nv: Optional[float] = None, ivp: Optional[float] = None,
+             earn: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     c, u = row.contract, snap.underlying
     local = now.astimezone(NY)
     return {"symbol": snap.symbol, "contract": c.occ_symbol.strip(), "right": c.right.value, "strike": c.strike, "expiry": c.expiry.isoformat(),
@@ -85,8 +110,8 @@ def features(snap: MarketSnapshot, row: ChainRow, day: date, now: datetime, nv: 
             "trend_pct": round((u / (sum(snap.closes) / len(snap.closes)) - 1) * 100, 2) if snap.closes and sum(snap.closes) > 0 else None,
             "sector": SECTOR_OF.get(snap.symbol), "hour_et": round(local.hour + local.minute / 60, 2), "followed_at": now.isoformat(),
             "source": snap.source, "verified": snap.timestamp_verified, "name_iv": nv,
-            "missing_features": [m for m in MISSING_FEATURES if not (m == "iv_percentile" and ivp is not None)],
-            **({"iv_percentile": ivp} if ivp is not None else {})}
+            "missing_features": [m for m in MISSING_FEATURES if not ((m == "iv_percentile" and ivp is not None) or (m == "days_to_earnings" and earn is not None))],
+            **({"iv_percentile": ivp} if ivp is not None else {}), **(earn or {})}
 
 
 def point_due(age: int, observed_days: set[str], day: date) -> bool:
@@ -117,7 +142,7 @@ def strategy_picks(strategies: Any, snap: MarketSnapshot, now: datetime) -> list
     return out
 
 
-def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictional: bool, strategies: Any = ()) -> dict[str, int]:
+def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictional: bool, strategies: Any = (), calendar: Any = None) -> dict[str, int]:
     """Follow new candidates from this chain and extend the paths of contracts already followed. Never raises on bad rows.
 
     ``strategies`` (optional) adds each strategy's top proposals to the followed set and tags every followed contract that a
@@ -130,12 +155,13 @@ def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictiona
         if f["followed_day"] < day.isoformat() and f.get("name_iv"):
             history.setdefault(f["followed_day"], f["name_iv"])
     ivp = iv_percentile(nv, history)
+    earn = earnings_context(calendar, snap.symbol, day)
     for row in select(snap, day):
-        if store.record_shadow_follow(row.contract.occ_symbol.strip(), day.isoformat(), fictional, features(snap, row, day, now, nv, ivp)):
+        if store.record_shadow_follow(row.contract.occ_symbol.strip(), day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn)):
             followed += 1
     for row, tag in strategy_picks(strategies, snap, now):
         sym = row.contract.occ_symbol.strip()
-        if store.record_shadow_follow(sym, day.isoformat(), fictional, features(snap, row, day, now, nv, ivp)):
+        if store.record_shadow_follow(sym, day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn)):
             followed += 1
         store.tag_shadow_follow(sym, day.isoformat(), fictional, tag)
     by_contract = {r.contract.occ_symbol.strip(): r for r in snap.rows}
