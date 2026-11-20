@@ -22,6 +22,9 @@ if [ ! -f "$DATA/config.env" ]; then
   umask 077; printf 'OPTPLAT_API_TOKEN=%s\n' "$("$APP/.venv/bin/python" -c 'import secrets;print(secrets.token_urlsafe(32))')" >"$DATA/config.env"
 fi
 chmod 600 "$DATA/config.env"
+# Keep earlier paper history: stop the server if it runs, then COPY the best earlier optplat.db into the data folder (see deploy/migrate_db.py).
+launchctl bootout "gui/$(id -u)/com.optionsplatform.server" 2>/dev/null || true
+"$APP/.venv/bin/python" "$APP/deploy/migrate_db.py" "$DATA" "$HOME/Downloads" "$HOME/Documents" "$HOME/Desktop" "$HOME" 2>&1 | sed 's/^/History: /' || true
 write_plist() {  # label, then the program arguments, then extra keys
   local label="$1"; shift; local extra="$1"; shift
   { echo '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict>'
