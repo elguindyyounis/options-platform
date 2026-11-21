@@ -574,3 +574,38 @@ def test_frozen_baseline_is_pinned_and_independent():
     assert (f.kind, f.budget_usd, f.max_open, f.stack, f.max_per_name) == ("short", 1000, 4, "none", 1)
     assert f.experimental is False and f.budget_usd <= ol.SHORT_AGGR.budget_usd
     assert f.max_per_sector < f.max_open and b.lane != f.lane
+
+
+# ------------------------------------------------------------ challenge 9: exit rules saved at entry
+def test_an_open_trade_keeps_the_stop_it_was_entered_with_when_the_lane_default_changes_later():
+    lane, prov, store, box, t, now = open_one()
+    saved_stop, saved_target = t["open_payload"]["stop_pct"], t["open_payload"]["target_pct"]
+    assert saved_stop == SHORT.stop_pct and saved_target == SHORT.target_pct
+    lane.p = replace(lane.p, stop_pct=99.0, target_pct=1000.0)       # a later edit of the lane default must not reach this trade
+    prov.override[t["open_payload"]["contract"]] = (t["entry_price"] * 0.5, t["entry_price"] * 0.55)
+    box[0] = now + timedelta(minutes=10)
+    lane.step(force=True)
+    done = store.lane_trades(lane.p.lane, True, 5)[0]
+    assert done["close_reason"] == "stop" and done["open_payload"]["stop_pct"] == saved_stop
+
+
+def test_an_open_trade_keeps_the_target_it_was_entered_with_when_the_lane_default_changes_later():
+    lane, prov, store, box, t, now = open_one()
+    lane.p = replace(lane.p, stop_pct=1.0, target_pct=1000.0)        # a looser target and a tighter stop set after entry
+    prov.override[t["open_payload"]["contract"]] = (t["entry_price"] * 1.7, t["entry_price"] * 1.75)
+    box[0] = now + timedelta(minutes=10)
+    lane.step(force=True)
+    assert store.lane_trades(lane.p.lane, True, 5)[0]["close_reason"] == "target"
+
+
+def test_an_open_swing_trade_keeps_the_holding_limit_it_was_entered_with():
+    lane, prov, store, box, t, now, data = swing_open()
+    saved = t["open_payload"]["max_hold_bars"]
+    assert saved == lane.p.max_hold_bars
+    lane.p = replace(lane.p, max_hold_bars=saved + 100)              # a later default of 100+ days must not extend this trade
+    prov.override[t["open_payload"]["contract"]] = (t["entry_price"], t["entry_price"] * 1.02)
+    box[0] = now + timedelta(days=10)
+    prov.daily = {"AAPL": data["AAPL"] + [Bar(data["AAPL"][-1].day + timedelta(days=k), data["AAPL"][-1].close, 1_000_000) for k in range(1, 13)]}
+    lane.feed._cache.clear()
+    lane.step(force=True)
+    assert store.lane_trades(lane.p.lane, True, 3)[0]["close_reason"] == "time"

@@ -913,3 +913,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Merged `origin/main` into integration first (clean). Decisions made: look MAX_DTE (120) days ahead; `earnings_status` is `known`, `etf` or `none_in_window`; a source that cannot answer leaves `days_to_earnings` in `missing_features` (never zero); dates labelled `unofficial estimate`. Calendar is cached 12h per symbol, one lookup per chain per scan, failures swallowed.
 * Changed: `shadow.earnings_context`, `features(earn=)`, `observe(calendar=)`, `Scanner(calendar=)`, engine passes its calendar. No risk, order, auth, sizing, broker or schema change.
 * Verified: `python -m pytest -q` 718 pass (2 new). Not verified: real Yahoo responses, scan time with the extra lookups, the Mac. Still open: days since earnings and the 5-day pre-event return (E6), following the five options lanes separately.
+
+## 2026-11-21 (daily challenger): open trades keep their saved exit rules; weekend scan
+
+* Alerter moved `8aa674d` to `3dd2733` (2 commits). Read `session_marks.py` (notes in `docs/COMPARISON_ALERTER.md`).
+* Challenge 9 answered by reading `optionlanes.py`: stop %, target % and `max_hold_bars` come from the trade's saved `open_payload`. Added 3 tests that change the lane default after entry and require the old rules still apply; a mutation that read the live default failed all three. No source change. Still live-read: the `expiry_near` 2-day rule, `FLAT_BY` and the swing trend rule (logged, not changed: they affect what lanes trade, so the owner decides).
+* UX challenge (UX-6): no upcoming-events view in the app; the plan file holds hand-copied macro events with their source.
+* Weekend scan: Yahoo unreachable, so no strategy output and no candidates. `docs/MONDAY_PLAN.md` holds macro events and underlying prices from TradingView, labelled; the price moves look extreme and are marked unverified.
+* Verified: `python -m pytest -q` (718 baseline plus 3 new). Not verified: alerter tests, option data, a real browser, the Mac. The Mac copy of the platform is a manual git clone at ~/options-platform; merging does not deliver it, and arrival is not confirmed.
