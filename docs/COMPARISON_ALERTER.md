@@ -131,3 +131,13 @@ These are challenges raised by reading the alerter. None is proven.
 * **New account, not a resize.** The owner added `$5K paper swing` (5 to 10% per idea, 10% total premium cap, 3x in 30 days stretch goal) as a
   separate account beside the aggressive ones, as CLAUDE.md asks. Platform: no change; sizing there remains the owner's call.
 * **Still not read:** `server.py`, `handoff_challenge.py`, `opportunity.py`, the alerter's tests (none run).
+
+## Addendum 2026-11-21: `session_marks.py` (alerter at `3dd2733`, 2 commits since `8aa674d`: after-hours paper equity, experiment position links)
+
+* **After hours, equity is marked from the last session's bids only.** `last_session_equity` counts a holding only if its bid was seen
+  during the last completed US session, is positive, and not later than now. If even one holding lacks such a bid, `equity_usd` is `None`
+  (not a partial sum) and it reports `marked_positions` / `total_positions`, the first and last observation times, and
+  `exchange_timestamp_verified: False`. It is stricter than showing a stale mark as if current.
+* Platform comparison: the Desk shows lane equity from stored marks. Whether it can show a partial mark as a full number was not checked;
+  logged as a follow-up in `docs/CHALLENGES.md` (challenge 10).
+* Not read: `server.py`, `handoff_challenge.py`, `opportunity.py`; alerter tests not run.

@@ -48,6 +48,8 @@ Own data the owner provides stays out of commits and logs, and results are label
 
 ## Next up
 
+000000. **Challenge 10 (2026-11-21).** Check that no Desk equity or lane P&L figure sums only some positions' marks; show "n of m marked" instead. See `docs/CHALLENGES.md`.
+
 00000. **Callouts follow-up (2026-11-19).** `callouts.py` is built; still open: record `days_to_earnings` and the 5-day pre-event return in the shadow book so E6 can run, then evaluate E6/C1 only after 30 resolved callouts.
 
 0000. **Owner roadmap (2026-11-17).** Bigger pieces, in order, in `docs/OWNER_ROADMAP.md`. Item 1 (Market context page) is done; take item 2 next.
@@ -124,6 +126,8 @@ Existing items, in order:
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-21: challenge 9, pinned the exit rules saved at entry for open option-lane trades (3 tests in `tests/test_optionlanes.py`). Follow-up: save `expiry_near` days, `FLAT_BY` and the trend rule per trade (owner may decide).
 
 * 2026-11-20: UX-5 Desk feed filter ("Orders placed (paper)", "Blocked or skipped", "Opinions only", "Other"). New: challenge 9 (do open lane trades keep entry-time exit rules?).
 
