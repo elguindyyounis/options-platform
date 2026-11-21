@@ -5,6 +5,20 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-21: the "future timestamp" rejections were the platform's own fetch time, not the Mac's clock (correction)
+
+* The 2026-11-19 entry blamed the Mac clock. That was wrong. The owner synced the clock and the rejections continued at 7 to 10 s,
+  which matched the length of the cycle (11.6 s from start to finish). Yahoo snapshots are stamped with the local clock when the fetch
+  finishes, but the gate compared them with the clock at the start of the cycle (engine, scanner) or of the step (option lanes), so any
+  fetch slower than 5 s looked like data from the future. Bigger chains (QQQ, 664 rejections against SPY's 250) fail more often.
+* Change, **approved by the owner in chat on 2026-11-21 and for the reviewer to confirm**: the gate now compares with the clock at the
+  moment of the check (`max(start, now)`) in `engine._vet`, `OptionLane._enter` and the scanner. `MAX_FUTURE_SKEW_S` (5 s) and
+  `check_snapshot` are unchanged. A timestamp more than 5 s ahead of the clock at the check is still rejected. Effect on a provider
+  that stamps its own times: it is now tolerated up to the fetch duration further ahead than before.
+* Tests: a slow fetch passes, 5 s ahead passes, 6 s ahead is rejected with FUTURE_TIMESTAMP (engine), and the same for the option lane.
+  Both fail without the change. The scanner call site has no dedicated test.
+* Not verified: a live session on the owner's Mac after this change. Expect the rejection count to drop and the option lanes to trade.
+
 ## 2026-11-19: why the option lanes made so few trades
 
 * Owner asked why short-term base, swing base/aggressive, unusual flow and the control had no trades. Read the owner's live `optplat.db` (read-only):

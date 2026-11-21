@@ -332,8 +332,13 @@ class TradingEngine:
 
     def _vet(self, snap: MarketSnapshot, report: dict[str, Any]) -> Optional[MarketSnapshot]:
         """Run the data-quality gate. A rejected snapshot is treated exactly like a failed data fetch."""
-        result = check_snapshot(snap, self._cycle_now)
-        ahead = (snap.as_of - self._cycle_now).total_seconds()
+        # Compare with the clock now, not the clock at the start of the cycle. Providers stamp a snapshot when its fetch
+        # finishes, which can be many seconds after the cycle began, so the start-of-cycle time made every slow fetch look
+        # like it came from the future. The 5 second tolerance is unchanged, and a timestamp truly ahead of the clock is
+        # still rejected. (Owner approved this change on 2026-11-21.)
+        checked_at = max(self._cycle_now, self.clock())
+        result = check_snapshot(snap, checked_at)
+        ahead = (snap.as_of - checked_at).total_seconds()
         report["clock_ahead_s"] = max(ahead, report.get("clock_ahead_s", ahead))
         issues = list(result.issues)
         fp = quote_fingerprint(snap)

@@ -175,3 +175,43 @@ def test_the_status_tells_the_owner_when_the_computers_clock_runs_behind_the_quo
     provider._clock = lambda: clock.now
     engine.run_cycle()
     assert engine.status()["clock"]["warning"] is None
+
+
+# ---------------------------------------------------------------- a slow fetch is not a clock problem
+def test_a_snapshot_stamped_when_a_slow_fetch_finished_is_not_called_future_but_one_truly_ahead_still_is():
+    engine, manager, broker, provider, clock = build()
+    engine._cycle_now = clock.now                                   # the cycle began here
+    clock.now = clock.now + timedelta(seconds=9)                    # the fetch took 9 s and the provider stamped it at the end
+    report = {"data_quality": [], "errors": []}
+    assert engine._vet(replace(snapshot(), as_of=clock.now), report) is not None
+    assert report["clock_ahead_s"] <= 0
+    assert engine._vet(replace(snapshot(), as_of=clock.now + timedelta(seconds=5)), {"data_quality": [], "errors": []}) is not None          # inside the 5 s tolerance
+    rejected = {"data_quality": [], "errors": []}
+    assert engine._vet(replace(snapshot(), as_of=clock.now + timedelta(seconds=6)), rejected) is None        # outside it: the gate is unchanged
+    assert rejected["clock_ahead_s"] == 6.0
+    assert [d["kind"] for d in rejected["data_quality"]] == ["FUTURE_TIMESTAMP"]
+
+
+def test_the_option_lane_uses_the_clock_after_the_fetch_not_the_step_start():
+    import test_optionlanes as tol
+    from optplat import optionlanes as ol
+
+    class StampedLate(ol.Feed):
+        def __init__(self, inner, box, advance_s, extra_s):
+            self.__dict__.update(inner.__dict__)
+            self.box, self.advance_s, self.extra_s = box, advance_s, extra_s
+
+        def window(self, *a, **k):
+            self.box[0] = self.box[0] + timedelta(seconds=self.advance_s)          # the fetch takes time
+            snap = super().window(*a, **k)
+            return replace(snap, as_of=self.box[0] + timedelta(seconds=self.extra_s))
+
+    names = ("SPY",)
+    for extra, should_open in ((0, True), (6, False)):
+        data, now = tol.downtrend_daily(names)
+        lane, prov, store, box = tol.make(replace(ol.CONTROL, symbols=names, budget_usd=20000.0), daily=data, now=now)
+        lane.feed = StampedLate(lane.feed, box, 9, extra)
+        out = lane.step(force=True)
+        assert bool(tol.opened(lane, prov, store)) is should_open, out
+        if not should_open:
+            assert any("data-quality gate" in e and "FUTURE_TIMESTAMP" in e for e in out["errors"])

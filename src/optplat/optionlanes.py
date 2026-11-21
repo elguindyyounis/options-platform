@@ -311,7 +311,8 @@ class OptionLane:
                extra: Optional[dict[str, Any]] = None, budget_mult: float = 1.0) -> Optional[dict[str, Any]]:
         p = self.p
         try:
-            chk = check_snapshot(self.feed.window(sym, p.dte_min, p.dte_max, 3), now)
+            snap = self.feed.window(sym, p.dte_min, p.dte_max, 3)
+            chk = check_snapshot(snap, max(now, self.clock()))   # the clock after the fetch: the snapshot is stamped when it finishes
         except Exception as exc:  # noqa: BLE001
             out["errors"].append(f"{sym}: chain unavailable ({describe_exc(exc)})")
             return None
