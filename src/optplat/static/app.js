@@ -1065,6 +1065,7 @@
       { label: "Seen before?", get: (r) => (r.sightings > 1 ? "Day " + r.sightings + ": " : "") + histText(r.history) },
       { label: "Spread", right: true, get: (r) => r.spread_pct.toFixed(1) + "%" },
       { label: "Quoted turnover", right: true, get: (r) => "$" + num(r.quoted_turnover_usd) },
+      { label: "Why consider it", get: (r) => (r.opportunity?.reasons || ["Movement/cost evidence unavailable"]).join(" ") },
       { label: "Status", get: (r) => r.decision === "REVIEWABLE" ? el("span", "Reviewable", "tag info") : el("span", "Watch only: " + r.why_observe_only, "tag") },
     ], un, "Nothing unusual by these thresholds", "Thresholds: at least " + th.min_volume + " contracts at " + th.min_volume_oi_ratio + "x open interest or more" + (th.low_oi_below ? ", or at least " + th.min_volume_when_oi_low + " contracts when open interest is under " + th.low_oi_below : "") + ".");
 
@@ -1318,6 +1319,7 @@
       { label: "Cause", get: (r) => el("b", words(r.tag)) }, { label: "Trades", right: true, get: (r) => r.count },
       { label: "Winners", right: true, get: (r) => r.win_rate_pct + "%" },
       { label: "Average", right: true, get: (r) => { const x = span(arrow(r.avg_net_pct) + pct(r.avg_net_pct), tone(r.avg_net_pct)); x.style.whiteSpace = "nowrap"; return x; } },
+      { label: "Why consider it", get: (r) => (r.opportunity?.reasons || ["Movement/cost evidence unavailable"]).join(" ") },
       { label: "Status", get: (r) => el("span", r.pattern ? "Pattern" : "Too few to say", "tag " + (r.pattern ? "warn" : "")) },
       { label: "What it means", get: (r) => r.means }, { label: "Test next", get: (r) => r.try_next },
     ], dg.tags, "No post-mortems yet", "Each closed trade is reviewed automatically when it closes.");
@@ -1413,6 +1415,7 @@
   function renderResearch(list) {
     table($("research"), [
       { label: "Id", get: (h) => h.id }, { label: "Hypothesis", get: (h) => h.statement },
+      { label: "Why consider it", get: (r) => (r.opportunity?.reasons || ["Movement/cost evidence unavailable"]).join(" ") },
       { label: "Status", get: (h) => h.status + (h.intact ? "" : " (RECORD TAMPERED)") },
       { label: "Min trades", get: (h) => (h.criteria.min_trades || "") + " total / " + (h.criteria.min_oos_trades || "") + " out-of-sample" },
       { label: "Evaluations", right: true, get: (h) => h.evaluations },
@@ -1591,7 +1594,7 @@
     const rows = (c ? c.entries : []).map((x) => ({
       what: x.contract || x.symbol,
       outcome: RESULT_TEXT[x.result] || String(x.result),
-      why: [x.reason || (x.risk_failures || []).join("; ") || (x.rationale && x.rationale.trend ? "Trend " + x.rationale.trend + ", spread " + x.rationale.spread_pct + "%" : ""),
+      why: [...(x.rationale?.opportunity?.reasons || []), x.reason || (x.risk_failures || []).join("; ") || (x.rationale && x.rationale.trend ? "Trend " + x.rationale.trend + ", spread " + x.rationale.spread_pct + "%" : ""),
       x.size_vs_liquidity && x.size_vs_liquidity.warnings.length ? "Size check: " + x.size_vs_liquidity.warnings.join("; ") : ""].filter(Boolean).join(" | "),
     }));
     const base = c ? (c.entries_note || (rows.length ? "" : "No symbols were evaluated.")) : "No cycle has run yet.";
@@ -1604,7 +1607,7 @@
   function renderCandidates(c) {
     const rows = c && c.candidates ? c.candidates : [];
     $("candidates-note").textContent = c
-      ? "Contracts that passed the strategy filters, best score first. The score ranks liquidity and closeness to the price; it is not a chance of profit. Symbols after a buy in the same cycle are not scanned."
+      ? "Contracts that passed the strategy filters, best score first. Candidates must pass a historical-movement versus cost screen, including time decay, spread, fees and a 20% IV decline. Ranking is a research heuristic, not a chance of profit. Symbols after a buy in the same cycle are not scanned."
       : "No cycle has run yet.";
     table($("candidates-table"), [
       { label: "Contract", get: (r) => r.contract }, { label: "Trend", get: (r) => r.trend },
@@ -1612,6 +1615,7 @@
       { label: "Spread %", get: (r) => r.spread_pct }, { label: "Days to expiry", get: (r) => r.dte },
       { label: "Volume", get: (r) => (r.volume == null ? "not reported" : r.volume) },
       { label: "Open interest", get: (r) => (r.open_interest == null ? "not reported" : r.open_interest) },
+      { label: "Why consider it", get: (r) => (r.opportunity?.reasons || ["Movement/cost evidence unavailable"]).join(" ") },
       { label: "Last traded", get: (r) => (r.last_trade_age_hours == null ? "unknown" : r.last_trade_age_hours > 24 ? "STALE? " + r.last_trade_age_hours + "h ago" : r.last_trade_age_hours + "h ago") },
     ], rows, "No contract passed the filters in the last cycle");
   }

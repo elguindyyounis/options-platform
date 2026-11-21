@@ -15,7 +15,7 @@ from optplat.store import Store
 from optplat.strategy import LiquidTrendStrategy
 
 EXPIRY = NOW.date() + timedelta(days=60)
-UP = tuple(100.0 + i for i in range(60))
+UP = tuple((100.0 + i) * (1.06 if i%2==0 else 1) for i in range(60))
 SATURDAY = datetime(2026, 11, 21, 15, 0, tzinfo=timezone.utc)
 
 
@@ -508,12 +508,12 @@ def test_flow_strategy_runs_in_the_engine_and_orders_pass_the_unchanged_risk_gat
 
     engine, manager, broker, provider, clock = build(auto_entries=True)
     engine.strategy = FlowFollowStrategy(mode="flagged")
-    far = OptionContract("AAA", NOW.date() + timedelta(days=10), Right.PUT, 120.0)  # spot 159: ~24% OTM
+    far = OptionContract("AAA", NOW.date() + timedelta(days=10), Right.PUT, 155.0)  # near spot, historical movement can cover its cost
     provider.set_snapshot(
         MarketSnapshot("AAA", UP[-1], UP, (ChainRow(far, 0.95, 1.05, 30000, 500, 0.6),), NOW, "test", True)
     )
     report = engine.run_cycle()
     entry = report["entries"][0]
     assert entry["contract"].startswith("AAA") and entry["rationale"]["strategy"].startswith("flow-otm")
-    assert entry["rationale"]["otm_pct"] > 20
+    assert entry["rationale"]["opportunity"]["eligible"]
     assert entry["result"] in {s.value for s in OrderState}  # accepted or risk-rejected, never bypassed
