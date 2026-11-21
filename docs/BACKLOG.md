@@ -93,6 +93,8 @@ Existing items, in order:
 8. **CI hardening.** Add `ruff` and a type check (`mypy` or `pyright`) to the workflow; fix what
    they find without changing behaviour.
 
+0000. **UX follow-ups (owner, 2026-11-21).** Swing lane rule is technicals only: add a reason-to-buy (catalyst, earnings context, relative strength) from free sources, registered as a hypothesis before use (strategy change; no sizing or exit change). Market page: confirm heat map reads well populated. Context page: hold until gamma data exists. Short-term: keep minimal. Agents: matured-vote record stays empty until entries run; explain on page.
+
 ## Blocked on a human
 
 * **Validating any signal.** `VALIDATED_SIGNALS` in `signals.py` is empty. Adding a name is the owner's
