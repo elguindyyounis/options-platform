@@ -99,8 +99,36 @@ def earnings_context(calendar: Any, symbol: str, day: date) -> Optional[dict[str
             "earnings_source": "unofficial estimate"}
 
 
+def last_earnings(history: list[dict[str, Any]], day: date) -> Optional[dict[str, Any]]:
+    """Most recent earnings date that passed, taken from this name's own earlier follows (hypothesis E6 needs days SINCE a report).
+
+    The calendar source only lists upcoming dates, so a report date is learned from an earlier follow's ``next_earnings`` once
+    that date is in the past (and was never later than ``day``). It is an earlier unofficial estimate, labelled as such, and
+    None when no earlier follow of this name carried a date that has passed. Never a guess.
+    """
+    dates = []
+    for f in history:
+        try:
+            d = date.fromisoformat(str(f.get("next_earnings")))
+        except ValueError:
+            continue
+        if d <= day:
+            dates.append(d)
+    if not dates:
+        return None
+    last = max(dates)
+    return {"last_earnings": last.isoformat(), "days_since_earnings": (day - last).days, "last_earnings_source": "earlier shadow-book estimate"}
+
+
+def return_5d_pct(closes: tuple[float, ...]) -> Optional[float]:
+    """Return over the last 5 daily bars of the snapshot, in percent; None when there are fewer than 6 bars. E6 buckets on this."""
+    if len(closes) < 6 or closes[-6] <= 0:
+        return None
+    return round((closes[-1] / closes[-6] - 1) * 100, 2)
+
+
 def features(snap: MarketSnapshot, row: ChainRow, day: date, now: datetime, nv: Optional[float] = None, ivp: Optional[float] = None,
-             earn: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+             earn: Optional[dict[str, Any]] = None, since: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     c, u = row.contract, snap.underlying
     local = now.astimezone(NY)
     return {"symbol": snap.symbol, "contract": c.occ_symbol.strip(), "right": c.right.value, "strike": c.strike, "expiry": c.expiry.isoformat(),
@@ -111,7 +139,8 @@ def features(snap: MarketSnapshot, row: ChainRow, day: date, now: datetime, nv: 
             "sector": SECTOR_OF.get(snap.symbol), "hour_et": round(local.hour + local.minute / 60, 2), "followed_at": now.isoformat(),
             "source": snap.source, "verified": snap.timestamp_verified, "name_iv": nv,
             "missing_features": [m for m in MISSING_FEATURES if not ((m == "iv_percentile" and ivp is not None) or (m == "days_to_earnings" and earn is not None))],
-            **({"iv_percentile": ivp} if ivp is not None else {}), **(earn or {})}
+            **({"iv_percentile": ivp} if ivp is not None else {}), **(earn or {}), **(since or {}),
+            **({"return_5d_pct": r5} if (r5 := return_5d_pct(snap.closes)) is not None else {})}
 
 
 def point_due(age: int, observed_days: set[str], day: date) -> bool:
@@ -156,12 +185,13 @@ def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictiona
             history.setdefault(f["followed_day"], f["name_iv"])
     ivp = iv_percentile(nv, history)
     earn = earnings_context(calendar, snap.symbol, day)
+    since = last_earnings([f for f in store.shadow_follows(snap.symbol, day.isoformat(), fictional) if f["followed_day"] < day.isoformat()], day)
     for row in select(snap, day):
-        if store.record_shadow_follow(row.contract.occ_symbol.strip(), day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn)):
+        if store.record_shadow_follow(row.contract.occ_symbol.strip(), day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn, since)):
             followed += 1
     for row, tag in strategy_picks(strategies, snap, now):
         sym = row.contract.occ_symbol.strip()
-        if store.record_shadow_follow(sym, day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn)):
+        if store.record_shadow_follow(sym, day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn, since)):
             followed += 1
         store.tag_shadow_follow(sym, day.isoformat(), fictional, tag)
     by_contract = {r.contract.occ_symbol.strip(): r for r in snap.rows}

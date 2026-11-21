@@ -928,3 +928,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * UX challenge (UX-6): no upcoming-events view in the app; the plan file holds hand-copied macro events with their source.
 * Weekend scan: Yahoo unreachable, so no strategy output and no candidates. `docs/MONDAY_PLAN.md` holds macro events and underlying prices from TradingView, labelled; the price moves look extreme and are marked unverified.
 * Verified: `python -m pytest -q` (718 baseline plus 3 new). Not verified: alerter tests, option data, a real browser, the Mac. The Mac copy of the platform is a manual git clone at ~/options-platform; merging does not deliver it, and arrival is not confirmed.
+
+## 2026-11-22 (scheduled improvement run): days since earnings and 5-day return in the shadow book
+
+* Evolution plan Phase 1 item 1(b). Helps E6 (calls after vs before earnings, split by pre-report run-up) and E4. Gate not met; the private data repo `options-platform-data` is not attached, so no real results were read and no hypothesis was registered or resolved.
+* `origin/main` had nothing integration lacked. Decisions made: Yahoo only lists upcoming dates, so a past report date is learned from an earlier follow's `next_earnings` once it has passed (`shadow.last_earnings`, labelled `earlier shadow-book estimate`, absent when unknown); `return_5d_pct` is the trailing return over the snapshot's last 6 daily bars. `MISSING_FEATURES` left unchanged (existing test kept); absence of the new fields means unknown.
+* Limit: this is the trailing 5-day return at follow time, not the return before the report; E6 needs the later bid-path underlying prices for that. Names followed only after a report was already past get no date until a follow predates it.
+* Verified: `python -m pytest -q` 724 pass (3 new). Not verified: real Yahoo data, the Mac. Merged to main: see PR below.
