@@ -240,3 +240,29 @@ def test_observe_records_days_to_earnings_and_keeps_missing_list_honest(tmp_path
     shadow.observe(store2, snap([r]), D0, T0, False, (), FakeCalendar(None))
     g = store2.shadow_follows("AAA", D0.isoformat(), False)[0]
     assert "days_to_earnings" not in g and "days_to_earnings" in g["missing_features"]
+
+
+def test_last_earnings_learned_from_earlier_follows_only_once_passed():
+    hist = [{"next_earnings": (D0 - timedelta(days=3)).isoformat()}, {"next_earnings": (D0 + timedelta(days=20)).isoformat()}, {"next_earnings": None}, {}]
+    got = shadow.last_earnings(hist, D0)
+    assert got["days_since_earnings"] == 3 and got["last_earnings_source"] == "earlier shadow-book estimate"
+    assert shadow.last_earnings([{"next_earnings": (D0 + timedelta(days=2)).isoformat()}, {"next_earnings": "junk"}], D0) is None  # future or unreadable: unknown
+    assert shadow.last_earnings([], D0) is None
+
+
+def test_return_5d_needs_six_bars():
+    assert shadow.return_5d_pct((100, 100, 100, 100, 100)) is None
+    assert shadow.return_5d_pct((100.0, 101, 102, 103, 104, 110.0)) == 10.0
+    assert shadow.return_5d_pct((0, 1, 1, 1, 1, 1)) is None
+
+
+def test_observe_records_days_since_earnings_from_an_earlier_follow(tmp_path):
+    from optplat.events import Event
+    store = Store(str(tmp_path / "s.db"))
+    d1 = D0 + timedelta(days=4)
+    shadow.observe(store, snap([row(100, vol=900)]), D0, T0, False, (), FakeCalendar([Event("EARNINGS", d1, "x", True)]))
+    shadow.observe(store, snap([row(100, vol=900)]), d1 + timedelta(days=2), T0 + timedelta(days=6), False, (), FakeCalendar([]))
+    later = [f for f in store.shadow_all_follows(False) if f["followed_day"] == (d1 + timedelta(days=2)).isoformat()][0]
+    assert later["days_since_earnings"] == 2 and later["last_earnings"] == d1.isoformat()
+    first = [f for f in store.shadow_all_follows(False) if f["followed_day"] == D0.isoformat()][0]
+    assert "days_since_earnings" not in first

@@ -914,6 +914,13 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Changed: `shadow.earnings_context`, `features(earn=)`, `observe(calendar=)`, `Scanner(calendar=)`, engine passes its calendar. No risk, order, auth, sizing, broker or schema change.
 * Verified: `python -m pytest -q` 718 pass (2 new). Not verified: real Yahoo responses, scan time with the extra lookups, the Mac. Still open: days since earnings and the 5-day pre-event return (E6), following the five options lanes separately.
 
+## 2026-11-21 (interactive, owner request): Desk and navigation redesign
+
+* Owner asked for a cleaner first screen with real information at a glance, no $100,000 headline while nothing trades, a better heat map position, a useful Agents overview, and the Tracker de-emphasised.
+* Decisions made: (1) Desk: the 13-line "At a glance" and "Research progress" lists are folded into one attention bar (worst level, count, most urgent line; opens by itself only when something needs action); (2) headline is realized P&L after fees ("No closed trades yet" when none), with KPI cards for open positions, closed trades, winners, drawdown, and the paper balance shown small and dimmed; (3) open positions and the taken-or-skipped feed sit side by side; Results check is collapsed; (4) Market heat map sectors lay out in a grid so less scrolling; (5) Agents gets "Where each agent stands now" cards (latest call, support/oppose/abstain tally, first reason); (6) Tracker link moved to the bottom of the nav and labelled rarely used (nav-order test updated for that deliberate change; every link still needs a page and a question). All element ids kept.
+* NOT done, needs the owner: automatic entries stay OFF by default (CLAUDE.md rule 2 forbids making it default-on); the owner turns it on in Controls (Settings, "Automatic entries", Save settings; it requires automatic exits). Swing rule has no reason-to-buy beyond technicals: needs a free, verifiable source for fundamentals/catalysts; recorded in BACKLOG, not built. Short-term and Context pages untouched.
+* Verified: `python -m pytest -q` 718 pass; headless Chromium screenshots of Desk and Agents on the fictional demo server. Not verified: a populated Desk (open positions, many closed trades), Market heat map after the grid change, mobile width, the Mac.
+
 ## 2026-11-21 (daily challenger): open trades keep their saved exit rules; weekend scan
 
 * Alerter moved `8aa674d` to `3dd2733` (2 commits). Read `session_marks.py` (notes in `docs/COMPARISON_ALERTER.md`).
@@ -921,3 +928,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * UX challenge (UX-6): no upcoming-events view in the app; the plan file holds hand-copied macro events with their source.
 * Weekend scan: Yahoo unreachable, so no strategy output and no candidates. `docs/MONDAY_PLAN.md` holds macro events and underlying prices from TradingView, labelled; the price moves look extreme and are marked unverified.
 * Verified: `python -m pytest -q` (718 baseline plus 3 new). Not verified: alerter tests, option data, a real browser, the Mac. The Mac copy of the platform is a manual git clone at ~/options-platform; merging does not deliver it, and arrival is not confirmed.
+
+## 2026-11-22 (scheduled improvement run): days since earnings and 5-day return in the shadow book
+
+* Evolution plan Phase 1 item 1(b). Helps E6 (calls after vs before earnings, split by pre-report run-up) and E4. Gate not met; the private data repo `options-platform-data` is not attached, so no real results were read and no hypothesis was registered or resolved.
+* `origin/main` had nothing integration lacked. Decisions made: Yahoo only lists upcoming dates, so a past report date is learned from an earlier follow's `next_earnings` once it has passed (`shadow.last_earnings`, labelled `earlier shadow-book estimate`, absent when unknown); `return_5d_pct` is the trailing return over the snapshot's last 6 daily bars. `MISSING_FEATURES` left unchanged (existing test kept); absence of the new fields means unknown.
+* Limit: this is the trailing 5-day return at follow time, not the return before the report; E6 needs the later bid-path underlying prices for that. Names followed only after a report was already past get no date until a follow predates it.
+* Verified: `python -m pytest -q` 724 pass (3 new). Not verified: real Yahoo data, the Mac. Merged to main: see PR below.
