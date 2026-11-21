@@ -535,6 +535,13 @@
           <div class="panel"><h2>How the agents have changed</h2><p class="q">Learned trust in each agent, from how its votes turned out.</p><div class="scroll" id="rs-agents" style="margin-top:10px"></div></div>
           <div class="panel"><h2>Over time</h2><p class="q">Milestones, weight changes and challenge attempts, newest first.</p><ol class="timeline" id="rs-timeline" style="margin-top:10px"></ol></div>
         </div>
+        <div class="panel">
+          <h2>Candle forecasts (Kronos)</h2>
+          <p class="q">An experiment: a pretrained model forecasts the next three daily closes. Every forecast is written down before the outcome is known, then scored against guessing that nothing changes.</p>
+          <p id="rs-fc-verdict" style="margin:10px 0"></p>
+          <div class="scroll" id="rs-fc-table"></div>
+          <p class="muted" id="rs-fc-note" style="margin-top:8px"></p>
+        </div>
         <div class="panel"><h2>Registered experiments</h2><p class="q">A challenger only counts if its hypothesis and pass criteria were written down before its results existed. The baseline strategy is frozen.</p><div class="scroll" id="research" style="margin-top:10px"></div></div>
         <details class="notes panel"><summary>What this can and cannot tell you</summary><p id="rs-caveat" class="muted" style="margin-top:10px"></p></details>
       </section>

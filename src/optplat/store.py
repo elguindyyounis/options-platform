@@ -111,6 +111,22 @@ CREATE TABLE IF NOT EXISTS tracker_marks (
     payload TEXT NOT NULL,
     PRIMARY KEY (contract, sighted_day, horizon, fictional)
 );
+CREATE TABLE IF NOT EXISTS forecasts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    bar_day TEXT NOT NULL,
+    model TEXT NOT NULL,
+    horizon INTEGER NOT NULL,
+    fictional INTEGER NOT NULL,
+    made_at TEXT NOT NULL,
+    last_close REAL NOT NULL,
+    pred_close REAL NOT NULL,
+    pred_high REAL NOT NULL,
+    pred_low REAL NOT NULL,
+    realized_close REAL,
+    resolved_day TEXT,
+    UNIQUE (symbol, bar_day, model, horizon, fictional)
+);
 CREATE TABLE IF NOT EXISTS agent_weights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,
@@ -390,6 +406,27 @@ class Store:
             self._db.execute("DELETE FROM tracker_marks WHERE sighted_day < date(?, '-400 day')", (observed_day,))
             self._db.commit()
             return cur.rowcount == 1
+
+    # ---- forecast journal: every forecast is logged before the outcome is known, then scored against what happened ----
+    def record_forecast(self, f: dict[str, Any], fictional: bool) -> bool:
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT OR IGNORE INTO forecasts (symbol, bar_day, model, horizon, fictional, made_at, last_close, pred_close, pred_high, pred_low)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)", (f["symbol"], f["bar_day"], f["model"], f["horizon"], int(fictional), f["made_at"],
+                                                    f["last_close"], f["pred_close"], f["pred_high"], f["pred_low"]))
+            self._db.commit()
+            return cur.rowcount == 1
+
+    def forecasts(self, fictional: bool, *, unresolved_only: bool = False, limit: int = 5000) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute("SELECT * FROM forecasts WHERE fictional=?" + (" AND realized_close IS NULL" if unresolved_only else "") +
+                                    " ORDER BY id DESC LIMIT ?", (int(fictional), limit)).fetchall()
+        return [dict(r) for r in rows]
+
+    def resolve_forecast(self, forecast_id: int, realized_close: float, resolved_day: str) -> None:
+        with self._lock:
+            self._db.execute("UPDATE forecasts SET realized_close=?, resolved_day=? WHERE id=? AND realized_close IS NULL", (realized_close, resolved_day, forecast_id))
+            self._db.commit()
 
     def tracker_marks(self, fictional: bool) -> list[dict[str, Any]]:
         with self._lock:

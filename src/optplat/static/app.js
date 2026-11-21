@@ -1299,8 +1299,25 @@
     ], list, "No experiments registered", "Register one with: python -m optplat.research register. The baseline stays frozen.");
   }
   async function loadResearch() {
-    const [hyp, learn] = await Promise.all([api("/api/research/hypotheses"), api("/api/learning")]);
-    renderResearch(hyp); renderLearning(learn);
+    const [hyp, learn, fcast] = await Promise.all([api("/api/research/hypotheses"), api("/api/learning"), api("/api/forecasts").catch(() => null)]);
+    renderResearch(hyp); renderLearning(learn); renderForecasts(fcast);
+  }
+  const FC_VERDICT = { ahead: ["Ahead so far", "gain"], behind: ["Not better than no change", "loss"], mixed: ["Mixed", "warn"], too_few: ["Too early", ""], none: ["No data", ""] };
+  function renderForecasts(f) {
+    const vp = $("rs-fc-verdict"), note = $("rs-fc-note");
+    vp.replaceChildren();
+    if (!f) { vp.textContent = "Could not load the forecast scorecard."; table($("rs-fc-table"), [], [], ""); note.textContent = ""; return; }
+    const v = FC_VERDICT[f.verdict] || [f.verdict, ""];
+    kids(vp, [el("span", v[0], "tag " + v[1]), span("  " + f.headline + " ")]);
+    if (!f.model_ready) vp.appendChild(el("div", f.model_status, "muted"));
+    else if (f.scored) vp.appendChild(el("div", f.scored + " scored of " + f.logged + " logged. Right direction " + f.direction_hit_pct + "% (best constant guess " + f.always_up_hit_pct + "%). Average miss " + f.mae_pct + "% against " + f.mae_no_change_pct + "% for 'no change'.", "muted"));
+    table($("rs-fc-table"), [
+      { label: "Name", get: (x) => x.symbol }, { label: "Last candle", get: (x) => x.bar_day },
+      { label: "Forecast move", right: true, get: (x) => span(pct(x.predicted_move_pct), tone(x.predicted_move_pct)) },
+      { label: "What happened", right: true, get: (x) => (x.realized_move_pct === null ? "not yet" : span(pct(x.realized_move_pct), tone(x.realized_move_pct))) },
+      { label: "Right way", get: (x) => (x.right_way === null ? "" : x.right_way ? "yes" : "no") },
+    ], f.recent, "No forecasts yet", "They start once Kronos is installed (./install-kronos.sh) and the platform is restarted.");
+    note.textContent = f.note + (f.fictional ? " Fictional demo data." : "");
   }
   const VERDICT = { IMPROVING: ["▲ Improving", "gain"], WORSENING: ["▼ Getting worse", "loss"], NO_CLEAR_CHANGE: ["◆ No clear change", ""], TOO_EARLY: ["◇ Too early to say", ""] };
   function renderLearning(l) {

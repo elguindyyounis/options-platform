@@ -24,6 +24,7 @@ from typing import Any, Callable, Optional, Sequence
 
 from . import shortterm as st_mod
 from . import swing as sw_mod
+from . import forecast as fc_mod
 from .dataquality import check_snapshot
 from .diagnostics import describe_exc
 from .events import ETFS, EventCalendar
@@ -69,7 +70,7 @@ class Params:
     symbols: tuple[str, ...]
     max_per_name: int = 1        # open positions allowed in one name (stacking)
     stack: str = "none"          # "none", "winners" (add only to winners) or "any"
-    signal: str = "rule"         # "rule": the lane's own entry signal. "random": a seeded coin flip (the negative control)
+    signal: str = "rule"         # "rule": the lane's own entry signal. "random": a seeded coin flip (the negative control). "kronos": a Kronos candle forecast
 
 
 EXTRA_SHORT = ("AMD", "META", "AMZN", "MSFT", "GOOGL", "PLTR", "COIN", "SMCI", "MU", "AVGO")
@@ -100,8 +101,16 @@ CONTROL = replace(SWING_BASE, lane="control-random-swing", label="Control: rando
                   why="NEGATIVE CONTROL. Buys a call 30 to 60 days out on randomly chosen names, with exactly the sizing, stop, target and holding "
                       "limit of Swing options, base. It exists to show what this machinery earns with no signal at all. A strategy only counts if it beats this.",
                   signal="random")
-ALL_PARAMS = (SHORT_BASE, SHORT_AGGR, SWING_BASE, SWING_AGGR, FLOW, CONTROL)
+# Kronos candle forecasts as the entry signal. Everything else (size, expiry, strike, stop, target, holding limit, earnings gate, fees)
+# is copied from "Swing options, base" so the only difference from the random control and the pullback rule is where the direction comes from.
+# Needs the optional Kronos install (./install-kronos.sh); without it the lane says so and does nothing.
+KRONOS = replace(SWING_BASE, lane="kronos-options-swing", label="Kronos forecast options (swing)", both_ways=True, signal="kronos",
+                 why="EXPERIMENT. Buys a call when the Kronos candle model forecasts the 3-day close at least 1% higher, a put when 1% lower, "
+                     "with the exits of Swing options, base. Every forecast is journaled and scored against 'no change' whether or not it trades. "
+                     "It has to beat the random control to count.")
+ALL_PARAMS = (SHORT_BASE, SHORT_AGGR, SWING_BASE, SWING_AGGR, FLOW, CONTROL, KRONOS)
 CONTROL_PICKS_PER_DAY = 2
+KRONOS_MAX_PER_STEP = 6      # forecasts per check: a forecast takes seconds on a laptop, so the rest wait for the next check
 
 EXIT_TEXT = {
     "stop": "The option's bid fell to the stop set when the trade opened.",
@@ -228,8 +237,9 @@ class Feed:
 # ------------------------------------------------------------ the lane
 class OptionLane:
     def __init__(self, provider: MarketDataProvider, store: Store, params: Params, feed: Feed, *, clock: Callable[[], datetime] = utcnow,
-                 calendar: Optional[EventCalendar] = None) -> None:
+                 calendar: Optional[EventCalendar] = None, forecaster: Optional[fc_mod.Forecaster] = None) -> None:
         self.provider, self.store, self.p, self.feed, self.clock, self.calendar = provider, store, params, feed, clock, calendar
+        self.forecaster = forecaster
         self._lock = threading.Lock()
 
     # -- bookkeeping. ``held`` is a list of open trades: a lane may hold several in one name when it is allowed to stack.
@@ -464,12 +474,26 @@ class OptionLane:
             self._swing_exit(t, marks.get(t["open_payload"]["contract"]), reads.get(t["symbol"]), now, out, held)
         signals = []
         fresh = []
+        forecasts_made = 0
+        if p.signal == "kronos":
+            self._kronos_ready(raw, out)
         for sym in p.symbols:
             r = reads.get(sym)
             if r is None:
                 continue
             key = f"optlane_bar:{p.lane}:{sym}"
             if self.store.get_state(key, "") == r["day"].isoformat():
+                continue
+            if p.signal == "kronos":
+                if forecasts_made >= KRONOS_MAX_PER_STEP:
+                    break                                    # the rest wait for the next check: a forecast is slow, and the engine must not stall
+                got = self._kronos_signal(sym, r, raw.get(sym, []), now, out)
+                if got is False:
+                    break                                    # no usable model: nothing is used up
+                forecasts_made += 1
+                self.store.set_state(key, r["day"].isoformat())
+                if got:
+                    signals.append(got)
                 continue
             self.store.set_state(key, r["day"].isoformat())
             if p.signal == "random":
@@ -498,7 +522,8 @@ class OptionLane:
             reads_done += 1
             errors_before = len(out["errors"])
             made = self._enter(sym, right, now, out, {"bar_day": r["day"].isoformat(), "close": round(r["close"], 4), "rsi": r["rsi"],
-                                                       "sma_slow": round(r["sma_slow"], 4), "direction": "up" if right == "C" else "down"},
+                                                       "sma_slow": round(r["sma_slow"], 4), "direction": "up" if right == "C" else "down",
+                                                       **({"forecast": r["forecast"]} if "forecast" in r else {})},
                                held, {"bar_day": r["day"].isoformat(), "earnings_state": state})
             if made:
                 entries += 1
@@ -507,6 +532,41 @@ class OptionLane:
                 # trade, so the day's signal is kept for the next check instead of being used up. The gate itself is unchanged.
                 self.store.set_state(f"optlane_bar:{p.lane}:{sym}", "")
                 out["skips"].append(f"{sym}: the chain was not usable, so this signal will be tried again at the next check")
+
+    def _kronos_ready(self, raw: dict[str, Any], out: dict[str, Any]) -> None:
+        """Score earlier forecasts whose horizon has passed, and say why the lane is idle when there is no model."""
+        if self.forecaster is None:
+            out["skips"].append("Kronos is switched off. Run ./install-kronos.sh and restart the platform")
+            return
+        try:
+            fc_mod.resolve(self.store, raw, self.provider.fictional)
+        except Exception as exc:  # noqa: BLE001 - scoring must never stop a lane
+            out["errors"].append(f"forecast scoring failed: {describe_exc(exc)}")
+
+    def _kronos_signal(self, sym: str, r: dict[str, Any], bars: list[Any], now: datetime, out: dict[str, Any]) -> Any:
+        """(rank, symbol, right, read) when the forecast calls a move, None when it does not, False when there is no usable model.
+
+        Every forecast is journaled before the outcome is known, whether or not it leads to a trade."""
+        if self.forecaster is None:
+            return False
+        ok, why = self.forecaster.status()
+        if not ok:
+            out["skips"].append(why)
+            return False
+        try:
+            f = self.forecaster.predict(sym, bars, fc_mod.HORIZON, now)
+        except Exception as exc:  # noqa: BLE001
+            out["errors"].append(f"{sym}: Kronos forecast failed ({describe_exc(exc)})")
+            return False
+        if f is None:
+            return None                                       # not enough candles with open, high and low: a definitive no
+        self.store.record_forecast(f.as_dict(), self.provider.fictional)
+        r["forecast"] = f.as_dict()
+        if f.move_pct >= fc_mod.CALL_MOVE_PCT:
+            return (-f.move_pct, sym, "C", r)
+        if f.move_pct <= -fc_mod.CALL_MOVE_PCT and self.p.both_ways:
+            return (f.move_pct, sym, "P", r)
+        return None
 
     def _long_exit(self, t: dict[str, Any], mark: Optional[tuple[float, float]], r: Optional[dict[str, Any]], now: datetime, out: dict[str, Any],
                    held: list[dict[str, Any]], trend_rule: bool) -> None:
@@ -590,10 +650,11 @@ class OptionLane:
 # ------------------------------------------------------------ all five together
 class OptionLanes:
     def __init__(self, provider: MarketDataProvider, store: Store, *, clock: Callable[[], datetime] = utcnow,
-                 calendar: Optional[EventCalendar] = None) -> None:
+                 calendar: Optional[EventCalendar] = None, forecaster: Optional[fc_mod.Forecaster] = None) -> None:
         self.provider, self.store, self.clock = provider, store, clock
         self.feed = Feed(provider, clock)
-        self.lanes = [OptionLane(provider, store, p, self.feed, clock=clock, calendar=calendar) for p in ALL_PARAMS]
+        self.forecaster = forecaster if forecaster is not None else fc_mod.from_env()
+        self.lanes = [OptionLane(provider, store, p, self.feed, clock=clock, calendar=calendar, forecaster=self.forecaster) for p in ALL_PARAMS]
         from .challenge import ChallengeLane  # imported here: the challenge module builds on this one
 
         self.challenge = ChallengeLane(provider, store, self.feed, clock=clock, calendar=calendar)

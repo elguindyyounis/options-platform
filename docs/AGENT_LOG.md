@@ -5,6 +5,26 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-21: Kronos candle forecasts as an optional paper experiment
+
+* Owner asked to add the Kronos model (github.com/shiyu-coder/Kronos, MIT, AAAI 2026 paper) as a technical-analysis input for entries and
+  exits, with a test, and approved the extra install (PyTorch, Hugging Face model download). Concerns raised first: the README gives no accuracy
+  figures, its backtest ignores costs, the model may have seen the test period in training, and it forecasts price candles, not options.
+* `forecast.py`: `KronosForecaster` (lazy, optional, never raises into the engine), `make_forecast` (refuses non-finite or inconsistent numbers),
+  the journal (`forecasts` table, one row per name per candle, written before the outcome is known), `resolve` (scores at +3 trading days) and
+  `scorecard` (direction against the best constant guess, average miss against 'no change', verdict withheld below 20 scored, never called proof).
+* New lane `kronos-options-swing` (`ol.KRONOS`): copied from Swing options, base (same size, expiry, strike, stop, target, holding limit, earnings
+  gate, fees). Buys a call when the forecast 3-day close is 1%+ above the last close, a put when 1%+ below. At most 6 forecasts per check so a slow
+  model cannot stall the engine. With no model it says so and uses nothing up. Research lane, no orders. Judged against `control-random-swing`.
+* `Bar` gained optional open, high and low (Yahoo fills them) because Kronos needs real candles. The demo market does not, so no forecasts there.
+* `GET /api/forecasts`, a "Candle forecasts (Kronos)" panel on Research, `install-kronos.sh` (clone pinned to commit 67b630e, installs into `.venv`,
+  downloads the small model, runs one test forecast on made-up prices).
+* Verified: 17 new tests with a fake model (signal direction, journaling, retry, cap per check, scorecard verdicts, endpoint), full suite, headless
+  Chromium on the demo for the Research panel.
+* **Not verified: the real model has never been run.** The sandbox cannot reach Hugging Face. The first real check is the test forecast at the end of
+  `./install-kronos.sh` on the owner's Mac. Speed on a laptop CPU is unknown. Pinned code is third-party and is executed when the lane loads it.
+* Not done: the forecast's high and low (the "exit price") are journaled but not yet scored, and exits are unchanged. No trend-following control yet.
+
 ## 2026-11-21: the "future timestamp" rejections were the platform's own fetch time, not the Mac's clock (correction)
 
 * The 2026-11-19 entry blamed the Mac clock. That was wrong. The owner synced the clock and the rejections continued at 7 to 10 s,

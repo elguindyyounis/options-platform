@@ -21,6 +21,10 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 ## Next up
 
+00000. **Kronos follow-ups.** (1) Score the forecast high and low (did the forecast target get hit?) before any exit ever uses them. (2) Add a plain
+   trend-following control lane (buy in the direction of the last 3-day move) so Kronos is judged against something smarter than a coin flip.
+   (3) Try it on intraday candles for entry timing, only after the daily scorecard has 20+ scored forecasts. (4) Add a Kronos line to the Desk objections.
+
 0000. **Persist the reason each option lane did not trade.** Today only the last check's skips are kept, and nothing is kept when the market is closed. Keep a per-day tally by reason (no signal, chain rejected, no contract met the limits, over budget, caps) per lane and show it beside each lane, so "why no trades" has a recorded answer. After the owner syncs the Mac clock, check whether `shortterm-options-base` is also blocked by its own limits.
 
 000. **More negative controls (from `docs/PRINCIPLES.md`).** A frozen-baseline lane that is never edited, a stressed-cost lane (double spread and

@@ -435,7 +435,7 @@ def test_the_option_lanes_are_off_by_default_and_the_endpoints_say_so(client):
     assert EngineConfig().option_lanes_enabled is False and engine.maybe_option_lanes() is None
     assert c.get("/api/optlanes").status_code == 401
     body = c.get("/api/optlanes", headers=H).json()
-    assert body["enabled"] is False and body["fictional"] is True and len(body["lanes"]) == 6 and "digest" in body
+    assert body["enabled"] is False and body["fictional"] is True and len(body["lanes"]) == 7 and "digest" in body
     assert {l["lane"] for l in body["lanes"]} == {p.lane for p in ol.ALL_PARAMS}
     assert c.post("/api/optlanes/step", headers=H).status_code == 409
 
@@ -444,7 +444,7 @@ def test_switching_the_lanes_on_runs_them_and_every_trade_is_labelled_fictional_
     c, engine = client
     engine.set_config({"option_lanes_enabled": True, "enforce_market_hours": False})
     res = c.post("/api/optlanes/step", headers=H).json()
-    assert len(res["lanes"]) == 6 and all("errors" in x for x in res["lanes"])
+    assert len(res["lanes"]) == 7 and all("errors" in x for x in res["lanes"])
     body = c.get("/api/optlanes", headers=H).json()
     assert body["enabled"] is True and all(l["fictional"] is True for l in body["lanes"])
     assert all(l["rules"] and l["limitations"] and l["params"] for l in body["lanes"])

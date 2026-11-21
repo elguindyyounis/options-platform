@@ -97,6 +97,9 @@ class Bar:
     day: date
     close: float
     volume: float
+    open_: Optional[float] = None   # optional: only some providers keep the full candle (Yahoo does, the demo does not)
+    high: Optional[float] = None
+    low: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -427,10 +430,13 @@ class YahooDataProvider(MarketDataProvider):
             try:
                 sub = frame[sym] if len(symbols) > 1 else frame
                 bars = []
-                for ts, close, vol in zip(sub.index, sub["Close"].tolist(), sub["Volume"].tolist()):
+                opens, highs, lows = sub["Open"].tolist(), sub["High"].tolist(), sub["Low"].tolist()
+                for ts, close, vol, o, h, lo in zip(sub.index, sub["Close"].tolist(), sub["Volume"].tolist(), opens, highs, lows):
                     c, v = _num(close), _num(vol)
                     if c and c > 0 and v is not None and v >= 0:
-                        bars.append(Bar(ts.date(), c, v))
+                        o, h, lo = _num(o), _num(h), _num(lo)
+                        full = all(x is not None and x > 0 for x in (o, h, lo)) and lo <= min(o, c) and h >= max(o, c)
+                        bars.append(Bar(ts.date(), c, v, o, h, lo) if full else Bar(ts.date(), c, v))
                 if bars:
                     out[sym] = bars
             except Exception:  # noqa: BLE001 - one symbol failing must not hide the others

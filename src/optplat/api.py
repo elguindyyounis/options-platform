@@ -323,6 +323,15 @@ def create_app(
             return objections.build(rows, tracker.report(engine.store, fictional, now, session_day(now), unusual_criteria()),
                                     engine.status()["clock"], engine.option_lanes.challenge.report(now), fictional, now.isoformat())
 
+        @app.get("/api/forecasts", dependencies=[Depends(auth)])
+        def forecasts_report() -> dict[str, Any]:
+            from . import forecast
+
+            out = forecast.scorecard(engine.store, engine.provider.fictional)
+            ok, why = (engine.option_lanes.forecaster.status() if engine.option_lanes.forecaster is not None
+                       else (False, "Kronos is switched off. Run ./install-kronos.sh and restart the platform"))
+            return {**out, "model_ready": ok, "model_status": why}
+
         @app.get("/api/learning", dependencies=[Depends(auth)])
         def learning_report() -> dict[str, Any]:
             from . import committee, learning, tracker
