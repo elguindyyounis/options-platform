@@ -302,14 +302,13 @@
 
   function renderDesk(portfolio, report, eq, status) {
     const a = portfolio.account, sm = eq.summary;
-    $("desk-value").textContent = money(a.equity);
+    // Headline is realized profit and loss, not the account balance: a balance of $100,000 with nothing traded says nothing.
+    const dv = $("desk-value");
+    dv.textContent = report.closed_trades ? sgn(report.realized_pnl) : "No closed trades yet";
+    dv.className = "hero-value num " + (report.closed_trades ? tone(report.realized_pnl) : "muted");
     const ch = $("desk-change");
     ch.replaceChildren();
-    if (sm.change_pct === null || sm.change_pct === undefined) ch.appendChild(el("span", "No change history yet", "muted"));
-    else {
-      const d = a.equity - a.equity / (1 + sm.change_pct / 100);
-      kids(ch, [span(arrow(sm.change_pct) + sgn(d) + " (" + pct(sm.change_pct) + ")", tone(sm.change_pct)), span(" since the first recorded point", "muted")]);
-    }
+    ch.appendChild(span(report.closed_trades ? "After fees, " + report.closed_trades + " closed" + (report.win_rate_pct === null ? "" : ", " + report.win_rate_pct + "% winners") : "Nothing has been bought and sold yet", "muted"));
     const fict = eq.fictional ? " Fictional demo data." : "";
     $("desk-headline").textContent = "Holds " + report.open.length + " open position" + (report.open.length === 1 ? "" : "s") + " and has closed " + report.closed_trades + " trade" + (report.closed_trades === 1 ? "" : "s") + "." + fict;
     const need = Math.max(0, MIN_TRADES - report.closed_trades);
@@ -317,11 +316,14 @@
       (need ? "With " + report.closed_trades + " closed trades, none of these numbers is evidence yet; " + MIN_TRADES + " is the minimum." : "The sample is past the minimum, which still does not show an edge on its own.");
     const t = $("tiles");
     t.replaceChildren();
+    t.className = "kpis";
+    const kpi = (v, l, sub, cls) => { const k = el("div", null, "kpi " + (cls || "")); k.appendChild(el("div", v, "v num")); k.appendChild(el("div", l, "l")); if (sub) k.appendChild(el("div", sub, "s")); return k; };
     kids(t, [
-      fig(money(a.cash), "Cash"),
-      fig(money(a.open_premium), "In open options", report.open.length + " position" + (report.open.length === 1 ? "" : "s")),
-      fig(sgn(report.realized_pnl), "Realized profit", report.closed_trades + " closed" + (report.win_rate_pct === null ? "" : ", " + report.win_rate_pct + "% winners"), tone(report.realized_pnl)),
-      fig(sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "%", "Below its peak", "worst -" + (sm.max_drawdown_pct || 0) + "%"),
+      kpi(String(report.open.length), "Open positions", money(a.open_premium) + " at cost"),
+      kpi(String(report.closed_trades), "Closed trades", "minimum " + MIN_TRADES + " before judging"),
+      kpi(report.win_rate_pct === null ? "n/a" : report.win_rate_pct + "%", "Winners", report.closed_trades ? "of closed trades" : "no closed trades"),
+      kpi(sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "%", "Below its peak", "worst -" + (sm.max_drawdown_pct || 0) + "%"),
+      kpi(money(a.equity), "Paper balance", "cash " + money(a.cash) + (report.closed_trades ? "" : "; untouched"), "dim"),
     ]);
     $("sample").textContent = report.caveat;
     S.lastPoints = eq.points;
@@ -1390,6 +1392,21 @@
       { label: "Agent", get: (x) => el("b", x.name) }, { label: "Learned weight", right: true, get: (x) => Number(x.weight).toFixed(2) },
       { label: "After it supported", get: (x) => x.support }, { label: "After it opposed", get: (x) => x.oppose }, { label: "Note", get: (x) => x.note },
     ], rows, "No agents");
+    const now = $("committee-now");
+    now.replaceChildren();
+    const per = {};
+    votes.forEach((d) => ((d.payload && d.payload.verdicts) || []).forEach((v) => {
+      const p = per[v.agent] || (per[v.agent] = { latest: v, support: 0, oppose: 0, abstain: 0 });
+      if (v.stance === "SUPPORT") p.support += 1; else if (v.stance === "OPPOSE") p.oppose += 1; else p.abstain += 1;
+    }));
+    const names = Object.keys(per);
+    if (!names.length) now.appendChild(el("p", "No votes yet. The committee votes on the top candidates each cycle; with entries off or the market closed there is nothing to vote on. It is in " + c.mode + " mode, so it records opinions only.", "muted"));
+    names.forEach((n) => {
+      const p = per[n], card = el("div", null, "agentcard");
+      kids(card, [el("b", n), voteChip(p.latest), el("div", p.support + " support, " + p.oppose + " oppose, " + p.abstain + " abstain", "num"),
+        el("div", (p.latest.reasons || [])[0] || "No reason recorded", "why")]);
+      now.appendChild(card);
+    });
     const latest = [], seen = {};
     votes.forEach((d) => { if (d.contract && !seen[d.contract] && latest.length < 8) { seen[d.contract] = 1; latest.push(d); } });
     table($("committee-votes"), [
@@ -1729,6 +1746,15 @@
     box.replaceChildren();
     const c = glanceCounts(items);
     const worst = c.bad ? "bad" : c.warn ? "warn" : "ok";
+    const sum = $("attn-summary");
+    if (sum) {
+      const top = orderGlance(items)[0];
+      sum.replaceChildren();
+      sum.appendChild(el("span", worst === "bad" ? "Needs you" : worst === "warn" ? "Check" : "All clear", "pill " + worst));
+      sum.appendChild(el("span", c.bad ? c.bad + " action, " + c.warn + " notes" : c.warn + " notes, nothing urgent", "muted"));
+      if (top && top.level !== "ok") sum.appendChild(el("span", top.text.length > 110 ? top.text.slice(0, 107) + "..." : top.text, top.level));
+      $("attn").open = worst === "bad";
+    }
     box.appendChild(el("div", worst === "bad" ? "Needs your attention" : worst === "warn" ? "Check these" : "Nothing needs you right now", "pill " + worst));
     box.appendChild(el("span", " " + c.bad + " action, " + c.warn + " note, " + c.ok + " ok (most urgent first)", "muted"));
     const ul = el("ul");
