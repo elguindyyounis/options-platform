@@ -22,6 +22,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Optional, Sequence
 
+from . import shadow
 from . import shortterm as st_mod
 from . import swing as sw_mod
 from .dataquality import check_snapshot
@@ -327,6 +328,7 @@ class OptionLane:
         if row is None:
             out["skips"].append(f"{sym}: no {'call' if right == 'C' else 'put'} met the expiry, spread and open interest limits")
             return None
+        shadow.follow_lane_pick(self.store, chk.snapshot, row, now, self.provider.fictional, p.lane, p.label, self.calendar)
         budget = p.budget_usd * budget_mult
         qty = int(budget // (row.ask * MULTIPLIER))
         if qty < 1:
