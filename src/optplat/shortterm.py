@@ -220,6 +220,9 @@ def lane_report(store: Store, lane: str, fictional: bool, now: datetime, *, rule
                     "realized_pnl": round(sum(t["pnl"] for t in done), 2),
                     "avg_return_pct": round(sum(rets) / len(rets), 2) if rets else None,
                     "unrealized_pnl": round(sum(t["unrealized_pnl"] or 0 for t in trades if t["status"] == "OPEN"), 2),
+                    # The sum above skips open trades with no usable bid. Say how many, so a partial sum is never read as the whole.
+                    "unmarked_open": sum(1 for t in trades if t["status"] == "OPEN" and t["unrealized_pnl"] is None),
+                    "unrealized_complete": all(t["unrealized_pnl"] is not None for t in trades if t["status"] == "OPEN"),
                     "stress_trades": len(covered),
                     "stress_bid_pnl": round(sum(t["pnl"] for t in covered), 2) if covered else None,
                     "stress_pnl": round(sum(t["stress_pnl"] for t in covered), 2) if covered else None,

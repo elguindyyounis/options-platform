@@ -255,3 +255,8 @@ Existing items, in order:
 * Glance line "Worst case today" (open premium as % of equity), display only (challenge 19).
 
 * Glance list sorted most-urgent-first with action/note/ok counts, frontend only (run 24, challenge 23).
+
+## 2026-11-22 (daily challenger)
+
+* Done: challenge 10 for lane and trade summaries (partial open P&L is flagged, not silently summed).
+* New: challenge 11, a display-only "effective positions" count for correlated baskets (SPY/QQQ/IWM). Any cap needs the owner. Check Desk equity and the Orders page for the same partial-sum gap.

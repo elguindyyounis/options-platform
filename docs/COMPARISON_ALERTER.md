@@ -141,3 +141,15 @@ These are challenges raised by reading the alerter. None is proven.
 * Platform comparison: the Desk shows lane equity from stored marks. Whether it can show a partial mark as a full number was not checked;
   logged as a follow-up in `docs/CHALLENGES.md` (challenge 10).
 * Not read: `server.py`, `handoff_challenge.py`, `opportunity.py`; alerter tests not run.
+
+## Addendum 2026-11-22: `entry_quality.py` and `day_limits.py` (alerter at `3dd2733`, unchanged since the last run)
+
+* **`entry_quality.py`** (strict real-source entry policy): spread at most 15% of the *ask*, volume >= 20, OI >= 100, order at most 10% of
+  reported volume and of OI, 7 to 730 DTE, strike within 30/40/60% of spot by horizon, and basket caps (2 per symbol and side, 3 across
+  SPY/QQQ/IWM, 4 across a mega-cap growth set). No score may waive a failure; demo rows are exempt and say so. The platform has the 10%
+  participation test (`liquidity.py`) and a per-underlying side limit (`risk.py`), but **no correlated-basket cap**: SPY, QQQ and IWM
+  calls count as three independent positions. Logged as challenge 11 (changing a risk limit is the owner's call).
+* **`day_limits.py`**: optional per-day entry count, daily realized-loss limit and ET entry window, all OFF until the owner sets them, and
+  `NOT_CHECKED_NO_CLOSED_LEDGER` is reported when a lane account cannot measure today's loss, rather than passing it. A platform
+  equivalent was not found by a quick search of `risk.py` for `daily_loss`; that is unconfirmed.
+* Not read: `underlying_exits.py`, `target_planning.py`, `paper_readiness.py`; alerter tests not run.
