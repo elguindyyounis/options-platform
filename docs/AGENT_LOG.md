@@ -935,3 +935,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * `origin/main` had nothing integration lacked. Decisions made: Yahoo only lists upcoming dates, so a past report date is learned from an earlier follow's `next_earnings` once it has passed (`shadow.last_earnings`, labelled `earlier shadow-book estimate`, absent when unknown); `return_5d_pct` is the trailing return over the snapshot's last 6 daily bars. `MISSING_FEATURES` left unchanged (existing test kept); absence of the new fields means unknown.
 * Limit: this is the trailing 5-day return at follow time, not the return before the report; E6 needs the later bid-path underlying prices for that. Names followed only after a report was already past get no date until a follow predates it.
 * Verified: `python -m pytest -q` 724 pass (3 new). Not verified: real Yahoo data, the Mac. Merged to main: see PR below.
+
+## 2026-11-22 (daily challenger): partial open P&L is flagged; weekend scan
+
+* Alerter still `3dd2733`. Read `entry_quality.py` and `day_limits.py` (notes in `docs/COMPARISON_ALERTER.md`): the alerter has a correlated-basket cap the platform lacks (challenge 11, needs the owner).
+* Challenge 10: `shortterm.lane_report` and `trades.build_trades` summed open P&L over marked trades only. Added `unrealized_complete` (both) and `unmarked_open` (lanes); the lane page and compare table now say "partial" without gain/loss colour. Numeric values unchanged. UI is display only; no risk, order, sizing, auth or broker change.
+* Weekend scan: Yahoo refused again (HTTP 000), so no strategy output and no candidates. `docs/MONDAY_PLAN.md` refreshed with TradingView prices, RSI and SMAs and the calendar; single source, labelled research.
+* Verified: `python -m pytest -q` 725 pass (1 new test, 1 assertion added to an existing test; nothing weakened); `node --check` on app.js. Not verified: alerter tests, option data, a real browser, Desk equity path, the Mac. The Mac copy is a manual clone at ~/options-platform; merging does not deliver it and arrival is not confirmed.

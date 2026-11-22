@@ -97,7 +97,7 @@ def test_a_position_that_cannot_be_priced_is_unobservable_not_zero(client):
     body = trades(client)
     t = body["trades"][0]
     assert t["mark"] is None and t["unrealized_pnl"] is None and t["pnl"] is None and t["pnl_pct"] is None
-    assert body["summary"]["unobservable_open"] == 1
+    assert body["summary"]["unobservable_open"] == 1 and body["summary"]["unrealized_complete"] is False
 
 
 def test_trade_detail_has_the_audit_trail_and_unknown_ids_404(client):

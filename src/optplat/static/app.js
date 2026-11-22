@@ -1297,7 +1297,7 @@
       { label: "Winners", right: true, get: (r) => r.s.win_rate_pct === null ? "n/a" : r.s.win_rate_pct + "%" },
       { label: "Average per trade", right: true, get: (r) => r.s.avg_return_pct === null ? "n/a" : span(arrow(r.s.avg_return_pct) + pct(r.s.avg_return_pct), tone(r.s.avg_return_pct)) },
       { label: "Realized", right: true, get: (r) => span(arrow(r.s.realized_pnl) + sgn(r.s.realized_pnl), tone(r.s.realized_pnl)) },
-      { label: "Open now", right: true, get: (r) => r.s.unrealized_pnl === undefined ? "n/a" : span(arrow(r.s.unrealized_pnl) + sgn(r.s.unrealized_pnl), tone(r.s.unrealized_pnl)) },
+      { label: "Open now", right: true, get: (r) => r.s.unrealized_pnl === undefined ? "n/a" : r.s.unrealized_complete === false ? span(sgn(r.s.unrealized_pnl) + " (partial, " + r.s.unmarked_open + " unmarked)", "muted") : span(arrow(r.s.unrealized_pnl) + sgn(r.s.unrealized_pnl), tone(r.s.unrealized_pnl)) },
     ], rows, "No lanes");
     chips($("op-tabs"), lanes.map((l) => ({ id: l.lane, label: l.label })), S.optLane, (id) => { S.optLane = id; renderOptions(); }, "tab");
     const lane = lanes.find((l) => l.lane === S.optLane) || lanes[0], sm = lane.summary;
@@ -1309,7 +1309,9 @@
       fig(sm.win_rate_pct === null ? "n/a" : sm.win_rate_pct + "%", "Winners", sm.closed ? sm.wins + " of " + sm.closed + " closed" : "no closed trades"),
       fig(sm.avg_return_pct === null ? "n/a" : arrow(sm.avg_return_pct) + pct(sm.avg_return_pct), "Average per trade", "of the premium paid, after fees", tone(sm.avg_return_pct)),
       fig(arrow(sm.realized_pnl) + sgn(sm.realized_pnl), "Realized", "simulated", tone(sm.realized_pnl)),
-      fig(arrow(sm.unrealized_pnl) + sgn(sm.unrealized_pnl), "Open now", "at the last bid", tone(sm.unrealized_pnl)),
+      sm.unrealized_complete === false
+        ? fig(sgn(sm.unrealized_pnl) + " (partial)", "Open now", sm.unmarked_open + " open trade(s) have no usable bid and are left out, so the real figure is unknown")
+        : fig(arrow(sm.unrealized_pnl) + sgn(sm.unrealized_pnl), "Open now", "at the last bid", tone(sm.unrealized_pnl)),
       fig(sm.stress_pnl === null ? "n/a" : arrow(sm.stress_pnl) + sgn(sm.stress_pnl), "Realized, harder exit", sm.stress_pnl === null ? "needs closed trades with a post-mortem" : "same " + sm.stress_trades + " trades, at the bid they made " + sgn(sm.stress_bid_pnl) + "; a what-if, not a price", tone(sm.stress_pnl)),
     ]);
     const host = $("op-trades");

@@ -609,3 +609,20 @@ def test_an_open_swing_trade_keeps_the_holding_limit_it_was_entered_with():
     lane.feed._cache.clear()
     lane.step(force=True)
     assert store.lane_trades(lane.p.lane, True, 3)[0]["close_reason"] == "time"
+
+
+def test_open_figure_is_flagged_partial_when_one_open_trade_has_no_mark():
+    """Challenge 10: a sum over only the marked open trades must not read as the whole open figure."""
+    from optplat.shortterm import lane_report
+    store = Store(":memory:")
+    a = store.lane_open("x", "AAA", NOW, 2.0, 1, True, {"multiplier": 100, "fees_open": 0.0, "fee_per_contract": 0.0})
+    store.lane_open("x", "BBB", NOW, 2.0, 1, True, {"multiplier": 100, "fees_open": 0.0, "fee_per_contract": 0.0})  # never marked
+    store.set_state(f"lane_mark:{a}", json.dumps({"bid": 3.0, "ask": 3.1, "at": NOW.isoformat()}))
+    s = lane_report(store, "x", True, NOW, rules=[], limitations=[], symbols=[], exit_text={})["summary"]
+    assert s["unmarked_open"] == 1 and s["unrealized_complete"] is False
+    assert s["unrealized_pnl"] == pytest.approx(100.0)  # the marked part only, flagged as such
+    store.set_state(f"lane_mark:{a + 1}", json.dumps({"bid": 1.5, "ask": 1.6, "at": NOW.isoformat()}))
+    s = lane_report(store, "x", True, NOW, rules=[], limitations=[], symbols=[], exit_text={})["summary"]
+    assert s["unmarked_open"] == 0 and s["unrealized_complete"] is True and s["unrealized_pnl"] == pytest.approx(50.0)
+    empty = lane_report(Store(":memory:"), "x", True, NOW, rules=[], limitations=[], symbols=[], exit_text={})["summary"]
+    assert empty["unrealized_complete"] is True and empty["unmarked_open"] == 0

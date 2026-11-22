@@ -112,6 +112,7 @@ def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
         "realized_pnl": round(sum(t["realized_pnl"] for t in out), 2),
         "unrealized_pnl": round(sum(t["unrealized_pnl"] or 0.0 for t in out), 2),
         "unobservable_open": sum(1 for t in out if t["remaining"] > 0 and t["mark"] is None),
+        "unrealized_complete": not any(t["remaining"] > 0 and t["mark"] is None for t in out),
         "best": max((t["pnl"] for t in closed if t["pnl"] is not None), default=None),
         "worst": min((t["pnl"] for t in closed if t["pnl"] is not None), default=None),
         "caveat": "Paper trades with simulated fills. A small number of trades says nothing about a real edge.",

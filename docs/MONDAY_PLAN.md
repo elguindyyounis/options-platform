@@ -1,9 +1,9 @@
 # Monday plan (research, not advice)
 
-As of 2026-11-21 02:15 UTC (Saturday). Run by the daily challenger from a cloud session, not from the owner's Mac.
+As of 2026-11-22 02:20 UTC (Sunday); refreshed from the 2026-11-21 version. Run by the daily challenger from a cloud session, not from the owner's Mac.
 
 **Option scan: not run.** The platform's only option-chain provider (Yahoo) was refused again by this session's egress
-proxy (HTTP 000). No other free option-chain source is wired in, so no strategy output exists and **no candidates are
+proxy (HTTP 000, re-tested this run). No other free option-chain source is wired in, so no strategy output exists and **no candidates are
 listed**. Demo data is fictional and is deliberately not used here.
 
 ## What real data was reachable
@@ -16,6 +16,12 @@ listed**. Demo data is fictional and is deliberately not used here.
   volatility is probably high and the platform's spread and OI filters will behave differently than on a calm week.
 * **Why that matters for the lanes (an observation, not a signal):** a broad drop of this size makes put-side lanes and
   every stop/target (percent of premium) hit sooner, and wide spreads make bid exits look worse than the ask-in entry.
+
+* **Same source, second look (TradingView, same session close, still one source):** RSI(14) SPY 24.9, QQQ 26.6, IWM 30.2, DIA 27.0,
+  GLD 23.7, NVDA 15.0, MSFT 34.8, TSLA 37.8, AAPL 46.4. SPY 689.81 is below its 50-day (760.18) and 200-day (732.76) averages; QQQ, IWM,
+  DIA and MSFT too. Quotes are identical to the 11-21 pull, so nothing new has printed since Friday. The oversold readings are
+  consistent with the large drops, which makes a data error less likely but is **not** a second source. Oversold can stay oversold;
+  this is a description, not a signal.
 
 ## Known events, week of 2026-11-23 (source: TradingView economic calendar, US, medium and high importance; times UTC)
 
