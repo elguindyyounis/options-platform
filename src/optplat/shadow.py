@@ -171,6 +171,35 @@ def strategy_picks(strategies: Any, snap: MarketSnapshot, now: datetime) -> list
     return out
 
 
+def context(store: Any, snap: MarketSnapshot, day: date, fictional: bool, calendar: Any = None) -> tuple[Any, Any, Any, Any]:
+    """The point-in-time context of a name that every follow of it carries: IV level, IV percentile, earnings ahead, earnings behind."""
+    nv = name_iv(snap, day)
+    earlier = [f for f in store.shadow_follows(snap.symbol, day.isoformat(), fictional) if f["followed_day"] < day.isoformat()]
+    history: dict[str, float] = {}  # earlier days only, one level per day (the first recorded that day)
+    for f in sorted(earlier, key=lambda f: f["followed_at"]):
+        if f.get("name_iv"):
+            history.setdefault(f["followed_day"], f["name_iv"])
+    return nv, iv_percentile(nv, history), earnings_context(calendar, snap.symbol, day), last_earnings(earlier, day)
+
+
+def follow_lane_pick(store: Any, snap: MarketSnapshot, row: ChainRow, now: datetime, fictional: bool, lane: str, version: str, calendar: Any = None) -> bool:
+    """Follow the contract an options lane chose, whether or not the lane then bought it (Phase 1 item 1a, the lanes half).
+
+    Tagged ``chosen_by`` with ``lane:<name>`` so a later test can compare each lane's pick with the other candidates of the
+    same name and day (S1) and replay exits on its bid path. Research only: never raises into the lane, never places an order.
+    The path only grows while the engine scan reads the same chain, so a name the scan does not read has an entry and no path.
+    """
+    try:
+        day = now.astimezone(NY).date()
+        sym = row.contract.occ_symbol.strip()
+        nv, ivp, earn, since = context(store, snap, day, fictional, calendar)
+        new = store.record_shadow_follow(sym, day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn, since))
+        store.tag_shadow_follow(sym, day.isoformat(), fictional, {"strategy": f"lane:{lane}", "version": version, "rank": 1, "score": None})
+        return bool(new)
+    except Exception:  # noqa: BLE001 - research only
+        return False
+
+
 def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictional: bool, strategies: Any = (), calendar: Any = None) -> dict[str, int]:
     """Follow new candidates from this chain and extend the paths of contracts already followed. Never raises on bad rows.
 
@@ -178,14 +207,7 @@ def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictiona
     strategy chose with ``chosen_by``; the generic most-active selection still runs as before.
     """
     followed = points = 0
-    nv = name_iv(snap, day)
-    history: dict[str, float] = {}  # earlier days only, one level per day (the first recorded that day)
-    for f in sorted(store.shadow_follows(snap.symbol, day.isoformat(), fictional), key=lambda f: f["followed_at"]):
-        if f["followed_day"] < day.isoformat() and f.get("name_iv"):
-            history.setdefault(f["followed_day"], f["name_iv"])
-    ivp = iv_percentile(nv, history)
-    earn = earnings_context(calendar, snap.symbol, day)
-    since = last_earnings([f for f in store.shadow_follows(snap.symbol, day.isoformat(), fictional) if f["followed_day"] < day.isoformat()], day)
+    nv, ivp, earn, since = context(store, snap, day, fictional, calendar)
     for row in select(snap, day):
         if store.record_shadow_follow(row.contract.occ_symbol.strip(), day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn, since)):
             followed += 1
@@ -248,5 +270,5 @@ def report(store: Any, fictional: bool, today: date) -> dict[str, Any]:
             "gate_met_except_export": all(met.values()),  # the export streak is not visible from here
             "note": "Gate also needs the export to run five days in a row, which this report cannot see; the owner or the weekly agent confirms it. "
                     "The 'followed' count includes several strikes of one name per day; 'independent_observations' (one per underlying per day) is the sample any hypothesis test can claim. "
-                    "Selection is the most active liquid contracts per underlying plus the top proposals of each strategy (tagged chosen_by); the five options lanes are not followed separately yet.",
+                    "Selection is the most active liquid contracts per underlying plus the top proposals of each strategy (tagged chosen_by); the contracts the five options lanes chose are followed and tagged chosen_by lane:<name> (no path unless the engine scan reads that chain).",
             "missing_features": MISSING_FEATURES}

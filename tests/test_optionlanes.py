@@ -626,3 +626,19 @@ def test_open_figure_is_flagged_partial_when_one_open_trade_has_no_mark():
     assert s["unmarked_open"] == 0 and s["unrealized_complete"] is True and s["unrealized_pnl"] == pytest.approx(50.0)
     empty = lane_report(Store(":memory:"), "x", True, NOW, rules=[], limitations=[], symbols=[], exit_text={})["summary"]
     assert empty["unrealized_complete"] is True and empty["unmarked_open"] == 0
+
+
+def test_a_lane_pick_is_followed_in_the_shadow_book_tagged_with_the_lane_and_a_failure_never_blocks_the_entry(monkeypatch):
+    """Evolution plan Phase 1 item 1a (lanes), helps S1: what a lane chose is followed even when nothing is bought."""
+    bars, now = short_up()
+    lane, prov, store, box = make(SHORT, bars, now=now)
+    lane.step(force=True)
+    t = opened(lane, prov, store)
+    assert len(t) == 1
+    follows = store.shadow_all_follows(True)
+    mine = [f for f in follows if f["contract"] == t[0]["open_payload"]["contract"]]
+    assert len(mine) == 1 and mine[0]["chosen_by"][0]["strategy"] == f"lane:{SHORT.lane}" and mine[0]["entry_ask"] == t[0]["entry_price"]
+    lane2, prov2, store2, _ = make(SHORT, bars, now=now)
+    monkeypatch.setattr(ol.shadow, "context", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    lane2.step(force=True)
+    assert len(opened(lane2, prov2, store2)) == 1 and store2.shadow_all_follows(True) == []

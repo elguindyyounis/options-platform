@@ -14,3 +14,4 @@ One line per run. Columns: date, followed candidates, trading days of shadow boo
 | 2026-11-21 | unknown (data repo not attached) | unknown | 0 / 0 | none (days to earnings recorded in shadow book, for E4/E6) |
 | 2026-11-21 (UX run) | unknown | unknown | 0 / 0 | none (dashboard Desk/Agents/nav redesign; display only) |
 | 2026-11-22 | unknown (data repo not attached) | unknown | 0 / 0 | none (days since earnings and 5-day return recorded in shadow book, for E6) |
+| 2026-11-23 | unknown (data repo not attached) | unknown | 0 / 0 | none (options-lane picks followed in shadow book, for S1) |
