@@ -949,3 +949,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Merged `origin/main` into integration first (clean). Decisions made: the follow is written when a lane picks a contract (before sizing and vetoes), so a pick the lane then skipped is still followed; tag is `lane:<name>` in `chosen_by`, rank 1, score none; the context (IV percentile, earnings) is shared with `observe` through the new `shadow.context`; any error is swallowed so a lane entry never fails because of research code.
 * Changed: `shadow.context`, `shadow.follow_lane_pick`, one call in `OptionLane._enter`. No risk, order, sizing, auth, broker or schema change; no lane decision changed.
 * Verified: `python -m pytest -q` 726 pass (1 new). Not verified: real chains, whether lane symbols are read by the engine scan (a pick outside it has an entry but no path), the Mac.
+
+## 2026-11-23 (daily challenger): open P&L in the all-accounts tables says when it is partial
+
+* Alerter still `3dd2733`; read `market_breadth.py` (notes in `docs/COMPARISON_ALERTER.md`). Monday, so no weekend scan.
+* Challenge 10 / UX-7: `alltrades.build_all` summed open P&L treating an unmarked open trade as 0, so the Desk all-accounts table and the Trades sources table looked complete. Added `open_complete` and `open_unmarked` to every source and summary, and the tables show "partial, N unmarked" (no gain/loss colour). `open_pnl` itself is unchanged. No risk, order, sizing, auth, broker or schema change.
+* Verified: `python -m pytest -q` 727 pass (1 new test in `tests/test_alltrades.py`), `node --check` on app.js. Not verified: alerter tests, a real browser (the label is not covered by a JS test), real data, Desk KPI cards, Orders page, Desk paper equity.
+* The Mac copy of the platform is a manual git clone at ~/options-platform: merging does not deliver it, and arrival is not confirmed.

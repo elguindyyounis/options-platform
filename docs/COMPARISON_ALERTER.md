@@ -153,3 +153,12 @@ These are challenges raised by reading the alerter. None is proven.
   `NOT_CHECKED_NO_CLOSED_LEDGER` is reported when a lane account cannot measure today's loss, rather than passing it. A platform
   equivalent was not found by a quick search of `risk.py` for `daily_loss`; that is unconfirmed.
 * Not read: `underlying_exits.py`, `target_planning.py`, `paper_readiness.py`; alerter tests not run.
+
+## Addendum 2026-11-23: `market_breadth.py` (alerter at `3dd2733`, unchanged since the last run)
+
+* Free Yahoo daily bars for up to 320 names in batches of 20, no retries; a name that fails stays `DATA_UNAVAILABLE` or `INSUFFICIENT_HISTORY`
+  and is never filled in. Needs 6 dated bars. The rank is `min(15, |1-bar % move|)*2 + min(5, volume / prior-5-day average)*3`, labelled a
+  descriptive rank, never a win probability, with `daily_bar_may_be_incomplete: true` and `supports_option_order: false` on every row.
+* Platform comparison: the platform scans a short fixed list and has no wide, honest-about-gaps underlying discovery step. Cloud runs cannot reach Yahoo,
+  so this could not be tried. Possible later item (display-only): a breadth watch feeding the shadow book. Not started.
+* Not read: `server.py`, `opportunity.py`; alerter tests not run.

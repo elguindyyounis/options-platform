@@ -90,3 +90,19 @@ def test_the_endpoint_needs_the_token_and_returns_the_same_list(parts):
         assert c.get("/api/alltrades").status_code == 401
         body = c.get("/api/alltrades", headers=H).json()
     assert body["fictional"] is True and len(body["trades"]) == 4 and body["caveat"]
+
+
+def test_open_pnl_says_when_an_open_trade_has_no_mark(parts):
+    manager, engine = parts
+    seed(engine.store)
+    out = build_all(manager, engine.store, True, T0 + timedelta(days=3), engine.option_lanes)
+    src = {s["source"]: s for s in out["sources"]}
+    unmarked = [r for r in out["trades"] if r["status"] != "CLOSED" and r["pnl"] is None]
+    assert unmarked, "the seeded open trades have no quotes, so they cannot be marked"
+    assert out["summary"]["all"]["open_complete"] is False
+    assert out["summary"]["all"]["open_unmarked"] == len(unmarked)
+    assert src["flow-options"]["open_complete"] is False and src["flow-options"]["open_unmarked"] == 1
+    # a lane with only closed trades has nothing open, so nothing is missing
+    assert src["swing-options-base"]["open_complete"] is True and src["swing-options-base"]["open_unmarked"] == 0
+    # the number itself is unchanged: unmarked trades still add 0
+    assert src["flow-options"]["open_pnl"] == 0.0

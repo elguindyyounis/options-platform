@@ -127,6 +127,8 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-23: UX-7 follow-up / challenge 10: the Desk "All accounts" table and the Trades sources table now say "partial, N unmarked" when an open trade has no bid (`open_complete`, `open_unmarked` in `/api/alltrades`; number unchanged). Still unchecked: Desk KPI cards, Orders page, Desk paper equity. New: UX-8 (browser check of the new label).
+
 * 2026-11-21: challenge 9, pinned the exit rules saved at entry for open option-lane trades (3 tests in `tests/test_optionlanes.py`). Follow-up: save `expiry_near` days, `FLAT_BY` and the trend rule per trade (owner may decide).
 
 * 2026-11-20: UX-5 Desk feed filter ("Orders placed (paper)", "Blocked or skipped", "Opinions only", "Other"). New: challenge 9 (do open lane trades keep entry-time exit rules?).
