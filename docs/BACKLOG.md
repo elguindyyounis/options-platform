@@ -55,7 +55,7 @@ Own data the owner provides stays out of commits and logs, and results are label
 0000. **Owner roadmap (2026-11-17).** Bigger pieces, in order, in `docs/OWNER_ROADMAP.md`. Item 1 (Market context page) is done; take item 2 next.
 
 000. **Evolution plan, Phase 1 (owner priority, 2026-11-16).** See `docs/EVOLUTION_PLAN.md`. Shadow book first slice is built
-   (`shadow.py`, see Done). Still open, in order (a and b need strategy plumbing and an earnings source, so (c) was taken first): (a) follow the top candidates of each strategy and lane, not only the generic
+   (`shadow.py`, see Done). Still open, in order (R1 regime reading per follow DONE 2026-11-24; a and b need strategy plumbing and an earnings source, so (c) was taken first): (a) follow the top candidates of each strategy and lane, not only the generic
    most-active pick: strategies DONE 2026-11-19 (`chosen_by` tags, top 3 per strategy per chain); the five options lanes DONE 2026-11-23 (`follow_lane_pick`, tagged `chosen_by` `lane:<name>`; the $1,000 challenge account is not included; a path grows only when the engine scan reads that chain); (b) record IV percentile and days to earnings per followed contract (listed in `missing_features`): IV percentile DONE 2026-11-18 (`name_iv`, `iv_percentile`; appears once a name has 20 prior days, so unknown until then), days to earnings DONE 2026-11-21 (`earnings_context`, from the event calendar's unofficial Yahoo dates, labelled `unofficial estimate`; unknown when the source cannot say; days SINCE earnings and the trailing 5-day return DONE 2026-11-22 (`last_earnings` learns a report date from the name's own earlier follows once it has passed, labelled `earlier shadow-book estimate`; `return_5d_pct` from the snapshot's last 6 daily bars; both absent = unknown). The exact 5-day return BEFORE a report is not recorded: E6 must take it from the bid-path underlying prices or accept the trailing figure);
    (c) exit replay harness over `shadow_points`: DONE 2026-11-17 (`exit_replay.py`, `GET /api/shadow/exits`; not yet fed real data); (d) independent-observation counting: DONE 2026-11-17 (`one_per_underlying_day`, `independent_observations` in `/api/shadow`; not yet used by any test harness).
 
@@ -94,6 +94,10 @@ Existing items, in order:
    they find without changing behaviour.
 
 0000. **UX follow-ups (owner, 2026-11-21).** Swing lane rule is technicals only: add a reason-to-buy (catalyst, earnings context, relative strength) from free sources, registered as a hypothesis before use (strategy change; no sizing or exit change). Market page: confirm heat map reads well populated. Context page: hold until gamma data exists. Short-term: keep minimal. Agents: matured-vote record stays empty until entries run; explain on page.
+
+00000. **R1 market-regime data (owner, 2026-11-23).** Record SPY RSI14, SPY drawdown from its 20-day high and SPY's day return on every shadow follow (SPY chain/closes are read each scan), then evaluate R1 with `research.py`. Related display idea: show net call/put exposure across open positions on the Desk.
+
+000000. **Regime follow-ups (2026-11-24).** Feed the scan's breadth (share of names up) into `RegimeSource`; record the regime reading on every shadow follow for R1; show the regime as a pill on the Desk; add the guard to the swing and short-term share lanes; consider market-trend alignment (puts only when SPY is not in an uptrend) as hypothesis R2.
 
 ## Blocked on a human
 

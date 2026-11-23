@@ -339,9 +339,10 @@ LIMITATIONS = (
 
 class Scanner:
     def __init__(self, provider: MarketDataProvider, store: Store, *, clock: Callable[[], datetime] = utcnow,
-                 universe: Sequence[str] = UNIVERSE, budget_s: float = SCAN_BUDGET_S, strategies: Sequence[Any] = (), calendar: Any = None) -> None:
+                 universe: Sequence[str] = UNIVERSE, budget_s: float = SCAN_BUDGET_S, strategies: Sequence[Any] = (), calendar: Any = None, regime: Any = None) -> None:
         self.provider, self.store, self.clock = provider, store, clock
         self.universe, self.budget_s = tuple(universe), budget_s
+        self.regime = regime  # market-regime source: its reading is recorded per shadow follow (R1), research only
         self.calendar = calendar  # earnings dates for the shadow book (research only)
         self.strategies: tuple[Any, ...] = tuple(strategies)  # followed by the shadow book (research only)
         self._lock = threading.Lock()

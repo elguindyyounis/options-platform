@@ -956,3 +956,25 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Challenge 10 / UX-7: `alltrades.build_all` summed open P&L treating an unmarked open trade as 0, so the Desk all-accounts table and the Trades sources table looked complete. Added `open_complete` and `open_unmarked` to every source and summary, and the tables show "partial, N unmarked" (no gain/loss colour). `open_pnl` itself is unchanged. No risk, order, sizing, auth, broker or schema change.
 * Verified: `python -m pytest -q` 727 pass (1 new test in `tests/test_alltrades.py`), `node --check` on app.js. Not verified: alerter tests, a real browser (the label is not covered by a JS test), real data, Desk KPI cards, Orders page, Desk paper equity.
 * The Mac copy of the platform is a manual git clone at ~/options-platform: merging does not deliver it, and arrival is not confirmed.
+
+## 2026-11-23 (interactive, owner question): why puts into a broad bounce
+
+* Finding (read from the code, not from the owner's live positions, which this session cannot see): `LiquidTrendStrategy` decides call or put per name only from that name's own daily closes (put when close < 20-day average < 50-day average). After a deep sell-off nearly every name satisfies that, so puts pile up on SPY and others at the same time. Nothing reads market breadth, SPY, or an oversold/bounce state. The technical agent only multiplies confidence by 0.6 when RSI is below 25, never opposes, and the committee is in shadow mode, so it changes nothing. Risk caps limit two contracts per name and side, not total net direction across names.
+* Caution: one bounce day does not show calls would have done better; the same rule made money on the way down. So no live change was made.
+* Decision (owner choice): registered as hypothesis R1 in `docs/EVOLUTION_PLAN.md` with pass criteria (same as every row) written before any result. Not runnable until the shadow book records SPY RSI, drawdown from the 20-day high and day return per follow; added to BACKLOG.
+* Not done: the `ponytail` repository (github.com/dietrichgebert/ponytail) is outside this session's allowed repositories and no add-repo tool is available, so it was not fetched.
+
+## 2026-11-24 (interactive, owner decision): market regime steers calls versus puts
+
+* Owner decision: overall market state must decide whether to buy calls or puts, and RSI alone is not enough. Built `regime.py`: a count of signals (SPY RSI14, drawdown from the 20-day high, distance from the 20-day average, day and 3-day return, plus the share of names up and the VIX when known). A new put is blocked when the market is oversold twice over, oversold and bouncing, or bouncing hard twice; calls the mirror image. It only tightens entries, never sizes or exits, and unknown data never blocks.
+* Wired into the main engine (journal `SKIPPED_REGIME` with the reading, cycle result `BLOCKED_REGIME`) and into `OptionLane._enter` through the shared `Feed`, which covers the five option lanes and the challenge. `OPTPLAT_REGIME_GUARD=0` switches it off. Not wired into the swing and short-term share lanes.
+* Thresholds are my engineering choices made before any result, not tuned and not an edge; R1 in the plan tests them. An implausible VIX (a provider inventing a bar) is ignored.
+* Verified: `python -m pytest -q` 737 pass (10 new in `tests/test_regime.py`; the demo market first showed a bogus VIX of 414 that the guard counted, now bounded). Not verified: real SPY/VIX data from Yahoo (`^VIX` bars), breadth is not fed in yet, the effect on live paper entries, the Mac.
+
+## 2026-11-24 (scheduled improvement run): market-regime reading recorded on every shadow follow
+
+* Evolution plan Phase 1 item 1(b), the part R1 was waiting for. Helps R1 (regime guard on new puts/calls): each follow now carries `regime_label`, `regime_blocks_puts`, `regime_blocks_calls` and `regime_facts` (SPY RSI14, drawdown, day and 3-day return, VIX/breadth when known), so blocked and unblocked entries can be compared on the same bid paths. Gate not met; the private data repo `options-platform-data` is not attached, so no real results were read and no hypothesis was registered or resolved.
+* `origin/main` had nothing integration lacked. Decisions made: the reading is recorded whether or not the guard is switched on (`shadow.regime_fields`); one cached SPY read per chain; an unknown reading or any error leaves the fields absent (never guessed, never stops a follow). Wired through `Scanner(regime=...)` from the engine and `follow_lane_pick` from the lane `Feed`. Recording only: no entry, sizing, exit, risk or schema change (features are a JSON blob; export unchanged).
+* Limit: follows made before this change have no regime fields (unknown). The regime is the reading at follow time from the shared 15-minute cache.
+* Verified: `python -m pytest -q` 739 pass (2 new in `tests/test_shadow.py`). Not verified: real SPY/VIX data, the Mac.
+
