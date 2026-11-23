@@ -22,6 +22,7 @@ from .broker.sim import SimBroker
 from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
 from .market_clock import NY, session_status, upcoming_closures
 from .events import EventCalendar
+from .regime import spy_source
 from .dataquality import MAX_FUTURE_SKEW_S, check_snapshot, frozen_issue, quote_fingerprint
 from .diagnostics import clock_status
 from .liquidity import size_vs_liquidity
@@ -169,6 +170,7 @@ class TradingEngine:
         followed: dict[str, Strategy] = {strategy.name: strategy}  # the shadow book follows every strategy's top picks, not only the active one
         for extra in (LiquidTrendStrategy(), FlowFollowStrategy(mode="flagged"), FlowFollowStrategy(mode="nearer")):
             followed.setdefault(extra.name, extra)
+        self.regime = spy_source(provider, clock)  # market-regime guard on new entries (owner decision 2026-11-24; tightening only)
         self.scanner = Scanner(provider, self.store, clock=clock, strategies=tuple(followed.values()), calendar=self.calendar)
         self.shortterm = ShortTermLane(provider, self.store, clock=clock)
         self.swing = SwingLane(provider, self.store, clock=clock, calendar=self.calendar)
@@ -771,6 +773,23 @@ class TradingEngine:
                     self._journal("ENTRY", symbol, "SKIPPED_COOLDOWN", p.contract, p.limit_price,
                                   {"rationale": p.rationale, "score": p.score}, snap)
             proposals = [p for p in raw if p.contract not in held and not cooling(p.contract)]
+            blocked_why = ""
+            kept = []
+            n_blocked = 0
+            for p in proposals:
+                ok, why, reg = self.regime.allows(p.contract.right.value)
+                if ok:
+                    kept.append(p)
+                else:
+                    blocked_why = why
+                    n_blocked += 1
+                    if n_blocked <= self.JOURNAL_MAX_CANDIDATES:
+                        self._journal("ENTRY", symbol, "SKIPPED_REGIME", p.contract, p.limit_price,
+                                      {"rationale": p.rationale, "score": p.score, "why": why, "regime": reg.to_dict() if reg else None}, snap)
+            proposals = kept
+            if blocked_why and not proposals:
+                report["entries"].append({"symbol": symbol, "result": "BLOCKED_REGIME", "reason": blocked_why[:300]})
+                continue
             if not proposals:
                 item_np: dict[str, Any] = {"symbol": symbol, "result": "NO_PROPOSAL"}
                 explain = getattr(self.strategy, "explain_no_proposal", None)

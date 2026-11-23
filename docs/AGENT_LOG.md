@@ -963,3 +963,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Caution: one bounce day does not show calls would have done better; the same rule made money on the way down. So no live change was made.
 * Decision (owner choice): registered as hypothesis R1 in `docs/EVOLUTION_PLAN.md` with pass criteria (same as every row) written before any result. Not runnable until the shadow book records SPY RSI, drawdown from the 20-day high and day return per follow; added to BACKLOG.
 * Not done: the `ponytail` repository (github.com/dietrichgebert/ponytail) is outside this session's allowed repositories and no add-repo tool is available, so it was not fetched.
+
+## 2026-11-24 (interactive, owner decision): market regime steers calls versus puts
+
+* Owner decision: overall market state must decide whether to buy calls or puts, and RSI alone is not enough. Built `regime.py`: a count of signals (SPY RSI14, drawdown from the 20-day high, distance from the 20-day average, day and 3-day return, plus the share of names up and the VIX when known). A new put is blocked when the market is oversold twice over, oversold and bouncing, or bouncing hard twice; calls the mirror image. It only tightens entries, never sizes or exits, and unknown data never blocks.
+* Wired into the main engine (journal `SKIPPED_REGIME` with the reading, cycle result `BLOCKED_REGIME`) and into `OptionLane._enter` through the shared `Feed`, which covers the five option lanes and the challenge. `OPTPLAT_REGIME_GUARD=0` switches it off. Not wired into the swing and short-term share lanes.
+* Thresholds are my engineering choices made before any result, not tuned and not an edge; R1 in the plan tests them. An implausible VIX (a provider inventing a bar) is ignored.
+* Verified: `python -m pytest -q` 737 pass (10 new in `tests/test_regime.py`; the demo market first showed a bogus VIX of 414 that the guard counted, now bounded). Not verified: real SPY/VIX data from Yahoo (`^VIX` bars), breadth is not fed in yet, the effect on live paper entries, the Mac.

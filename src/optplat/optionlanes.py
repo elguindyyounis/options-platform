@@ -209,6 +209,9 @@ class Feed:
         self.provider, self.clock, self.ttl_s, self.daily_ttl_s = provider, clock, ttl_s, daily_ttl_s
         self._cache: dict[Any, tuple[datetime, Any]] = {}
         self._lock = threading.Lock()
+        from .regime import spy_source
+
+        self.regime = spy_source(provider, clock)  # shared by every lane and the challenge
 
     def _cached(self, key: Any, ttl: float, load: Callable[[], Any]) -> Any:
         now = self.clock()
@@ -316,6 +319,10 @@ class OptionLane:
     def _enter(self, sym: str, right: str, now: datetime, out: dict[str, Any], signal: dict[str, Any], held: list[dict[str, Any]],
                extra: Optional[dict[str, Any]] = None, budget_mult: float = 1.0) -> Optional[dict[str, Any]]:
         p = self.p
+        ok, why, _reg = self.feed.regime.allows(right)  # market-regime guard (owner decision 2026-11-24; tightening only)
+        if not ok:
+            out["skips"].append(f"{sym}: {why}")
+            return None
         try:
             chk = check_snapshot(self.feed.window(sym, p.dte_min, p.dte_max, 3), now)
         except Exception as exc:  # noqa: BLE001
