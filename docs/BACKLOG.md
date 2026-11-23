@@ -95,6 +95,8 @@ Existing items, in order:
 
 0000. **UX follow-ups (owner, 2026-11-21).** Swing lane rule is technicals only: add a reason-to-buy (catalyst, earnings context, relative strength) from free sources, registered as a hypothesis before use (strategy change; no sizing or exit change). Market page: confirm heat map reads well populated. Context page: hold until gamma data exists. Short-term: keep minimal. Agents: matured-vote record stays empty until entries run; explain on page.
 
+00000. **R1 market-regime data (owner, 2026-11-23).** Record SPY RSI14, SPY drawdown from its 20-day high and SPY's day return on every shadow follow (SPY chain/closes are read each scan), then evaluate R1 with `research.py`. Related display idea: show net call/put exposure across open positions on the Desk.
+
 ## Blocked on a human
 
 * **Validating any signal.** `VALIDATED_SIGNALS` in `signals.py` is empty. Adding a name is the owner's
