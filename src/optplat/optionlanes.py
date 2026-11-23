@@ -335,7 +335,7 @@ class OptionLane:
         if row is None:
             out["skips"].append(f"{sym}: no {'call' if right == 'C' else 'put'} met the expiry, spread and open interest limits")
             return None
-        shadow.follow_lane_pick(self.store, chk.snapshot, row, now, self.provider.fictional, p.lane, p.label, self.calendar)
+        shadow.follow_lane_pick(self.store, chk.snapshot, row, now, self.provider.fictional, p.lane, p.label, self.calendar, self.feed.regime)
         budget = p.budget_usd * budget_mult
         qty = int(budget // (row.ask * MULTIPLIER))
         if qty < 1:

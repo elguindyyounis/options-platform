@@ -127,8 +127,24 @@ def return_5d_pct(closes: tuple[float, ...]) -> Optional[float]:
     return round((closes[-1] / closes[-6] - 1) * 100, 2)
 
 
+def regime_fields(source: Any) -> Optional[dict[str, Any]]:
+    """The market-regime reading recorded with a follow (hypothesis R1): label, what the guard would block, and SPY facts.
+
+    Recorded whether or not the guard is switched on, so blocked and unblocked entries can be compared later. ``None`` when the
+    reading is unknown (no source, too few bars, any error): the fields are then absent, never guessed.
+    """
+    try:
+        reg = source.read() if source is not None else None
+        if reg is None:
+            return None
+        return {"regime_label": reg.label, "regime_blocks_puts": bool(reg.block_puts), "regime_blocks_calls": bool(reg.block_calls),
+                "regime_facts": dict(reg.facts)}
+    except Exception:  # noqa: BLE001 - research only
+        return None
+
+
 def features(snap: MarketSnapshot, row: ChainRow, day: date, now: datetime, nv: Optional[float] = None, ivp: Optional[float] = None,
-             earn: Optional[dict[str, Any]] = None, since: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+             earn: Optional[dict[str, Any]] = None, since: Optional[dict[str, Any]] = None, regime: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     c, u = row.contract, snap.underlying
     local = now.astimezone(NY)
     return {"symbol": snap.symbol, "contract": c.occ_symbol.strip(), "right": c.right.value, "strike": c.strike, "expiry": c.expiry.isoformat(),
@@ -139,7 +155,7 @@ def features(snap: MarketSnapshot, row: ChainRow, day: date, now: datetime, nv: 
             "sector": SECTOR_OF.get(snap.symbol), "hour_et": round(local.hour + local.minute / 60, 2), "followed_at": now.isoformat(),
             "source": snap.source, "verified": snap.timestamp_verified, "name_iv": nv,
             "missing_features": [m for m in MISSING_FEATURES if not ((m == "iv_percentile" and ivp is not None) or (m == "days_to_earnings" and earn is not None))],
-            **({"iv_percentile": ivp} if ivp is not None else {}), **(earn or {}), **(since or {}),
+            **({"iv_percentile": ivp} if ivp is not None else {}), **(earn or {}), **(since or {}), **(regime or {}),
             **({"return_5d_pct": r5} if (r5 := return_5d_pct(snap.closes)) is not None else {})}
 
 
@@ -182,7 +198,7 @@ def context(store: Any, snap: MarketSnapshot, day: date, fictional: bool, calend
     return nv, iv_percentile(nv, history), earnings_context(calendar, snap.symbol, day), last_earnings(earlier, day)
 
 
-def follow_lane_pick(store: Any, snap: MarketSnapshot, row: ChainRow, now: datetime, fictional: bool, lane: str, version: str, calendar: Any = None) -> bool:
+def follow_lane_pick(store: Any, snap: MarketSnapshot, row: ChainRow, now: datetime, fictional: bool, lane: str, version: str, calendar: Any = None, regime: Any = None) -> bool:
     """Follow the contract an options lane chose, whether or not the lane then bought it (Phase 1 item 1a, the lanes half).
 
     Tagged ``chosen_by`` with ``lane:<name>`` so a later test can compare each lane's pick with the other candidates of the
@@ -193,14 +209,14 @@ def follow_lane_pick(store: Any, snap: MarketSnapshot, row: ChainRow, now: datet
         day = now.astimezone(NY).date()
         sym = row.contract.occ_symbol.strip()
         nv, ivp, earn, since = context(store, snap, day, fictional, calendar)
-        new = store.record_shadow_follow(sym, day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn, since))
+        new = store.record_shadow_follow(sym, day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn, since, regime_fields(regime)))
         store.tag_shadow_follow(sym, day.isoformat(), fictional, {"strategy": f"lane:{lane}", "version": version, "rank": 1, "score": None})
         return bool(new)
     except Exception:  # noqa: BLE001 - research only
         return False
 
 
-def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictional: bool, strategies: Any = (), calendar: Any = None) -> dict[str, int]:
+def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictional: bool, strategies: Any = (), calendar: Any = None, regime: Any = None) -> dict[str, int]:
     """Follow new candidates from this chain and extend the paths of contracts already followed. Never raises on bad rows.
 
     ``strategies`` (optional) adds each strategy's top proposals to the followed set and tags every followed contract that a
@@ -208,12 +224,13 @@ def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictiona
     """
     followed = points = 0
     nv, ivp, earn, since = context(store, snap, day, fictional, calendar)
+    reg = regime_fields(regime)  # one SPY reading per chain (cached by the source)
     for row in select(snap, day):
-        if store.record_shadow_follow(row.contract.occ_symbol.strip(), day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn, since)):
+        if store.record_shadow_follow(row.contract.occ_symbol.strip(), day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn, since, reg)):
             followed += 1
     for row, tag in strategy_picks(strategies, snap, now):
         sym = row.contract.occ_symbol.strip()
-        if store.record_shadow_follow(sym, day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn, since)):
+        if store.record_shadow_follow(sym, day.isoformat(), fictional, features(snap, row, day, now, nv, ivp, earn, since, reg)):
             followed += 1
         store.tag_shadow_follow(sym, day.isoformat(), fictional, tag)
     by_contract = {r.contract.occ_symbol.strip(): r for r in snap.rows}

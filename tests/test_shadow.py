@@ -266,3 +266,42 @@ def test_observe_records_days_since_earnings_from_an_earlier_follow(tmp_path):
     assert later["days_since_earnings"] == 2 and later["last_earnings"] == d1.isoformat()
     first = [f for f in store.shadow_all_follows(False) if f["followed_day"] == D0.isoformat()][0]
     assert "days_since_earnings" not in first
+
+
+class _Src:
+    def __init__(self, reg):
+        self.reg = reg
+
+    def read(self):
+        if isinstance(self.reg, Exception):
+            raise self.reg
+        return self.reg
+
+
+def _bounce_regime():
+    from optplat.regime import read_regime
+    closes = [100 - i * 0.6 for i in range(30)] + [82.5, 85.0]  # a long slide, then a +3% day
+    reg = read_regime(closes)
+    assert reg is not None
+    return reg
+
+
+def test_follow_records_regime_reading_for_r1_and_lane_picks_too():
+    reg = _bounce_regime()
+    s = Store(":memory:")
+    r = row()
+    shadow.observe(s, snap([r]), D0, T0, True, regime=_Src(reg))
+    f = s.shadow_all_follows(True)[0]
+    assert f["regime_label"] == reg.label and f["regime_blocks_puts"] is reg.block_puts and f["regime_blocks_calls"] is reg.block_calls
+    assert f["regime_facts"]["rsi14"] == reg.facts["rsi14"]
+    s2 = Store(":memory:")
+    assert shadow.follow_lane_pick(s2, snap([r]), r, T0, True, "swing", "v1", None, _Src(reg))
+    assert s2.shadow_all_follows(True)[0]["regime_label"] == reg.label
+
+
+def test_unknown_regime_leaves_fields_absent_never_guessed():
+    for src in (None, _Src(None), _Src(RuntimeError("yahoo down"))):
+        s = Store(":memory:")
+        assert shadow.observe(s, snap([row()]), D0, T0, True, regime=src)["followed"] == 1  # a bad reading never stops the follow
+        f = s.shadow_all_follows(True)[0]
+        assert not any(k.startswith("regime_") for k in f)

@@ -171,7 +171,7 @@ class TradingEngine:
         for extra in (LiquidTrendStrategy(), FlowFollowStrategy(mode="flagged"), FlowFollowStrategy(mode="nearer")):
             followed.setdefault(extra.name, extra)
         self.regime = spy_source(provider, clock)  # market-regime guard on new entries (owner decision 2026-11-24; tightening only)
-        self.scanner = Scanner(provider, self.store, clock=clock, strategies=tuple(followed.values()), calendar=self.calendar)
+        self.scanner = Scanner(provider, self.store, clock=clock, strategies=tuple(followed.values()), calendar=self.calendar, regime=self.regime)
         self.shortterm = ShortTermLane(provider, self.store, clock=clock)
         self.swing = SwingLane(provider, self.store, clock=clock, calendar=self.calendar)
         self.option_lanes = OptionLanes(provider, self.store, clock=clock, calendar=self.calendar)

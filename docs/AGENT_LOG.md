@@ -970,3 +970,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Wired into the main engine (journal `SKIPPED_REGIME` with the reading, cycle result `BLOCKED_REGIME`) and into `OptionLane._enter` through the shared `Feed`, which covers the five option lanes and the challenge. `OPTPLAT_REGIME_GUARD=0` switches it off. Not wired into the swing and short-term share lanes.
 * Thresholds are my engineering choices made before any result, not tuned and not an edge; R1 in the plan tests them. An implausible VIX (a provider inventing a bar) is ignored.
 * Verified: `python -m pytest -q` 737 pass (10 new in `tests/test_regime.py`; the demo market first showed a bogus VIX of 414 that the guard counted, now bounded). Not verified: real SPY/VIX data from Yahoo (`^VIX` bars), breadth is not fed in yet, the effect on live paper entries, the Mac.
+
+## 2026-11-24 (scheduled improvement run): market-regime reading recorded on every shadow follow
+
+* Evolution plan Phase 1 item 1(b), the part R1 was waiting for. Helps R1 (regime guard on new puts/calls): each follow now carries `regime_label`, `regime_blocks_puts`, `regime_blocks_calls` and `regime_facts` (SPY RSI14, drawdown, day and 3-day return, VIX/breadth when known), so blocked and unblocked entries can be compared on the same bid paths. Gate not met; the private data repo `options-platform-data` is not attached, so no real results were read and no hypothesis was registered or resolved.
+* `origin/main` had nothing integration lacked. Decisions made: the reading is recorded whether or not the guard is switched on (`shadow.regime_fields`); one cached SPY read per chain; an unknown reading or any error leaves the fields absent (never guessed, never stops a follow). Wired through `Scanner(regime=...)` from the engine and `follow_lane_pick` from the lane `Feed`. Recording only: no entry, sizing, exit, risk or schema change (features are a JSON blob; export unchanged).
+* Limit: follows made before this change have no regime fields (unknown). The regime is the reading at follow time from the shared 15-minute cache.
+* Verified: `python -m pytest -q` 739 pass (2 new in `tests/test_shadow.py`). Not verified: real SPY/VIX data, the Mac.
+
