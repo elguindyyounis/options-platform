@@ -335,6 +335,11 @@
 
   // Every account and lane on the front page, so results do not hide behind the other pages. Each row is one ledger;
   // lanes are research with their own sizing and simulated fills, so the total is simulated dollars, not an account balance.
+  // Open P&L for one account row. A trade with no usable bid adds nothing to the sum, so say it is partial.
+  function openNow(r, prefix) {
+    if (r.open_complete === false) return span(prefix + sgn(r.open_pnl) + " (partial, " + r.open_unmarked + " unmarked)", "muted");
+    return span(prefix + arrow(r.open_pnl) + sgn(r.open_pnl), tone(r.open_pnl));
+  }
   function renderAccounts(data) {
     const host = $("all-accounts"), note = $("all-accounts-note");
     if (!data) { empty(host, "Could not load the lanes", "Trades from every lane appear here once the page can reach /api/alltrades."); note.textContent = ""; return; }
@@ -354,7 +359,7 @@
         if (r.total_row) top.appendChild(el("b", r.label));
         else { const b = el("button", r.label, "linkbtn"); b.type = "button"; b.style.marginTop = "0"; b.addEventListener("click", () => goTo(r.source)); top.appendChild(b); top.appendChild(el("span", kind(r), "muted")); }
         const nums = el("div", null, "acct-nums num");
-        kids(nums, [span("Realized " + arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)), span("Open " + arrow(r.open_pnl) + sgn(r.open_pnl), tone(r.open_pnl))]);
+        kids(nums, [span("Realized " + arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)), openNow(r, "Open ")]);
         kids(box, [top, nums, el("div", r.open + " open, " + r.closed + " closed" + (r.win_rate_pct === null ? "" : ", " + r.win_rate_pct + "% winners"), "muted")]);
         host.appendChild(box);
       });
@@ -366,7 +371,7 @@
         b.addEventListener("click", () => goTo(r.source)); return b; } },
       { label: "Kind", get: (r) => (r.total_row ? "" : kind(r)) },
       { label: "Realized", right: true, get: (r) => span(arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)) },
-      { label: "Open now", right: true, get: (r) => span(arrow(r.open_pnl) + sgn(r.open_pnl), tone(r.open_pnl)) },
+      { label: "Open now", right: true, get: (r) => openNow(r, "") },
       { label: "Trades", right: true, get: (r) => r.open + " open, " + r.closed + " closed" },
       { label: "Winners", right: true, get: (r) => (r.win_rate_pct === null ? "n/a" : r.win_rate_pct + "%") },
     ], rows, "No lanes yet");
@@ -718,7 +723,7 @@
       { label: "Trades", right: true, get: (r) => r.open + " open, " + r.closed + " closed" },
       { label: "Winners", right: true, get: (r) => (r.win_rate_pct === null ? "n/a" : r.win_rate_pct + "%") },
       { label: "Realized", right: true, get: (r) => span(arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)) },
-      { label: "Open now", right: true, get: (r) => span(arrow(r.open_pnl) + sgn(r.open_pnl), tone(r.open_pnl)) },
+      { label: "Open now", right: true, get: (r) => openNow(r, "") },
     ], rows, "No lanes have traded yet");
   }
 

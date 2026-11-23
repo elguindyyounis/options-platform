@@ -87,7 +87,10 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
         return {"total": len(sel), "open": sum(1 for r in sel if r["status"] != "CLOSED"), "closed": len(done), "wins": len(wins),
                 "win_rate_pct": round(len(wins) / len(done) * 100, 1) if done else None,
                 "realized_pnl": round(sum(r["pnl"] for r in done), 2),
-                "open_pnl": round(sum(r["pnl"] or 0.0 for r in sel if r["status"] != "CLOSED"), 2)}
+                "open_pnl": round(sum(r["pnl"] or 0.0 for r in sel if r["status"] != "CLOSED"), 2),
+                # An open trade with no usable bid adds 0 to open_pnl; say so instead of letting the sum look complete.
+                "open_unmarked": sum(1 for r in sel if r["status"] != "CLOSED" and r["pnl"] is None),
+                "open_complete": all(r["pnl"] is not None for r in sel if r["status"] != "CLOSED")}
 
     sources: dict[str, dict[str, Any]] = {}
     for r in rows:
