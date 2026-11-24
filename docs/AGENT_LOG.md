@@ -1009,3 +1009,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Bug found and fixed: `app.js` had two functions named `renderResearch`; the later one silently replaced the earlier, so the "Registered experiments" table never rendered and the hypothesis list was fed to the progress renderer. Renamed to `renderHypotheses` and `renderResearchProgress`; a new test fails on any duplicate top-level function name.
 * Decisions made: the band never says the gate is passed; at best "Ready for your check", because the export streak is invisible to this page and registering a hypothesis stays a human decision. Fictional data always reads "Too early".
 * Verified: `python -m pytest -q` 748 pass; the page in a real browser, dark desktop and light phone, no script errors. Not verified: a populated hypothesis list, real data.
+
+## 2026-11-25 (System page)
+
+* Design proposal build step 5. The Controls page is now System (nav label and title; route unchanged) and opens with a band: an autonomy ladder (Off, Observe, Paper auto, and a locked Real money step), a readiness checklist and read-only guardrails. Display only; every switch and button below it is unchanged. No API, risk, order, sizing, auth, broker or schema change.
+* Decisions made: the ladder step is derived from existing settings (kill switch on = Off; entries and exits both on = Paper auto; otherwise Observe). Step 4 is always shown locked; nothing on the page can move to it. "Operations" always reads "You confirm" because the page cannot see whether the kill switch was ever tested; a stalled runner reads "Runner stalled". Entry quality counts closed trades across every lane and uses the same too-early/building/enough thresholds as the Now page.
+* Verified: `python -m pytest -q` 749 pass; the page in a real browser, dark desktop and light phone, no script errors. Not verified: kill-switch-on and entries-off states in a browser (covered under node only), real data.

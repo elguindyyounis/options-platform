@@ -122,7 +122,7 @@
     document.querySelectorAll("a.nav").forEach((a) => {
       if (a.getAttribute("data-page") === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
-    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", lanes: "Lanes", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Lab", system: "Controls" })[page] + " - " : "") + "options-platform";
+    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", lanes: "Lanes", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Lab", system: "System" })[page] + " - " : "") + "options-platform";
   }
 
   // ---------------------------------------------------------------- equity chart (unchanged behaviour)
@@ -1973,6 +1973,38 @@
     host.setAttribute("aria-label", "Evidence: " + EVIDENCE_WORDS[level].toLowerCase());
     for (let n = 1; n <= 3; n++) host.appendChild(el("i", null, n <= level ? "on" : ""));
   }
+  // The System band: which autonomy step the settings put it on, and the readiness evidence. Read-only; the owner judges.
+  function systemReadiness(status, closed, shadow) {
+    const c = status.config || {}, fict = !!(status.data_source && status.data_source.fictional);
+    const step = status.kill_switch ? 1 : (c.auto_entries && c.auto_exits) ? 3 : 2;
+    const ev = evidenceLevel(closed);
+    const checks = [
+      { key: "entry", title: "Entry quality", sub: "Results by lane against the baseline, above " + MIN_TRADES + " closed trades.", tag: ev === 3 ? "Enough to look at" : ev === 2 ? "Building" : "Too early", level: ev === 3 ? "info" : "warn" },
+      { key: "exit", title: "Exit quality", sub: "Automatic exits on, with a stop and a target on every position.", tag: c.auto_exits ? "On" : "Exits off", level: c.auto_exits ? "info" : "warn" },
+      { key: "real", title: "Real data only", sub: "Nothing on fictional data counts.", tag: fict ? "Fictional data" : "Real data", level: fict ? "warn" : "ok" },
+      { key: "gate", title: "Shadow-book gate", sub: "Enough followed contracts and days to test a hypothesis.", tag: shadow && shadow.gate_met_except_export ? "Data numbers met" : "Building", level: shadow && shadow.gate_met_except_export ? "info" : "warn" },
+      { key: "costs", title: "Costs included", sub: "Filled at the ask, closed at the bid, a fee each way, in every figure.", tag: "Met", level: "ok" },
+      { key: "ops", title: "Operations", sub: "Restart recovery, runner health and a tested kill switch. This page cannot see whether the kill switch was ever tested.", tag: status.runner && status.runner.stalled ? "Runner stalled" : "You confirm", level: status.runner && status.runner.stalled ? "bad" : "warn" },
+    ];
+    return { step: step, checks: checks, guard: [["Per cycle", (c.max_new_per_cycle || "?") + " new entr" + (c.max_new_per_cycle === 1 ? "y" : "ies")], ["Take profit / stop", "+" + c.take_profit_pct + "% / -" + c.stop_loss_pct + "% of the premium"],
+      ["Kill switch", status.kill_switch ? "ON: no new orders" : "Off"], ["Live order path", "None exists"], ["Broker connection", "Read-only"]] };
+  }
+  const STEPS = [["Off", "Kill switch on. No new orders."], ["Observe", "Automatic entries or exits are off, so nothing is placed on its own."], ["Paper, auto", "Places simulated orders and exits within limits, without asking."], ["Real money", "Not built. No live order path exists. An owner decision, never an automatic one."]];
+  function renderSystemBand(status, closed, shadow) {
+    const r = systemReadiness(status, closed, shadow), host = $("sys-ladder");
+    host.replaceChildren();
+    STEPS.forEach((st, i) => {
+      const n = i + 1, now = n === r.step, lock = n === 4;
+      const card = el("div", null, "rung" + (now ? " now" : "") + (lock ? " lock" : ""));
+      kids(card, [el("div", "Step " + n + (now ? " \u00B7 current" : "") + (lock ? " \u00B7 locked" : ""), "eyebrow"), el("b", st[0]), el("p", st[1], "muted")]);
+      host.appendChild(card);
+    });
+    $("sys-state").textContent = r.step === 3 ? "Cleared for paper. Not cleared for real money." : r.step === 1 ? "Stopped: the kill switch is on." : "Observing: nothing is placed on its own.";
+    const ck = $("sys-checks"); ck.replaceChildren();
+    r.checks.forEach((c) => { const row = el("div", null, "sys-check"); kids(row, [kids(el("div"), [el("b", c.title), el("div", c.sub, "muted")]), el("span", c.tag, "tag " + (c.level === "ok" ? "gain" : c.level === "bad" ? "loss" : c.level === "warn" ? "warn" : "info"))]); ck.appendChild(row); });
+    const gd = $("sys-guard"); gd.replaceChildren();
+    r.guard.forEach((g) => { const row = el("div", null, "sys-check"); kids(row, [el("span", g[0]), el("b", g[1])]); gd.appendChild(row); });
+  }
   function renderNow(items, ctx) {
     const st = nowState(items, exposure(ctx.trades && ctx.trades.trades));
     const band = $("now-band");
@@ -2171,6 +2203,7 @@
       renderGlance(glanceItems);
       renderNow(glanceItems, { health, status, portfolio, report, trades: allTrades, decisions, shadow: shadowRep, since: S.since });
       renderResearchProgress(buildResearchProgress(shadowRep));
+      renderSystemBand(status, (report.closed_trades !== undefined ? report.closed_trades : (allTrades && allTrades.trades ? allTrades.trades.filter((t) => t.status === "CLOSED").length : 0)), shadowRep);
       if (results) renderResults(results);
       renderCycleDecisions(status.last_cycle, status.recent_outcomes);
       renderCandidates(status.last_cycle);
@@ -2259,7 +2292,7 @@
   window.optplatVerdict = decisionVerdict;
   window.optplatDecisionFilter = filterDecisions;
   window.optplatTally = decisionTally;
-  window.optplatLabGate = labGate; window.optplatLaneVerdict = laneVerdict; window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
+  window.optplatSystem = systemReadiness; window.optplatLabGate = labGate; window.optplatLaneVerdict = laneVerdict; window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   S.since = lastSeen(); // the previous look, kept for this whole visit so the digest does not reset itself every refresh
   window.addEventListener("pagehide", markSeen);

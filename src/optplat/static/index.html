@@ -332,6 +332,10 @@
   .vital { flex:1 1 170px; min-width:0; padding:2px 0 2px 18px; border-left:1px solid var(--line); display:grid; gap:4px; }
   .vv { font:700 22px/1.15 var(--sans); letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
   .evrow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .rungs { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; } .rung { flex:1 1 170px; border:1px solid var(--line); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:4px; background:var(--raised); }
+  .rung.now { border-color:var(--series-1); box-shadow:inset 0 0 0 1px var(--series-1); } .rung.lock { border-style:dashed; } .rung p { margin:0; font-size:13px; }
+  .eyebrow { font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--mut); }
+  .sys-check { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; padding:9px 0; border-bottom:1px solid var(--line-soft); } .sys-check:last-child { border-bottom:0; }
   .gate-row { display:grid; grid-template-columns:150px 1fr 150px; gap:12px; align-items:center; padding:6px 0; }
   .gate-bar { height:8px; border-radius:4px; background:var(--line); overflow:hidden; } .gate-bar i { display:block; height:100%; background:var(--series-1); } .gate-bar i.met { background:var(--gain); }
   @media (max-width:640px) { .gate-row { grid-template-columns:1fr; gap:4px; } }
@@ -367,7 +371,7 @@
     <a class="nav" href="#/context" data-page="context">Context</a>
     <a class="nav" href="#/agents" data-page="agents">Agents</a>
     <a class="nav" href="#/research" data-page="research">Lab</a>
-    <a class="nav" href="#/system" data-page="system">Controls</a>
+    <a class="nav" href="#/system" data-page="system">System</a>
     <a class="nav" href="#/tracker" data-page="tracker" style="font-size:12.5px;opacity:.7">Tracker (rarely used)</a>
     <div class="rail-foot">Paper trading only. No live orders exist in this app.</div>
   </nav>
@@ -748,9 +752,18 @@
 
       <section id="view-system" data-page="system" data-question="Is it running, and what is it allowed to do?" hidden>
         <div>
-          <h1>Controls</h1>
+          <h1>System</h1>
           <p class="lede">Entries cannot be switched on without exits. Everything here is paper trading, and the kill switch stops all new entries.</p>
         </div>
+        <section class="panel" id="sys-band" data-question="How much do I trust it to run alone, and what is it allowed to do?">
+          <h2 id="sys-state"></h2>
+          <p class="q">The readiness list is the evidence you weigh before ever changing that. The platform fills it in; only you decide.</p>
+          <div class="rungs" id="sys-ladder"></div>
+          <div class="grid2" style="margin-top:14px">
+            <div><h3 style="font-size:14px;margin:0 0 4px">Readiness</h3><div id="sys-checks"></div></div>
+            <div><h3 style="font-size:14px;margin:0 0 4px">Guardrails (read-only)</h3><div id="sys-guard"></div></div>
+          </div>
+        </section>
         <div class="panel">
           <h2>Run</h2>
           <div class="toolbar" style="margin-top:12px">
