@@ -978,3 +978,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Limit: follows made before this change have no regime fields (unknown). The regime is the reading at follow time from the shared 15-minute cache.
 * Verified: `python -m pytest -q` 739 pass (2 new in `tests/test_shadow.py`). Not verified: real SPY/VIX data, the Mac.
 
+
+## 2026-11-24 (scheduled challenger run): baseline red, run stopped
+
+* Alerter scan, challenges and improvement were NOT done: `python -m pytest -q` on `main` (`fce8045`) gives 738 pass, 1 fail: `tests/test_regime.py::test_engine_blocks_and_journals_a_put_into_a_bounce`.
+* Cause (read from a debug cycle, not fixed): with `selloff_then_bounce` as the regime, the demo-data cycle (`DemoDataProvider`, `LiquidTrendStrategy`) picked only `SPY ...C00375000` (trend UP), so the entry was FILLED and nothing was BLOCKED_REGIME. The test assumes the demo market yields a put candidate, so it depends on the demo data (which varies with the date/seed), not on the guard being broken. The guard's own unit tests pass.
+* Not changed: no test was weakened and no code was touched. Suggested fix for the next run or the owner: make the test deterministic (a fixed demo seed or a stub strategy that proposes a put) rather than relying on today's demo trend.
+* Not verified: whether the same test also fails on `agent/integration`, the alerter, the Mac. No PR merge was done (docs-only branch).
