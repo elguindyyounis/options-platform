@@ -634,7 +634,78 @@
     after.after(holder);
   }
   function openRow(t, node, colspan) {
-    if (t.has_file) openTrade(t.id, node); else toggleInline(node, t, colspan);
+    if (t.has_file) openTrade(t.id, node);
+    else if (t.instrument === "options" && t.detail) openLaneTrade(t, node);
+    else toggleInline(node, t, colspan);
+  }
+  // The trade file for an options lane trade: same drawer as the options account, built from the lane's own record.
+  function laneLadder(d, o, mark) {
+    const entry = Number(d.entry_price), stop = entry * (1 - o.stop_pct / 100), goal = entry * (1 + o.target_pct / 100), span_ = goal - stop;
+    const at = (v) => Math.max(0, Math.min(100, ((v - stop) / span_) * 100));
+    const box = el("div"), lad = el("div", null, "ladder"), cost = el("div", null, "cost");
+    cost.style.left = at(entry) + "%";
+    lad.appendChild(el("div", null, "track")); lad.appendChild(cost);
+    if (mark !== null && mark !== undefined) { const m = el("div", null, "now"); m.style.left = at(mark) + "%"; lad.appendChild(m); }
+    lad.setAttribute("role", "img");
+    lad.setAttribute("aria-label", "Stop " + stop.toFixed(2) + ", paid " + entry.toFixed(2) + ", target " + goal.toFixed(2) + (mark === null || mark === undefined ? ", no quote" : ", bid " + Number(mark).toFixed(2)));
+    const keys = el("div", null, "ladder-keys");
+    [["stop", stop.toFixed(2)], ["paid", entry.toFixed(2)], ["target", goal.toFixed(2)]].forEach((k) => { const s2 = el("span"); s2.appendChild(document.createTextNode(k[0] + " ")); s2.appendChild(el("b", k[1])); keys.appendChild(s2); });
+    kids(box, [lad, keys]);
+    return box;
+  }
+  function renderLaneFile(t) {
+    const d = t.detail, o = d.why_entered || {}, open = t.status !== "CLOSED";
+    $("drawer-title").textContent = t.label || t.symbol;
+    $("drawer-sub").textContent = t.source_label + " · " + (open ? "Open" : laneExitLabel(t));
+    const body = $("drawer-body");
+    body.replaceChildren();
+    const res = el("div"), pnl = t.pnl;
+    res.appendChild(el("div", pnl === null || pnl === undefined ? "No mark yet" : arrow(pnl) + sgn(pnl), "result " + tone(pnl)));
+    res.appendChild(el("div", (t.pnl_pct === null || t.pnl_pct === undefined ? "No usable bid to mark this trade." : pct(t.pnl_pct) + " on " + money(t.entry_price * t.quantity * 100) + " paid") + (open ? " (still open, marked at the bid)" : ""), "muted"));
+    body.appendChild(res);
+
+    const facts = el("dl", null, "facts");
+    const row = (k, v) => { facts.appendChild(el("dt", k)); facts.appendChild(el("dd", v)); };
+    row("Bought", t.quantity + " at " + Number(t.entry_price).toFixed(2) + " on " + fmtTime(t.opened_at));
+    if (t.exit_price !== null && t.exit_price !== undefined) row("Sold", "at " + Number(t.exit_price).toFixed(2) + " on " + fmtTime(t.closed_at));
+    else if (t.mark !== null && t.mark !== undefined) row("Still held", "bid " + Number(t.mark).toFixed(2));
+    row("Held", heldText(t));
+    if (o.fees_open !== undefined) row("Fees in", money(o.fees_open) + ", spread " + o.spread_pct + "%, open interest " + num(o.open_interest));
+    body.appendChild(section("The trade", [facts]));
+
+    const why = [el("p", describeSignal(o) || "No entry signal was recorded.")];
+    if (o.earnings_state) why.push(el("p", "Earnings: " + (STATE[o.earnings_state] || o.earnings_state) + ".", "muted"));
+    if (o.critic) {
+      why.push(el("p", o.critic.verdict === "ACCEPTED" ? "Critic: no objections." : "Critic accepted despite: " + o.critic.objections.join("; ") + "."));
+      why.push(el("p", o.critic.thesis + " Wrong if " + o.critic.wrong_if + ".", "muted"));
+    }
+    if (o.stack_index > 0) why.push(el("p", "Position " + (o.stack_index + 1) + " in this name, stacked on " + o.stacked_on.length + " earlier trade" + (o.stacked_on.length > 1 ? "s" : "") + ".", "muted"));
+    body.appendChild(section("Why it entered", why));
+
+    if (o.stop_pct !== undefined && o.target_pct !== undefined) {
+      body.appendChild(section("Exit plan", [laneLadder(d, o, open ? d.mark_bid : d.exit_price),
+        el("p", "Sells at the bid when it reaches either level. Levels are rules, not predictions.", "muted")]));
+    }
+
+    const end = [];
+    if (open) end.push(el("p", "Still open." + (d.mark_bid !== null && d.mark_bid !== undefined ? " Last bid " + Number(d.mark_bid).toFixed(2) + " at " + fmtTime(d.mark_at) + "." : ""), "muted"));
+    else end.push(el("p", d.close_text || laneExitLabel(t)));
+    const pm = d.postmortem;
+    if (!open && pm) {
+      end.push(el("p", pm.headline));
+      if (pm.stress_net !== undefined) end.push(el("p", "If the exit had been stressed: " + sgn(pm.stress_net) + " (" + pct(pm.stress_net_pct) + ").", "muted"));
+      (pm.lessons || []).forEach((x) => end.push(el("p", x)));
+      if ((pm.try_next || []).length) { const u = el("ul", null, "plain"); pm.try_next.forEach((x) => u.appendChild(el("li", "Test next: " + x))); end.push(u); }
+    }
+    body.appendChild(section("How it ended", end));
+    body.appendChild(el("p", "One trade proves nothing about the rule. Paper result on simulated fills.", "muted"));
+  }
+  function openLaneTrade(t, opener) {
+    S.openTrade = t.key || t.id; S.opener = opener || document.activeElement;
+    renderLaneFile(t);
+    $("scrim").hidden = false; $("drawer").hidden = false;
+    document.body.style.overflow = "hidden";
+    $("btn-drawer-close").focus();
   }
 
   function renderTrades() {

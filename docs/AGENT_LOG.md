@@ -997,3 +997,8 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Decisions made: a lane is called ahead of or behind the frozen baseline only with at least 10 closed trades of its own and a baseline that has closed trades; otherwise "Too early" or the open/none-closed wording. A lane with 3 or more open trades all on one side is flagged Watch. Roles are inferred from the lane id (main = Account, `frozen-baseline` = Benchmark, shares lanes = Shares, rest = Experiment). The nav-order assertion in `tests/test_dashboard.py` gained "lanes" because a page was deliberately added.
 * Verified: `python -m pytest -q` 745 pass (1 new test, 7 verdict cases under node); the page in a real browser on the fictional demo market with no script errors. Not verified: light theme, phone width, real data, the Mac.
 
+
+## 2026-11-25 (trade file for lane trades)
+
+* Design proposal build step 3. Choosing an options lane or challenge trade (Trades page, Lanes page) now opens the same side drawer as the options account instead of a small inline note: result, the trade, why it entered, a stop/paid/target ladder, and how it ended with the post-mortem. Display only; no API, risk, order, sizing, auth, broker or schema change. Share lanes still open the inline file.
+* Verified: `python -m pytest -q` 746 pass; the drawer in a real browser on the fictional demo market, dark desktop and light phone, no script errors. Not verified: closed-trade post-mortem rendering in a browser, real data, the Mac.
