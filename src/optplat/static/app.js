@@ -34,7 +34,7 @@
   const S = {
     killState: false, lastPoints: [], core: null, connected: false,
     trades: null, filter: "all", kind: "all", source: "all", query: "", sort: { key: "opened_at", dir: -1 }, shown: 100, tkH: "3", openTrade: null, opener: null,
-    decFilter: "all", decisions: [], scan: null, marketTab: "heat", unusualFilter: "all", opt: null, optLane: "shortterm-options-base",
+    decFilter: "key", decShown: 8, decisions: [], scan: null, marketTab: "heat", unusualFilter: "all", opt: null, optLane: "shortterm-options-base",
   };
 
   // ---------------------------------------------------------------- DOM helpers (textContent only)
@@ -350,31 +350,34 @@
     const rows = sources.sort((a, b) => (a.source === "main" ? -1 : b.source === "main" ? 1 : b.realized_pnl - a.realized_pnl));
     const all = data.summary.all;
     const goTo = (src) => { S.source = src; S.kind = "all"; S.filter = "all"; S.shown = 100; location.hash = "#/trades"; };
-    rows.push({ source: "", label: "All together", total: all.total, open: all.open, closed: all.closed, wins: all.wins, win_rate_pct: all.win_rate_pct, realized_pnl: all.realized_pnl, open_pnl: all.open_pnl, instrument: "", total_row: true });
-    if (phone.matches) {
-      // Phones: one compact block per account instead of a table that would scroll sideways.
-      host.replaceChildren();
-      rows.forEach((r) => {
-        const box = el("div", null, "acct"), top = el("div", null, "acct-top");
-        if (r.total_row) top.appendChild(el("b", r.label));
-        else { const b = el("button", r.label, "linkbtn"); b.type = "button"; b.style.marginTop = "0"; b.addEventListener("click", () => goTo(r.source)); top.appendChild(b); top.appendChild(el("span", kind(r), "muted")); }
-        const nums = el("div", null, "acct-nums num");
-        kids(nums, [span("Realized " + arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)), openNow(r, "Open ")]);
-        kids(box, [top, nums, el("div", r.open + " open, " + r.closed + " closed" + (r.win_rate_pct === null ? "" : ", " + r.win_rate_pct + "% winners"), "muted")]);
-        host.appendChild(box);
-      });
-      note.textContent = "Realized is after fees; open is marked at the bid. Lanes are experiments with their own sizes, so the total adds simulated dollars and is not an account balance." + (data.fictional ? " Fictional demo data." : "");
-      return;
-    }
-    table(host, [
-      { label: "Account or lane", get: (r) => { if (r.total_row) return el("b", r.label); const b = el("button", r.label, "linkbtn"); b.type = "button"; b.style.marginTop = "0";
-        b.addEventListener("click", () => goTo(r.source)); return b; } },
-      { label: "Kind", get: (r) => (r.total_row ? "" : kind(r)) },
-      { label: "Realized", right: true, get: (r) => span(arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)) },
-      { label: "Open now", right: true, get: (r) => openNow(r, "") },
-      { label: "Trades", right: true, get: (r) => r.open + " open, " + r.closed + " closed" },
-      { label: "Winners", right: true, get: (r) => (r.win_rate_pct === null ? "n/a" : r.win_rate_pct + "%") },
-    ], rows, "No lanes yet");
+    rows.unshift({ source: "", label: "All together", total: all.total, open: all.open, closed: all.closed, wins: all.wins, win_rate_pct: all.win_rate_pct, realized_pnl: all.realized_pnl, open_pnl: all.open_pnl, instrument: "", total_row: true });
+    host.replaceChildren();
+    const maxAbs = Math.max(1, ...rows.filter((r) => !r.total_row).map((r) => Math.abs(r.realized_pnl) + Math.abs(r.open_pnl || 0)));
+    rows.forEach((r) => {
+      const card = el("button", null, "lane-card" + (r.total_row ? " total" : "") + (r.source === "main" ? " main" : ""));
+      card.type = "button";
+      if (r.total_row) card.disabled = true; else card.addEventListener("click", () => goTo(r.source));
+      const head = el("div", null, "lc-head");
+      head.appendChild(el("span", r.label, "lc-name"));
+      if (!r.total_row && kind(r) !== r.label) head.appendChild(el("span", kind(r), "tag"));
+      const big = el("div", null, "lc-big num");
+      big.appendChild(span(arrow(r.realized_pnl) + sgn(r.realized_pnl), tone(r.realized_pnl)));
+      big.appendChild(el("small", " realized", "muted"));
+      const open = el("div", null, "lc-open num");
+      open.appendChild(el("span", "Open ", "muted")); open.appendChild(openNow(r, ""));
+      const foot = el("div", r.open + " open, " + r.closed + " closed" + (r.win_rate_pct === null ? "" : ", " + r.win_rate_pct + "% winners"), "lc-foot muted");
+      const kidsList = [head, big, open];
+      if (!r.total_row) {
+        // A small bar: the share of the largest lane's size, split into closed (solid) and open (faded) results.
+        const bar = el("div", null, "lc-bar");
+        const seg = (v, cls) => { const i = el("i", null, cls + (v < 0 ? " neg" : " pos")); i.style.width = Math.round(Math.abs(v) / maxAbs * 100) + "%"; return i; };
+        bar.appendChild(seg(r.realized_pnl, "done")); if (r.open_pnl) bar.appendChild(seg(r.open_pnl, "live"));
+        kidsList.push(bar);
+      }
+      kidsList.push(foot);
+      kids(card, kidsList);
+      host.appendChild(card);
+    });
     note.textContent = "Realized is after fees on closed trades; open is marked at the bid. The options account is the only one that trades the paper broker. Lanes and the challenge are experiments with their own sizes and simulated fills, so the total adds simulated dollars and is not an account balance." + (data.fictional ? " Fictional demo data." : "") + " Small samples prove nothing.";
   }
 
@@ -455,40 +458,73 @@
   }
   // Filter groups for the feed. "Orders placed" is the only group that is a paper order; opinions never count as one.
   const DEC_FILTERS = [
-    { id: "all", label: "All", ids: null }, { id: "placed", label: "Orders placed (paper)", ids: ["taken", "exit", "pending"] },
+    { id: "key", label: "Orders and blocks", ids: ["taken", "exit", "pending", "blocked"] }, { id: "all", label: "All", ids: null }, { id: "placed", label: "Orders placed (paper)", ids: ["taken", "exit", "pending"] },
     { id: "notaken", label: "Blocked or skipped", ids: ["blocked", "skipped"] }, { id: "opinion", label: "Opinions only", ids: ["opinion"] },
     { id: "other", label: "Other", ids: ["other"] },
   ];
   function filterDecisions(list, filterId) {
-    const f = DEC_FILTERS.find((x) => x.id === filterId) || DEC_FILTERS[0];
+    const f = DEC_FILTERS.find((x) => x.id === filterId) || DEC_FILTERS.find((x) => x.id === "all");
     return (list || []).filter((d) => !f.ids || f.ids.indexOf(decisionVerdict(d).id) >= 0);
   }
+  // Activity feed: what mattered (orders, exits, blocks, opinions) is listed; runs of routine skips fold into one line
+  // that can be opened. Skips are the bulk of every cycle and carry the least news, so they must not push the page down.
+  const DEC_SHOWN = 8;
   function renderDecisions(all) {
     const host = $("decisions");
     if (!all.length) { empty(host, "No decisions recorded yet", "Run one cycle from Controls to see what it considers."); return; }
     S.decisions = all;
     host.replaceChildren();
     const bar = el("div", null, "chips");
-    chips(bar, DEC_FILTERS.map((f) => ({ id: f.id, label: f.label + " " + filterDecisions(all, f.id).length })), S.decFilter, (id) => { S.decFilter = id; renderDecisions(S.decisions); });
+    chips(bar, DEC_FILTERS.map((f) => ({ id: f.id, label: f.label + " " + filterDecisions(all, f.id).length })), S.decFilter, (id) => { S.decFilter = id; S.decShown = DEC_SHOWN; renderDecisions(S.decisions); });
     host.appendChild(bar);
     const tally = decisionTally(all);
     if (tally) host.appendChild(el("p", tally, "muted"));
     const list = filterDecisions(all, S.decFilter);
-    if (!list.length) host.appendChild(el("p", "Nothing in this group among the latest " + all.length + " lines.", "muted"));
-    const feed = el("div", null, "feed");
+    if (!list.length) host.appendChild(el("p", S.decFilter === "key" ? "No orders or blocks among the latest " + all.length + " lines. Choose All to see the skips." : "Nothing in this group among the latest " + all.length + " lines.", "muted"));
+    // fold consecutive skipped lines
+    const items = [];
     list.forEach((d) => {
-      const item = el("div", null, "feed-item");
+      const isSkip = decisionVerdict(d).id === "skipped", last = items[items.length - 1];
+      if (isSkip && last && last.skips) last.skips.push(d); else if (isSkip) items.push({ skips: [d] }); else items.push({ d });
+    });
+    const feed = el("div", null, "feed");
+    const limit = S.decShown || DEC_SHOWN;
+    items.slice(0, limit).forEach((it) => {
+      if (it.skips) {
+        const det = el("details", null, "skipfold");
+        const sum = el("summary", null, "feed-item");
+        const why = it.skips.map(whyOf).filter(Boolean);
+        kids(sum, [el("span", fmtTime(it.skips[0].ts), "feed-time"), el("span", it.skips.length + " routine skip" + (it.skips.length === 1 ? "" : "s"), "muted"), el("span", "show", "tag")]);
+        det.appendChild(sum);
+        const inner = el("div", null, "skip-list");
+        it.skips.forEach((d, i) => {
+          const row = el("div", null, "ticket");
+          if (d.contract) row.appendChild(ticketOcc(d.contract)); else if (d.symbol) row.appendChild(el("b", d.symbol));
+          if (why[i]) row.appendChild(el("span", why[i], "muted"));
+          inner.appendChild(row);
+        });
+        det.appendChild(inner);
+        feed.appendChild(det);
+        return;
+      }
+      const d = it.d, item = el("div", null, "feed-item");
       const who = el("div", null, "ticket");
       who.appendChild(el("span", words(d.kind), "muted"));
       if (d.contract) who.appendChild(ticketOcc(d.contract)); else if (d.symbol) who.appendChild(el("b", d.symbol));
       const v = decisionVerdict(d);
-      const tag = el("span", v.text + (d.fictional ? " (fictional)" : ""), "tag " + (v.id === "taken" || v.id === "exit" ? "info" : ""));
+      const tag = el("span", v.text + (d.fictional ? " (fictional)" : ""), "tag " + (v.id === "taken" || v.id === "exit" ? "info" : v.id === "blocked" ? "warn" : ""));
       kids(item, [el("span", fmtTime(d.ts), "feed-time"), who, tag]);
       const why = whyOf(d);
       item.appendChild(el("div", why ? "Rule: " + why : "No reason was recorded for this line (" + words(d.disposition) + ").", "feed-why"));
       feed.appendChild(item);
     });
     host.appendChild(feed);
+    if (items.length > limit) {
+      const more = el("button", "Show " + (items.length - limit) + " more", "linkbtn");
+      more.type = "button";
+      more.addEventListener("click", () => { S.decShown = limit + DEC_SHOWN; renderDecisions(S.decisions); });
+      host.appendChild(more);
+    }
   }
 
   function renderOrders(orders) {
@@ -614,7 +650,7 @@
     const best = done.length ? Math.max.apply(null, done.map((t) => t.pnl)) : null, worst = done.length ? Math.min.apply(null, done.map((t) => t.pnl)) : null;
     const noQuote = scoped.filter((t) => t.status !== "CLOSED" && t.pnl === null).length;
     $("trade-lede").textContent = all.length
-      ? all.length + " simulated trade" + (all.length === 1 ? "" : "s") + " from every account and lane. The long-term options account is the only one that trades the paper broker; the lanes and the 10x challenge are research experiments with their own simulated fills. Choose Options or Shares, pick a lane, or sort any column. " + data.caveat
+      ? all.length + " simulated trade" + (all.length === 1 ? "" : "s") + ". Pick a lane above, filter, or sort any column. " + data.caveat
       : "Nothing has traded yet. The options account needs automatic entries switched on in Controls; the lanes and the challenge need the options lanes switched on.";
     const f = $("trade-summary");
     f.replaceChildren();
@@ -627,15 +663,26 @@
     ]);
     const count = (test) => all.filter(srcOk).filter(test).length;
     chips($("trade-kind"), KINDS.map((k) => ({ id: k.id, label: k.label + " " + all.filter(srcOk).filter((t) => k.id === "all" || t.instrument === k.id).length })), S.kind, (id) => { S.kind = id; S.shown = 100; renderTrades(); });
-    const sel = $("trade-source");
-    if (!sel.dataset.ready || Number(sel.dataset.n) !== data.sources.length) {
-      sel.replaceChildren();
-      const first = el("option", "All accounts and lanes"); first.value = "all"; sel.appendChild(first);
-      data.sources.forEach((x) => { const o = el("option", x.label + " (" + x.total + ")"); o.value = x.source; sel.appendChild(o); });
-      if (!data.sources.some((x) => x.source === "main")) { const o = el("option", "Options account (0)"); o.value = "main"; sel.insertBefore(o, sel.children[1]); }
-      sel.dataset.ready = "1"; sel.dataset.n = String(data.sources.length);
-    }
-    sel.value = S.source;
+    // Lane tabs replace the old dropdown: every account and lane is visible at once with its trade count and result.
+    const kindScoped = all.filter(kindOk);
+    const tabs = [{ id: "all", label: "All lanes", t: kindScoped }];
+    const srcs = data.sources.slice();
+    if (!srcs.some((x) => x.source === "main")) srcs.unshift({ source: "main", label: "Options account" });
+    srcs.sort((x, y) => (x.source === "main" ? -1 : y.source === "main" ? 1 : 0)).forEach((x) => tabs.push({ id: x.source, label: x.label, t: kindScoped.filter((t) => t.source === x.source) }));
+    const lb = $("trade-source");
+    lb.replaceChildren();
+    tabs.forEach((tb) => {
+      const closed = tb.t.filter((t) => t.status === "CLOSED" && t.pnl !== null), real = closed.reduce((acc, t) => acc + t.pnl, 0);
+      const b = el("button", null, "lanetab");
+      b.type = "button"; b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(tb.id === S.source));
+      b.appendChild(el("span", tb.label, "lt-name"));
+      const meta = el("span", null, "lt-meta num");
+      meta.appendChild(el("span", tb.t.length + " trade" + (tb.t.length === 1 ? "" : "s"), "muted"));
+      if (closed.length) meta.appendChild(span(sgn(real), tone(real)));
+      b.appendChild(meta);
+      b.addEventListener("click", () => { S.source = tb.id; S.shown = 100; renderTrades(); });
+      lb.appendChild(b);
+    });
     const base = all.filter(kindOk).filter(srcOk);
     chips($("trade-filters"), FILTERS.map((x) => ({ id: x.id, label: x.label + " " + base.filter(x.test).length })), S.filter, (id) => { S.filter = id; S.shown = 100; renderTrades(); });
     const flt = FILTERS.find((x) => x.id === S.filter) || FILTERS[0], q = S.query.trim().toUpperCase();
@@ -1918,7 +1965,6 @@
     };
     setTimeout(poll, 2000);
   }));
-  $("trade-source").addEventListener("change", (ev) => { S.source = ev.target.value; renderTrades(); });
   $("trade-search").addEventListener("input", (ev) => { S.query = ev.target.value; renderTrades(); });
   $("btn-drawer-close").addEventListener("click", closeTrade);
   $("scrim").addEventListener("click", closeTrade);

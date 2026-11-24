@@ -80,9 +80,13 @@ def test_source_caches_for_five_minutes():
 
 
 def test_engine_blocks_and_journals_a_put_into_a_bounce():
+    # A fixed clock: the fictional demo market moves with the wall clock, and on a day it trends up the strategy proposes
+    # only calls, so a put block could never show. Same assertions as before; only the date is pinned.
+    now = datetime(2026, 11, 24, 15, tzinfo=timezone.utc)
+    clock = lambda: now  # noqa: E731
     m = OrderManager(SimBroker(), Store(":memory:"))
-    e = TradingEngine(m, DemoDataProvider(), LiquidTrendStrategy(), default_config=EngineConfig())
-    e.regime = regime.RegimeSource(selloff_then_bounce)
+    e = TradingEngine(m, DemoDataProvider(clock=clock), LiquidTrendStrategy(), default_config=EngineConfig(), clock=clock)
+    e.regime = regime.RegimeSource(selloff_then_bounce, clock)
     app = create_app(m, "t" * 24, e, Runner(e))
     with TestClient(app) as c:
         c.put("/api/engine/config", json={"enforce_market_hours": False, "auto_entries": True}, headers=H)

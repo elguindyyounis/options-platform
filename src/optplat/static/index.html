@@ -250,6 +250,74 @@
     .grid2 { grid-template-columns:1fr; }
     input[type=text], input[type=password] { min-width:0; flex:1; }
   }
+
+  /* ---- redesign 2026-11-25 (owner: Desk buried the accounts; Trades used a dropdown; plain look) ----
+     Order on the Desk is now: status, headline + chart, accounts and lanes, then activity beside positions.
+     Visual cues borrowed from the options alerter: eyebrow labels, rounded gradient cards, big tabular numbers. */
+  .content { max-width:1320px; }
+  .panel { border-radius:14px; background:linear-gradient(165deg,var(--surface),color-mix(in srgb,var(--surface) 88%,var(--raised))); box-shadow:0 1px 0 rgba(255,255,255,.03) inset,0 8px 24px rgba(0,0,0,.10); }
+  h1 { font:700 28px/1.2 var(--sans); letter-spacing:-.02em; }
+  h2.sect { font:700 16px var(--sans); letter-spacing:-.01em; }
+  .sect-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 14px; margin-bottom:10px; }
+  .sect-head .q { margin:0; }
+  .eyebrow { font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--mut); }
+  .rail { background:linear-gradient(180deg,var(--surface),var(--bg)); }
+  .brand b { font:700 16px var(--sans); letter-spacing:-.01em; }
+  .rail a.nav { border-radius:10px; border-left:0; padding:10px 14px; }
+  .rail a.nav[aria-current="page"] { background:var(--info-bg); color:var(--fg); box-shadow:inset 3px 0 0 var(--series-1); }
+  .pill { background:transparent; }
+
+  /* hero: numbers left, chart right */
+  .hero { grid-template-columns:minmax(0,5fr) minmax(0,7fr); gap:20px 34px; align-items:start; padding:24px 26px; background:linear-gradient(150deg,var(--info-bg),var(--surface) 55%); }
+  .hero-main { display:grid; gap:10px; align-content:start; min-width:0; }
+  .hero-chart { min-width:0; }
+  .hero-value { font:700 clamp(32px,4.4vw,50px)/1.05 var(--sans); margin:0; }
+  .hero-main .kpis { grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); margin-top:6px; }
+  .hero-value.muted { font-size:clamp(24px,2.8vw,32px); }
+  .kpi { border-radius:10px; }
+  .kpi .v { font-size:19px; font-weight:700; }
+  @media (max-width:1080px) { .hero { grid-template-columns:minmax(0,1fr); } }
+  @media (max-width:560px) { .hero-main .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+  /* accounts and lanes as cards */
+  .lane-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(228px,1fr)); gap:12px; }
+  .lane-card { text-align:left; display:grid; gap:6px; align-content:start; padding:14px 16px; border-radius:14px; border:1px solid var(--line); background:var(--surface); color:var(--fg); transition:transform .12s,border-color .12s,background .12s; }
+  button.lane-card:not(:disabled):hover { transform:translateY(-2px); border-color:var(--series-1); background:var(--raised); }
+  .lane-card.main { border-color:var(--series-1); }
+  .lane-card.total { background:var(--info-bg); border-style:dashed; cursor:default; }
+  .lane-card:disabled { cursor:default; opacity:1; }
+  .lc-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .lc-name { font-weight:700; font-size:14px; }
+  .lc-big { font:700 24px/1.15 var(--sans); letter-spacing:-.01em; }
+  .lc-big small { font:500 12px var(--sans); }
+  .lc-open { font-size:13px; font-weight:600; }
+  .lc-foot { font-size:12px; }
+  .lc-bar { position:relative; height:6px; border-radius:3px; background:var(--raised); overflow:hidden; display:flex; gap:2px; }
+  .lc-bar i { display:block; height:100%; border-radius:3px; min-width:2px; }
+  .lc-bar i.pos { background:var(--gain); } .lc-bar i.neg { background:var(--loss); } .lc-bar i.live { opacity:.45; }
+
+  /* activity feed: compact */
+  .feed-item { grid-template-columns:64px 1fr auto; padding:8px 0; }
+  .feed-why { font-size:12.5px; }
+  details.skipfold { border-bottom:1px solid var(--line-soft); }
+  details.skipfold > summary { list-style:none; cursor:pointer; padding:8px 0; border-bottom:0; }
+  details.skipfold > summary::-webkit-details-marker { display:none; }
+  details.skipfold[open] > summary .tag { display:none; }
+  .skip-list { display:grid; gap:6px; padding:0 0 10px 78px; font-size:12.5px; }
+  .pos-grid { grid-template-columns:minmax(0,1fr); gap:10px; }
+  .pos { border-radius:14px; padding:12px 14px; gap:8px; }
+  .pos-pnl .big { font-size:22px; }
+
+  /* trades: lane tabs instead of a dropdown */
+  .lanebar { display:flex; gap:8px; overflow-x:auto; padding:2px 2px 8px; scroll-snap-type:x proximity; }
+  .lanetab { flex:0 0 auto; scroll-snap-align:start; display:grid; gap:2px; text-align:left; padding:10px 14px; min-width:132px; border-radius:12px; border:1px solid var(--line); background:var(--surface); color:var(--fg); }
+  .lanetab:hover { border-color:var(--mut); }
+  .lanetab[aria-selected="true"] { border-color:var(--series-1); background:var(--info-bg); box-shadow:inset 0 -3px 0 var(--series-1); }
+  .lt-name { font-weight:700; font-size:13.5px; white-space:nowrap; }
+  .lt-meta { display:flex; gap:10px; font-size:12px; font-weight:600; }
+  .figures { padding:14px 18px; border:1px solid var(--line); border-radius:14px; background:var(--surface); }
+  .fig .v { font:700 22px/1.2 var(--sans); }
+  .chip { border-radius:99px; }
 </style>
 </head>
 <body>
@@ -301,22 +369,27 @@
           <div id="research-progress" class="muted">Connect to see the summary.</div>
         </details>
         <div class="panel hero">
-          <div class="hero-top">
-            <div>
-              <div class="hero-label" id="desk-label">Profit and loss since start (paper)</div>
-              <div id="desk-value" class="hero-value num">Loading</div>
-              <div id="desk-change" class="hero-change"></div>
-            </div>
+          <div class="hero-main">
+            <div class="eyebrow" id="desk-label">Profit and loss since start (paper)</div>
+            <div id="desk-value" class="hero-value num">Loading</div>
+            <div id="desk-change" class="hero-change"></div>
             <div class="hero-stats" id="tiles"></div>
+            <p id="desk-headline" class="hero-line"></p>
+            <details class="notes"><summary>About these numbers</summary>
+              <p id="desk-sub" class="muted" style="margin-top:8px"></p>
+              <p id="sample" class="muted"></p>
+            </details>
           </div>
-          <div class="viz" id="equity-chart"></div>
-          <button class="linkbtn" id="btn-table" type="button">Show as table</button>
-          <div class="scroll" id="equity-table" hidden></div>
-          <p id="desk-headline" class="hero-line"></p>
-          <details class="notes"><summary>About these numbers</summary>
-            <p id="desk-sub" class="muted" style="margin-top:8px"></p>
-            <p id="sample" class="muted"></p>
-          </details>
+          <div class="hero-chart">
+            <div class="viz" id="equity-chart"></div>
+            <button class="linkbtn" id="btn-table" type="button">Show as table</button>
+            <div class="scroll" id="equity-table" hidden></div>
+          </div>
+        </div>
+        <div>
+          <div class="sect-head"><h2 class="sect">Accounts and lanes</h2><span class="q">Every paper account and research lane side by side. Choose one to see its trades.</span></div>
+          <div id="all-accounts" class="lane-grid"></div>
+          <p class="muted" id="all-accounts-note" style="margin-top:8px"></p>
         </div>
         <div class="deskcols">
           <div>
@@ -325,16 +398,10 @@
             <div id="positions"></div>
           </div>
           <div>
-            <h2 class="sect">Taken or skipped, and why</h2>
-            <p class="q">Newest first: what happened and the rule that decided it.</p>
+            <h2 class="sect">Activity</h2>
+            <p class="q">What was bought, sold or blocked, newest first. Routine skips are folded into one line.</p>
             <div class="panel" style="padding:4px 16px"><div id="decisions"></div></div>
           </div>
-        </div>
-        <div>
-          <h2 class="sect">All accounts and lanes</h2>
-          <p class="q">The paper account and every research lane side by side. Choose a name to see its trades.</p>
-          <div class="panel" style="padding:6px 16px 10px;min-width:0;overflow:hidden"><div class="scroll" id="all-accounts"></div></div>
-          <p class="muted" id="all-accounts-note" style="margin-top:8px"></p>
         </div>
         <details class="panel">
           <summary>Results check (research, not proof of an edge)</summary>
@@ -375,18 +442,18 @@
           <p id="trade-lede" class="lede"></p>
         </div>
         <div class="figures" id="trade-summary"></div>
+        <div class="lanebar" id="trade-source" role="tablist" aria-label="Which account or lane"></div>
         <div class="toolbar">
           <div class="chips" id="trade-kind" role="group" aria-label="Options or shares"></div>
-          <select id="trade-source" aria-label="Which account or lane"></select>
-          <div class="chips" id="trade-filters" role="group" aria-label="Filter trades"></div>
+                    <div class="chips" id="trade-filters" role="group" aria-label="Filter trades"></div>
           <input id="trade-search" type="text" placeholder="Search by symbol" aria-label="Search trades by symbol">
         </div>
         <div class="panel" style="padding:6px 8px"><div class="scroll" id="trade-table"></div></div>
-        <div class="panel">
-          <h2>By account and lane</h2>
-          <p class="q">Which account or experiment is producing these trades, and how are they doing?</p>
+        <details class="panel">
+          <summary>Compare lanes in a table</summary>
+          <p class="q" style="margin-top:8px">Which account or experiment is producing these trades, and how are they doing?</p>
           <div class="scroll" id="trade-sources"></div>
-        </div>
+        </details>
       </section>
 
       <section id="view-options" data-page="options" data-question="Do simulated option trades beat shares on the same ideas, and what do the losses teach?" hidden>

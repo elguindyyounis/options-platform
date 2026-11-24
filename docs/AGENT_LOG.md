@@ -978,3 +978,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Limit: follows made before this change have no regime fields (unknown). The regime is the reading at follow time from the shared 15-minute cache.
 * Verified: `python -m pytest -q` 739 pass (2 new in `tests/test_shadow.py`). Not verified: real SPY/VIX data, the Mac.
 
+## 2026-11-25 (interactive, owner request): Desk and Trades redesign
+
+* Owner feedback: the Desk buried "All accounts and lanes" under a long taken/skipped feed, Trades chose the lane from a dropdown, and the look was plain. Changes (display only, no risk, order, sizing, auth, broker or API change): Desk order is now status, headline beside the chart, accounts and lanes as clickable cards, then positions beside an Activity feed. Activity defaults to orders and blocks, folds runs of routine skips into one opened-on-demand line and shows 8 items with "Show more". Trades has lane tabs (count and realized result each) instead of the dropdown; the by-lane table is folded away. Rounded gradient cards, eyebrow labels and bigger tabular numbers, taking cues from the options alerter.
+* Test change: `test_decision_feed_verdicts_are_plain...` asserted the old heading text "Taken or skipped, and why"; the heading is now "Activity", so the assertion checks the new subtitle. Nothing else weakened; unknown filter ids still fall back to All.
+* Verified: `node --check`, screenshots of Desk and Trades at 1440px and 390px (dark) on the fictional demo market, `python -m pytest -q` 738 pass. Not verified: light theme visually, real data, the other pages (Options, Swing and so on keep the old look and pick up only the shared card/heading styles), the Mac.
+* CI fix: `tests/test_regime.py::test_engine_blocks_and_journals_a_put_into_a_bounce` used the wall clock, and on 2026-11-24/25 the fictional demo market proposed only calls, so no put was ever blocked (red on integration too). Root cause is the unpinned clock; the test now pins it (same assertions, verified to block on four different dates).
+
