@@ -34,6 +34,15 @@ console.log(JSON.stringify({
   ev:[null,0,9,10,29,30,100].map(W.optplatEvidence),
   first:W.optplatDigest([],0),
   dig:W.optplatDigest([dec('ENTRY','FILLED','2026-11-24T10:00:00Z'),dec('ENTRY','FILLED','2026-11-24T11:00:00Z'),dec('ENTRY','SKIPPED_HELD','2026-11-24T12:00:00Z'),dec('ENTRY','FILLED','2026-11-23T10:00:00Z')],since),
+  lane:[
+    W.optplatLaneVerdict({source:'frozen-baseline-options',closed:40,open:0,realized_pnl:100,instrument:'options'},null,[]),
+    W.optplatLaneVerdict({source:'x',closed:0,open:2,realized_pnl:0,instrument:'options'},null,[]),
+    W.optplatLaneVerdict({source:'x',closed:4,open:0,realized_pnl:900,instrument:'options'},{closed:40,realized_pnl:100},[]),
+    W.optplatLaneVerdict({source:'x',closed:12,open:0,realized_pnl:900,instrument:'options'},{closed:40,realized_pnl:100},[]),
+    W.optplatLaneVerdict({source:'x',closed:12,open:0,realized_pnl:-5,instrument:'options'},{closed:40,realized_pnl:100},[]),
+    W.optplatLaneVerdict({source:'x',closed:12,open:0,realized_pnl:900,instrument:'options'},null,[]),
+    W.optplatLaneVerdict({source:'s',closed:0,open:3,realized_pnl:0,instrument:'options'},null,[opt('A','P'),opt('B','P'),opt('C','P')].map((t)=>({...t,source:'s'}))),
+  ],
   none:W.optplatDigest([dec('ENTRY','FILLED','2026-11-23T10:00:00Z')],since),
 }));
 """
@@ -80,3 +89,11 @@ def test_front_page_dom_has_the_band_the_needs_list_and_keeps_the_old_status_ids
     for ident in ("now-band", "now-headline", "needs-list", "vt-meter", "nav-needs", "attn", "glance", "trust-verdict"):
         assert f'id="{ident}"' in html, ident
     assert "innerHTML" not in js and "optplat.lastSeen" in js
+
+
+def test_lane_verdict_never_calls_a_thin_lane_ahead_and_flags_a_one_sided_book(out):
+    v = [x["text"] for x in out["lane"]]
+    assert v == ["Reference", "Open only, none closed", "Too early", "Ahead of the baseline", "Behind the baseline",
+                 "No baseline to compare", "Watch: 3 open, all puts"]
+    assert out["lane"][2]["tone"] == "warn"  # 4 closed trades and +$900 is still only "too early"
+    assert 'id="view-lanes"' in (ROOT / "index.html").read_text() and 'data-question="Which approach is working' in (ROOT / "index.html").read_text()

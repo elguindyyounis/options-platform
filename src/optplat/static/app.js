@@ -2,7 +2,7 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
   const phone = window.matchMedia("(max-width:860px)");
-  const PAGES = ["desk", "trades", "options", "swing", "shortterm", "market", "context", "tracker", "agents", "research", "system"];
+  const PAGES = ["desk", "trades", "lanes", "options", "swing", "shortterm", "market", "context", "tracker", "agents", "research", "system"];
   // The token is kept in this browser's local storage for this address (127.0.0.1 only), so a new tab, a refresh or a restart of
   // the browser stays connected. It is never sent anywhere except as the API header. An older session-only copy is moved over.
   const TOKEN_KEY = "optplat_token";
@@ -122,7 +122,7 @@
     document.querySelectorAll("a.nav").forEach((a) => {
       if (a.getAttribute("data-page") === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
-    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
+    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", lanes: "Lanes", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
   }
 
   // ---------------------------------------------------------------- equity chart (unchanged behaviour)
@@ -1900,6 +1900,83 @@
     if (st.needs.length > 5) list.appendChild(el("p", "+ " + (st.needs.length - 5) + " more in the full status notes below.", "muted"));
   }
 
+  // ---- Lanes page (design proposal 2026-11-25): every lane on the same terms, sorted by evidence, with exposure ----
+  function laneRole(x) { return x.source === "main" ? "Account" : /frozen-baseline/.test(x.source) ? "Benchmark" : x.instrument === "shares" ? "Shares" : "Experiment"; }
+  // One row's verdict in plain words. Evidence first: a lane with under 10 closed trades is never called ahead or behind.
+  function laneVerdict(x, baseline, trades) {
+    const role = laneRole(x), lvl = evidenceLevel(x.closed);
+    const mine = (trades || []).filter((t) => t.source === x.source), e = exposure(mine);
+    if (e.open >= 3 && (e.putPct === 100 || e.putPct === 0)) return { tone: "warn", text: "Watch: " + e.open + " open, all " + (e.putPct === 100 ? "puts" : "calls") };
+    if (role === "Benchmark") return { tone: "", text: "Reference" };
+    if (!x.closed) return { tone: "", text: x.open ? "Open only, none closed" : "No trades yet" };
+    if (lvl === 1) return { tone: "warn", text: "Too early" };
+    if (!baseline || !baseline.closed) return { tone: "", text: "No baseline to compare" };
+    return x.realized_pnl > baseline.realized_pnl ? { tone: "gain", text: "Ahead of the baseline" } : { tone: "loss", text: "Behind the baseline" };
+  }
+  function laneRows(data) {
+    const base = data.sources.find((x) => /frozen-baseline/.test(x.source));
+    const rows = data.sources.slice();
+    if (!rows.some((x) => x.source === "main")) rows.push({ source: "main", label: "Options account", instrument: "options", total: 0, open: 0, closed: 0, wins: 0, win_rate_pct: null, realized_pnl: 0, open_pnl: 0 });
+    rows.sort((a, b) => (evidenceLevel(b.closed) - evidenceLevel(a.closed)) || (b.realized_pnl - a.realized_pnl));
+    return { rows, base };
+  }
+  function renderLanes(data) {
+    if (!data) { empty($("ln-board"), "Could not load the lanes", "They appear once the page can reach /api/alltrades."); return; }
+    const { rows, base } = laneRows(data), all = data.trades || [], ex = exposure(all);
+    if (!rows.some((x) => x.source === S.laneSel)) S.laneSel = rows[0] ? rows[0].source : "";
+    const verdicts = rows.map((x) => laneVerdict(x, base, all));
+    const watch = verdicts.filter((v) => v.tone === "warn" && /^Watch/.test(v.text)).length;
+    const enough = rows.filter((x) => evidenceLevel(x.closed) >= 2).length;
+    $("ln-headline").textContent = watch ? "Watch: " + watch + " lane" + (watch === 1 ? " holds" : "s hold") + " a one-sided book." : enough ? enough + " of " + rows.length + " lanes have enough trades to compare." : "No lane has enough closed trades to rank on result yet.";
+    $("ln-lede").textContent = "Sorted by evidence first, then result. A lane is only called ahead or behind the frozen baseline once it has at least 10 closed trades; 30 is the minimum before any figure counts." + (data.fictional ? " Fictional demo data." : "");
+    const host = $("ln-board");
+    host.replaceChildren();
+    const head = el("div", null, "lb-row lb-head");
+    ["Lane", "Realized", "Open now", "Evidence", "Verdict"].forEach((t, n) => head.appendChild(el("span", t, n === 1 || n === 2 ? "r" : "")));
+    host.appendChild(head);
+    rows.forEach((x, n) => {
+      const b = el("button", null, "lb-row" + (x.source === S.laneSel ? " sel" : ""));
+      b.type = "button";
+      const name = el("span");
+      name.appendChild(el("b", x.label)); name.appendChild(el("span", "  " + laneRole(x), "muted"));
+      const real = span(arrow(x.realized_pnl) + sgn(x.realized_pnl), tone(x.realized_pnl) + " num r"), open = openNow(x, ""); open.className = (open.className || "") + " r";
+      const lvl = evidenceLevel(x.closed), ev = el("span", null, "evrow"), m = el("div", null, "meter");
+      renderMeter(m, lvl); ev.appendChild(m); ev.appendChild(el("span", x.closed + " closed", "muted"));
+      const v = verdicts[n];
+      kids(b, [name, real, open, ev, el("span", v.text, "tag " + v.tone)]);
+      b.addEventListener("click", () => { S.laneSel = x.source; renderLanes(S.trades); });
+      host.appendChild(b);
+    });
+    // exposure
+    const xb = $("ln-exposure");
+    xb.replaceChildren();
+    if (!ex.open) xb.appendChild(el("p", "Nothing is open, so there is no exposure.", "muted"));
+    else {
+      const bar = el("div", null, "xbar"), p = el("i", null, "p"), c = el("i", null, "c");
+      p.style.width = ex.putPct + "%"; c.style.width = (100 - ex.putPct) + "%";
+      kids(bar, [p, c]);
+      const labels = el("div", null, "toolbar"); kids(labels, [span(arrow(-1) + ex.putPct + "% puts", "loss"), span((100 - ex.putPct) + "% calls " + arrow(1), "gain")]);
+      kids(xb, [labels, bar, el("p", ex.puts + " puts and " + ex.calls + " calls open across " + ex.names + " name" + (ex.names === 1 ? "" : "s") + ". The Watch line is more than two thirds one way across 3 or more names.", "muted")]);
+    }
+    // selected lane
+    const sel = rows.find((x) => x.source === S.laneSel), d = $("ln-detail");
+    d.replaceChildren();
+    if (!sel) { empty(d, "No lane selected", ""); $("ln-detail-title").textContent = "Lane detail"; return; }
+    $("ln-detail-title").textContent = sel.label;
+    const fg = el("div", null, "figures");
+    kids(fg, [fig(String(sel.open), "Open", sel.closed + " closed"), fig(sgn(sel.realized_pnl), "Realized", "after fees", tone(sel.realized_pnl)),
+      fig(sel.open_complete === false ? "partial" : sgn(sel.open_pnl), "Open now", sel.open_complete === false ? sel.open_unmarked + " unmarked" : "marked at the bid", sel.open_complete === false ? "" : tone(sel.open_pnl))]);
+    d.appendChild(fg);
+    const mine = all.filter((t) => t.source === sel.source && t.status !== "CLOSED");
+    const list = el("div", null, "feed");
+    mine.slice(0, 8).forEach((t) => { const row = el("div", null, "feed-item"); kids(row, [el("span", t.label, "mono"), el("span", t.pnl === null ? "no quote" : sgn(t.pnl) + (t.pnl_pct === null ? "" : " (" + t.pnl_pct + "%)"), t.pnl === null ? "muted" : tone(t.pnl)), el("span", "")]); list.appendChild(row); });
+    d.appendChild(list);
+    const go = el("button", "Open this lane's trades", "linkbtn"); go.type = "button";
+    go.addEventListener("click", () => { S.source = sel.source; S.kind = "all"; S.filter = "all"; S.shown = 100; location.hash = "#/trades"; });
+    d.appendChild(go);
+    if (!sel.closed) d.appendChild(el("p", "Exit reasons and what the closed trades teach appear once this lane has closed trades. Nothing is guessed before then.", "muted"));
+  }
+
   // "Research progress": how far the shadow book is from its gate, and what sample a test could really claim.
   // Pure function of /api/shadow. Items are {level, text}; missing data is reported as unknown, never as fine.
   function buildResearchProgress(sh) {
@@ -1973,6 +2050,7 @@
       renderTrust(status);
       renderDesk(portfolio, report, eq, status);
       renderAccounts(allTrades);
+      renderLanes(allTrades);
       renderPositions(report, status.config, status.exit_plans);
       renderDecisions(decisions);
       renderOrders(orders);
@@ -2069,7 +2147,7 @@
   window.optplatVerdict = decisionVerdict;
   window.optplatDecisionFilter = filterDecisions;
   window.optplatTally = decisionTally;
-  window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
+  window.optplatLaneVerdict = laneVerdict; window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   S.since = lastSeen(); // the previous look, kept for this whole visit so the digest does not reset itself every refresh
   window.addEventListener("pagehide", markSeen);
