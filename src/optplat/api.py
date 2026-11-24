@@ -352,6 +352,13 @@ def create_app(
 
             return exit_replay.report(engine.store, engine.provider.fictional, session_day(engine.clock()))
 
+        @app.get("/api/shadow/entries", dependencies=[Depends(auth)])
+        def shadow_entries() -> dict[str, Any]:
+            from . import entry_replay
+            from .scanner import session_day
+
+            return entry_replay.report(engine.store, engine.provider.fictional, session_day(engine.clock()))
+
         @app.get("/api/rotation", dependencies=[Depends(auth)])
         def sector_rotation() -> dict[str, Any]:
             from . import rotation
