@@ -50,6 +50,11 @@ console.log(JSON.stringify({
     W.optplatLabGate({fictional:false,followed:900,underlyings:30,trading_days:9,complete_pct:85,gate:{trading_days:20,followed:2000,underlyings:50,complete_pct:80,export_days_in_a_row:5}},[{status:'PASSED',intact:true},{status:'NOT_EVALUATED',intact:false}]),
     W.optplatLabGate({fictional:false,followed:2400,underlyings:55,trading_days:21,complete_pct:90,gate:{trading_days:20,followed:2000,underlyings:50,complete_pct:80,export_days_in_a_row:5}},[]),
   ],
+  sys:[
+    W.optplatSystem({config:{auto_entries:true,auto_exits:true,max_new_per_cycle:1,take_profit_pct:40,stop_loss_pct:30},data_source:{fictional:false},kill_switch:false,runner:{stalled:false}},40,{gate_met_except_export:true}),
+    W.optplatSystem({config:{auto_entries:true,auto_exits:false},data_source:{fictional:true},kill_switch:false,runner:{stalled:false}},2,null),
+    W.optplatSystem({config:{auto_entries:true,auto_exits:true},data_source:{fictional:false},kill_switch:true,runner:{stalled:true}},12,null),
+  ],
   none:W.optplatDigest([dec('ENTRY','FILLED','2026-11-23T10:00:00Z')],since),
 }));
 """
@@ -131,3 +136,16 @@ def test_no_two_functions_share_a_name_in_app_js():
     names = re.findall(r"^  (?:async )?function ([A-Za-z0-9_]+)\(", (ROOT / "app.js").read_text(), re.M)
     dupes = sorted({n for n in names if names.count(n) > 1})
     assert not dupes, dupes
+
+
+def test_system_ladder_follows_the_settings_and_real_money_is_never_a_step_you_can_be_on(out):
+    live, observe, killed = out["sys"]
+    assert (live["step"], observe["step"], killed["step"]) == (3, 2, 1)
+    tags = {c["key"]: c for c in live["checks"]}
+    assert tags["entry"]["tag"] == "Enough to look at" and tags["real"]["tag"] == "Real data" and tags["gate"]["tag"] == "Data numbers met"
+    # Operations is always the owner's call: the page cannot see a kill-switch test.
+    assert tags["ops"]["tag"] == "You confirm"
+    o = {c["key"]: c for c in observe["checks"]}
+    assert o["entry"]["tag"] == "Too early" and o["real"]["level"] == "warn" and o["exit"]["tag"] == "Exits off"
+    assert {c["key"]: c for c in killed["checks"]}["ops"]["tag"] == "Runner stalled"
+    assert ["Live order path", "None exists"] in live["guard"]
