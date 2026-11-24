@@ -1816,6 +1816,90 @@
     box.appendChild(ul);
   }
 
+  // ---- Now page (design proposal 2026-11-25): one verdict, the vitals, a "Needs you" list, evidence next to every result ----
+  // Standing cautions are true all the time by design (the owner turned automatic entries on), so they are shown in the full
+  // notes but never raise the state to Watch. Everything else that is not OK does.
+  const STANDING = [/Automatic entries are ON/, /no daily loss halt/, /^Results: only \d+ closed/]; // the last one is what the evidence meter already shows
+  const isStanding = (i) => STANDING.some((re) => re.test(i.text));
+  // Evidence level of a sample of closed trades: 1 too early, 2 building, 3 enough to look at (never proof of an edge).
+  function evidenceLevel(n) { return !(n >= 10) ? 1 : n >= MIN_TRADES ? 3 : 2; }
+  const EVIDENCE_WORDS = ["", "Too early", "Building", "Enough to look at"];
+  function exposure(trades) {
+    // Share of OPEN option trades that are puts, and across how many names. Only measures what is open; never predicts.
+    const open = (trades || []).filter((t) => t.instrument === "options" && t.status !== "CLOSED" && t.right);
+    const puts = open.filter((t) => String(t.right).toUpperCase().charAt(0) === "P"), names = new Set(open.map((t) => t.symbol));
+    const pct = open.length ? Math.round(puts.length / open.length * 100) : null;
+    return { open: open.length, puts: puts.length, calls: open.length - puts.length, names: names.size, putPct: pct };
+  }
+  // The state of the whole platform from the glance lines plus the exposure reading. Pure function, exposed for tests.
+  function nowState(items, expo) {
+    const list = items.slice();
+    // Engineering threshold, chosen before any result: more than two thirds one way, 4+ open trades, 3+ names.
+    if (expo && expo.open >= 4 && expo.names >= 3 && (expo.putPct >= 67 || expo.putPct <= 33))
+      list.push({ level: "warn", text: "Open exposure leans one way: " + (expo.putPct >= 67 ? expo.putPct + "% puts" : (100 - expo.putPct) + "% calls") + " across " + expo.names + " names, so one market move hits them all together." });
+    const needs = orderGlance(list).filter((i) => i.level !== "ok" && !isStanding(i));
+    const bad = needs.filter((i) => i.level === "bad");
+    if (bad.length) return { state: "act", needs, headline: "Act now: " + bad[0].text };
+    if (needs.length) return { state: "watch", needs, headline: needs.length === 1 ? "Watch: one thing to look at." : "Watch: " + needs.length + " things to look at." };
+    return { state: "clear", needs, headline: "Nothing needs you. Autopilot is running within limits." };
+  }
+  // What happened since the owner last looked (decision lines newer than sinceMs). Counts only, from the journal.
+  function digestText(decisions, sinceMs) {
+    if (!sinceMs) return "First visit in this browser, so there is no earlier look to compare with.";
+    const c = {};
+    (decisions || []).filter((d) => Date.parse(d.ts) > sinceMs).forEach((d) => { const v = decisionVerdict(d).id; c[v] = (c[v] || 0) + 1; });
+    const hrs = Math.max(1, Math.round((Date.now() - sinceMs) / 3600000));
+    const parts = [["taken", "entr", "y", "ies"], ["exit", "exit", "", "s"], ["blocked", "blocked", "", ""], ["skipped", "skipped", "", ""]]
+      .filter((p) => c[p[0]]).map((p) => c[p[0]] + " " + (p[0] === "taken" ? (c[p[0]] === 1 ? "entry" : "entries") : p[0] === "exit" ? (c[p[0]] === 1 ? "exit" : "exits") : p[1]));
+    return "Since you last looked, " + hrs + " hour" + (hrs === 1 ? "" : "s") + " ago: " + (parts.length ? parts.join(", ") : "nothing was decided") + ". (Counts the latest journal lines only.)";
+  }
+  function lastSeen() { try { return Number(localStorage.getItem("optplat.lastSeen")) || 0; } catch (e) { return 0; } }
+  function markSeen() { try { localStorage.setItem("optplat.lastSeen", String(Date.now())); } catch (e) { /* storage may be blocked */ } }
+  function renderMeter(host, level) {
+    host.replaceChildren();
+    host.setAttribute("role", "img");
+    host.setAttribute("aria-label", "Evidence: " + EVIDENCE_WORDS[level].toLowerCase());
+    for (let n = 1; n <= 3; n++) host.appendChild(el("i", null, n <= level ? "on" : ""));
+  }
+  function renderNow(items, ctx) {
+    const st = nowState(items, exposure(ctx.trades && ctx.trades.trades));
+    const band = $("now-band");
+    band.className = "band " + st.state;
+    $("now-glyph").textContent = st.state === "clear" ? "\u25CF" : st.state === "watch" ? "\u25B2" : "\u25A0";
+    $("now-label").textContent = st.state === "clear" ? "All clear" : st.state === "watch" ? "Watch" : "Act now";
+    $("now-headline").textContent = st.headline;
+    $("now-digest").textContent = digestText(ctx.decisions, ctx.since);
+    const pf = ctx.portfolio, rn = ctx.status.runner || {};
+    const guards = [];
+    guards.push(ctx.health.mode === "PAPER" ? "paper only" : "NOT PAPER");
+    guards.push(pf && pf.kill_switch ? "kill switch ON" : "kill switch off");
+    guards.push(rn.stalled ? "loop stalled" : rn.running ? "loop running" : "loop stopped");
+    $("vt-safety").textContent = (ctx.health.mode === "PAPER" && !(pf && pf.kill_switch) && !rn.stalled) ? "Within limits" : "Look here";
+    $("vt-safety").className = "vv " + ((ctx.health.mode === "PAPER" && !(pf && pf.kill_switch) && !rn.stalled) ? "gain" : "loss");
+    $("vt-safety-s").textContent = guards.join(" · ");
+    const rep = ctx.report, base = (ctx.trades && ctx.trades.sources || []).find((x) => /frozen-baseline/.test(x.source));
+    $("vt-result").textContent = rep.closed_trades ? sgn(rep.realized_pnl) : "No closed trades";
+    $("vt-result").className = "vv num " + (rep.closed_trades ? tone(rep.realized_pnl) : "muted");
+    $("vt-result-s").textContent = base ? "Frozen baseline lane: " + (base.closed ? sgn(base.realized_pnl) + " on " + base.closed + " closed" : "no closed trades yet") : "Long-term account. Baseline lane not found.";
+    const lvl = evidenceLevel(rep.closed_trades);
+    $("vt-ev").textContent = rep.closed_trades + " of " + MIN_TRADES;
+    renderMeter($("vt-meter"), lvl);
+    $("vt-ev-s").textContent = EVIDENCE_WORDS[lvl] + (ctx.shadow && typeof ctx.shadow.trading_days === "number" && ctx.shadow.gate ? " · shadow book " + ctx.shadow.trading_days + " of " + ctx.shadow.gate.trading_days + " days" : "");
+    // Needs you
+    const box = $("needs"), list = $("needs-list"), badge = $("nav-needs");
+    list.replaceChildren();
+    box.hidden = !st.needs.length;
+    $("needs-count").textContent = String(st.needs.length);
+    badge.hidden = !st.needs.length; badge.textContent = String(st.needs.length);
+    st.needs.slice(0, 5).forEach((i) => {
+      const row = el("div", null, "need");
+      row.appendChild(el("span", i.level === "bad" ? "Act" : "Look", "tag " + (i.level === "bad" ? "loss" : "warn")));
+      row.appendChild(el("div", i.text));
+      list.appendChild(row);
+    });
+    if (st.needs.length > 5) list.appendChild(el("p", "+ " + (st.needs.length - 5) + " more in the full status notes below.", "muted"));
+  }
+
   // "Research progress": how far the shadow book is from its gate, and what sample a test could really claim.
   // Pure function of /api/shadow. Items are {level, text}; missing data is reported as unknown, never as fine.
   function buildResearchProgress(sh) {
@@ -1877,7 +1961,7 @@
       const [health, status, portfolio, orders, report, decisions, eq, allTrades, results, policy, shadowRep] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         api("/api/engine/status"), api("/api/portfolio"), api("/api/paper/orders"), api("/api/report"),
-        api("/api/journal?limit=15"), api("/api/equity"), api("/api/alltrades").catch(() => null),
+        api("/api/journal?limit=100"), api("/api/equity"), api("/api/alltrades").catch(() => null),
         api("/api/results").catch(() => null), api("/api/risk/policy").catch(() => null),
         api("/api/shadow").catch(() => null),
       ]);
@@ -1893,7 +1977,9 @@
       renderDecisions(decisions);
       renderOrders(orders);
       syncControls(status, status.config);
-      renderGlance(buildGlance(health, status, portfolio, results, policy));
+      const glanceItems = buildGlance(health, status, portfolio, results, policy);
+      renderGlance(glanceItems);
+      renderNow(glanceItems, { health, status, portfolio, report, trades: allTrades, decisions, shadow: shadowRep, since: S.since });
       renderResearch(buildResearchProgress(shadowRep));
       if (results) renderResults(results);
       renderCycleDecisions(status.last_cycle, status.recent_outcomes);
@@ -1983,7 +2069,11 @@
   window.optplatVerdict = decisionVerdict;
   window.optplatDecisionFilter = filterDecisions;
   window.optplatTally = decisionTally;
+  window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
+  S.since = lastSeen(); // the previous look, kept for this whole visit so the digest does not reset itself every refresh
+  window.addEventListener("pagehide", markSeen);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") markSeen(); });
   showPage();
   refresh();
   setInterval(refresh, 10000);

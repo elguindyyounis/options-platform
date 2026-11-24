@@ -318,13 +318,34 @@
   .figures { padding:14px 18px; border:1px solid var(--line); border-radius:14px; background:var(--surface); }
   .fig .v { font:700 22px/1.2 var(--sans); }
   .chip { border-radius:99px; }
+
+  /* ---- Now page (design proposal 2026-11-25): verdict band, vitals, Needs you, evidence meter ---- */
+  .band { display:flex; flex-wrap:wrap; border:1px solid var(--line); border-radius:14px; background:var(--surface); overflow:hidden; }
+  .band.clear { border-color:var(--gain); background:linear-gradient(150deg,var(--gain-bg),var(--surface) 60%); }
+  .band.watch { border-color:var(--warn); background:linear-gradient(150deg,var(--warn-bg),var(--surface) 60%); }
+  .band.act { border-color:var(--loss); background:linear-gradient(150deg,var(--loss-bg),var(--surface) 60%); }
+  .band-main { flex:1 1 380px; min-width:0; padding:22px 24px; display:grid; gap:8px; align-content:start; }
+  .band-state { display:flex; align-items:center; gap:10px; }
+  .band.clear .band-state { color:var(--gain); } .band.watch .band-state { color:var(--warn); } .band.act .band-state { color:var(--loss); }
+  .band-h { font:700 clamp(22px,2.6vw,32px)/1.15 var(--sans); letter-spacing:-.02em; color:var(--fg); }
+  .vitals { flex:2 1 520px; min-width:0; display:flex; flex-wrap:wrap; gap:16px 0; padding:22px 24px 22px 6px; align-items:flex-start; }
+  .vital { flex:1 1 170px; min-width:0; padding:2px 0 2px 18px; border-left:1px solid var(--line); display:grid; gap:4px; }
+  .vv { font:700 22px/1.15 var(--sans); letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
+  .evrow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .meter { display:flex; gap:3px; width:76px; } .meter i { display:block; flex:1; height:6px; border-radius:3px; background:var(--line); } .meter i.on { background:var(--series-1); }
+  .needs { border-color:var(--warn); }
+  .needs-head { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+  .need { display:flex; gap:12px; align-items:flex-start; padding:11px 0; border-bottom:1px solid var(--line-soft); }
+  .need:last-child { border-bottom:0; padding-bottom:0; }
+  .need > div { flex:1 1 0; min-width:0; }
+  .badge { margin-left:8px; background:var(--warn); color:#241a00; border-radius:99px; font-size:11px; font-weight:700; padding:1px 7px; }
 </style>
 </head>
 <body>
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand"><b>options-platform</b><small>Paper trading desk</small></div>
-    <a class="nav" href="#/desk" data-page="desk">Desk</a>
+    <a class="nav" href="#/desk" data-page="desk">Desk<span id="nav-needs" class="badge" hidden></span></a>
     <a class="nav" href="#/trades" data-page="trades">Trades</a>
     <a class="nav" href="#/options" data-page="options">Options</a>
     <a class="nav" href="#/swing" data-page="swing">Swing</a>
@@ -361,13 +382,23 @@
       </section>
 
       <section id="view-desk" data-page="desk" data-question="How is the paper account doing, and can I trust the numbers?" hidden>
-        <div id="trust-verdict" class="verdict"></div>
-        <details class="panel attn" id="attn">
-          <summary id="attn-summary">Checking status</summary>
-          <div id="glance" class="muted">Connect to see the summary.</div>
-          <h3 class="sub">Research progress: what is being tested and how much evidence there is</h3>
-          <div id="research-progress" class="muted">Connect to see the summary.</div>
-        </details>
+        <div id="trust-verdict" class="verdict" hidden></div>
+        <section id="now-band" class="band clear" aria-label="Verdict" data-question="Is it safe, does anything need me, and is it ahead of the baseline?">
+          <div class="band-main">
+            <div class="band-state"><span id="now-glyph" aria-hidden="true">&#9679;</span><span id="now-label" class="eb">Checking</span></div>
+            <h1 id="now-headline" class="band-h">Reading the platform status</h1>
+            <p id="now-digest" class="muted"></p>
+          </div>
+          <div class="vitals">
+            <div class="vital"><div class="eb">Safety</div><div id="vt-safety" class="vv"></div><p id="vt-safety-s" class="muted"></p></div>
+            <div class="vital"><div class="eb">Result vs baseline</div><div id="vt-result" class="vv num"></div><p id="vt-result-s" class="muted"></p></div>
+            <div class="vital"><div class="eb">Evidence</div><div id="vt-ev" class="vv num"></div><div class="evrow"><div id="vt-meter" class="meter"></div><span id="vt-ev-s" class="muted"></span></div></div>
+          </div>
+        </section>
+        <section id="needs" class="panel needs" aria-label="Needs you" data-question="What can only the owner fix or decide right now?" hidden>
+          <div class="needs-head"><h2 class="sect">Needs you</h2><span id="needs-count" class="tag warn"></span></div>
+          <div id="needs-list"></div>
+        </section>
         <div class="panel hero">
           <div class="hero-main">
             <div class="eyebrow" id="desk-label">Profit and loss since start (paper)</div>
@@ -403,6 +434,12 @@
             <div class="panel" style="padding:4px 16px"><div id="decisions"></div></div>
           </div>
         </div>
+<details class="panel attn" id="attn">
+          <summary id="attn-summary">Checking status</summary>
+          <div id="glance" class="muted">Connect to see the summary.</div>
+          <h3 class="sub">Research progress: what is being tested and how much evidence there is</h3>
+          <div id="research-progress" class="muted">Connect to see the summary.</div>
+        </details>
         <details class="panel">
           <summary>Results check (research, not proof of an edge)</summary>
           <div id="results-status"></div>
