@@ -97,3 +97,11 @@ def test_lane_verdict_never_calls_a_thin_lane_ahead_and_flags_a_one_sided_book(o
                  "No baseline to compare", "Watch: 3 open, all puts"]
     assert out["lane"][2]["tone"] == "warn"  # 4 closed trades and +$900 is still only "too early"
     assert 'id="view-lanes"' in (ROOT / "index.html").read_text() and 'data-question="Which approach is working' in (ROOT / "index.html").read_text()
+
+
+def test_lane_options_trades_open_the_drawer_trade_file():
+    js = (ROOT / "app.js").read_text()
+    assert 'else if (t.instrument === "options" && t.detail) openLaneTrade(t, node)' in js
+    assert "function renderLaneFile" in js and "function laneLadder" in js
+    for ident in ("drawer-title", "drawer-sub", "drawer-body", "scrim", "drawer", "btn-drawer-close"):
+        assert f'id="{ident}"' in (ROOT / "index.html").read_text()
