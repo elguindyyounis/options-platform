@@ -43,6 +43,13 @@ console.log(JSON.stringify({
     W.optplatLaneVerdict({source:'x',closed:12,open:0,realized_pnl:900,instrument:'options'},null,[]),
     W.optplatLaneVerdict({source:'s',closed:0,open:3,realized_pnl:0,instrument:'options'},null,[opt('A','P'),opt('B','P'),opt('C','P')].map((t)=>({...t,source:'s'}))),
   ],
+  gate:[
+    W.optplatLabGate(null,[]),
+    W.optplatLabGate({fictional:true,followed:240,underlyings:43,trading_days:1,complete_pct:0,independent_observations:43,gate:{trading_days:20,followed:2000,underlyings:50,complete_pct:80,export_days_in_a_row:5}},[]),
+    W.optplatLabGate({fictional:false,followed:0,underlyings:0,trading_days:0,complete_pct:null,gate:{trading_days:20,followed:2000,underlyings:50,complete_pct:80,export_days_in_a_row:5}},[]),
+    W.optplatLabGate({fictional:false,followed:900,underlyings:30,trading_days:9,complete_pct:85,gate:{trading_days:20,followed:2000,underlyings:50,complete_pct:80,export_days_in_a_row:5}},[{status:'PASSED',intact:true},{status:'NOT_EVALUATED',intact:false}]),
+    W.optplatLabGate({fictional:false,followed:2400,underlyings:55,trading_days:21,complete_pct:90,gate:{trading_days:20,followed:2000,underlyings:50,complete_pct:80,export_days_in_a_row:5}},[]),
+  ],
   none:W.optplatDigest([dec('ENTRY','FILLED','2026-11-23T10:00:00Z')],since),
 }));
 """
@@ -105,3 +112,22 @@ def test_lane_options_trades_open_the_drawer_trade_file():
     assert "function renderLaneFile" in js and "function laneLadder" in js
     for ident in ("drawer-title", "drawer-sub", "drawer-body", "scrim", "drawer", "btn-drawer-close"):
         assert f'id="{ident}"' in (ROOT / "index.html").read_text()
+
+
+def test_lab_gate_reads_the_shadow_book_and_never_claims_readiness_it_cannot_see(out):
+    unknown, fict, empty, building, ready = out["gate"]
+    assert unknown["state"] == "unknown" and unknown["rows"] == []
+    assert fict["state"] == "early" and "fictional" in fict["text"].lower()
+    assert empty["state"] == "early" and "Nothing is being followed" in empty["text"]
+    assert building["state"] == "building" and [r["met"] for r in building["rows"]] == [False, False, False, True]
+    assert building["hyps"]["total"] == 2 and building["hyps"]["tampered"] == 1
+    assert ready["state"] == "ready" and "you confirm" in ready["text"]
+    assert all(0 <= r["pct"] <= 100 for r in ready["rows"])
+
+
+def test_no_two_functions_share_a_name_in_app_js():
+    """A duplicate declaration silently replaced the registered-experiments renderer once."""
+    import re
+    names = re.findall(r"^  (?:async )?function ([A-Za-z0-9_]+)\(", (ROOT / "app.js").read_text(), re.M)
+    dupes = sorted({n for n in names if names.count(n) > 1})
+    assert not dupes, dupes

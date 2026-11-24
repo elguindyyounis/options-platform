@@ -122,7 +122,7 @@
     document.querySelectorAll("a.nav").forEach((a) => {
       if (a.getAttribute("data-page") === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
-    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", lanes: "Lanes", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Research", system: "Controls" })[page] + " - " : "") + "options-platform";
+    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", lanes: "Lanes", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Lab", system: "Controls" })[page] + " - " : "") + "options-platform";
   }
 
   // ---------------------------------------------------------------- equity chart (unchanged behaviour)
@@ -1552,7 +1552,7 @@
   }
 
   // ---------------------------------------------------------------- Research
-  function renderResearch(list) {
+  function renderHypotheses(list) {
     table($("research"), [
       { label: "Id", get: (h) => h.id }, { label: "Hypothesis", get: (h) => h.statement },
       { label: "Status", get: (h) => h.status + (h.intact ? "" : " (RECORD TAMPERED)") },
@@ -1583,9 +1583,50 @@
       { label: "Mean trade", right: true, get: (r) => pc(r.x.mean_pct) }, { label: "Sample", get: (r) => (r.x.enough ? "" : "too few to judge") },
     ], rg, "No regime split yet", "");
   }
+  // The Lab band: how close the shadow book is to the research gate, and where each registered hypothesis stands.
+  // Pure and read-only. It never registers or judges a hypothesis; the owner confirms the gate.
+  function labGate(sh, hyps) {
+    const list = Array.isArray(hyps) ? hyps : [];
+    const hy = { total: list.length, tampered: list.filter((h) => h.intact === false).length, by: {} };
+    list.forEach((h) => { hy.by[h.status] = (hy.by[h.status] || 0) + 1; });
+    if (!sh || !sh.gate) return { state: "unknown", rows: [], text: "The shadow book could not be read, so the gate cannot be shown.", hyps: hy };
+    const g = sh.gate;
+    const mk = (key, label, have, need, unit) => ({ key: key, label: label, have: have || 0, need: need, unit: unit || "", pct: Math.max(0, Math.min(100, Math.round(((have || 0) / need) * 100))), met: (have || 0) >= need });
+    const rows = [mk("trading_days", "Trading days", sh.trading_days, g.trading_days), mk("underlyings", "Underlyings", sh.underlyings, g.underlyings),
+      mk("followed", "Contracts followed", sh.followed, g.followed), mk("complete_pct", "Paths complete", sh.complete_pct, g.complete_pct, "%")];
+    const met = rows.filter((r) => r.met).length;
+    let state = met === rows.length ? "ready" : sh.followed > 0 ? "building" : "early", text;
+    if (sh.fictional) { state = "early"; text = "Following fictional demo data. None of this counts towards the gate."; }
+    else if (sh.followed === 0) text = "Nothing is being followed yet. Candidates are recorded when a scan runs.";
+    else if (state === "ready") text = "The data numbers are met. The export must also have run " + g.export_days_in_a_row + " days in a row; this page cannot see that, so you confirm it.";
+    else text = met + " of " + rows.length + " gate lines hold. Hypotheses wait until all do.";
+    if (typeof sh.independent_observations === "number" && sh.followed > 0) text += " Real sample: " + sh.independent_observations + " independent observations (one per name per day).";
+    return { state: state, rows: rows, text: text, hyps: hy };
+  }
+  function renderLabGate(sh, hyps) {
+    const g = labGate(sh, hyps);
+    $("lab-gate-text").textContent = g.text;
+    const tag = $("lab-gate-tag");
+    tag.textContent = g.state === "ready" ? "\u25CF Ready for your check" : g.state === "building" ? "\u25B2 Building" : g.state === "early" ? "\u25C7 Too early" : "\u25C7 Unknown";
+    tag.className = "tag " + (g.state === "ready" ? "gain" : g.state === "building" ? "warn" : "info");
+    const host = $("lab-gate-rows");
+    host.replaceChildren();
+    g.rows.forEach((r) => {
+      const row = el("div", null, "gate-row"), bar = el("div", null, "gate-bar"), fill = el("i");
+      fill.style.width = r.pct + "%";
+      if (r.met) fill.className = "met";
+      bar.appendChild(fill);
+      bar.setAttribute("role", "img");
+      bar.setAttribute("aria-label", r.label + ": " + r.have + r.unit + " of " + r.need + r.unit + (r.met ? ", met" : ""));
+      kids(row, [el("span", r.label), bar, el("span", (r.met ? "\u2713 " : "") + r.have + r.unit + " of " + r.need + r.unit, "num muted")]);
+      host.appendChild(row);
+    });
+    const h = g.hyps, by = Object.keys(h.by).map((k) => h.by[k] + " " + words(k).toLowerCase());
+    $("lab-hyps").textContent = h.total ? h.total + " registered: " + by.join(", ") + (h.tampered ? ". " + h.tampered + " record(s) fail the tamper check." : ".") : "No hypothesis is registered. That is expected until the gate holds and you confirm it.";
+  }
   async function loadResearch() {
-    const [hyp, learn, lab] = await Promise.all([api("/api/research/hypotheses"), api("/api/learning"), api("/api/lab")]);
-    renderResearch(hyp); renderLearning(learn); renderLab(lab);
+    const [hyp, learn, lab, shadow] = await Promise.all([api("/api/research/hypotheses"), api("/api/learning"), api("/api/lab"), api("/api/shadow").catch(() => null)]);
+    renderHypotheses(hyp); renderLearning(learn); renderLab(lab); renderLabGate(shadow, hyp);
   }
   const VERDICT = { IMPROVING: ["▲ Improving", "gain"], WORSENING: ["▼ Getting worse", "loss"], NO_CLEAR_CHANGE: ["◆ No clear change", ""], TOO_EARLY: ["◇ Too early to say", ""] };
   function renderLearning(l) {
@@ -2070,7 +2111,7 @@
     return out;
   }
 
-  function renderResearch(items) {
+  function renderResearchProgress(items) {
     const box = $("research-progress");
     box.replaceChildren();
     const ul = el("ul");
@@ -2129,7 +2170,7 @@
       const glanceItems = buildGlance(health, status, portfolio, results, policy);
       renderGlance(glanceItems);
       renderNow(glanceItems, { health, status, portfolio, report, trades: allTrades, decisions, shadow: shadowRep, since: S.since });
-      renderResearch(buildResearchProgress(shadowRep));
+      renderResearchProgress(buildResearchProgress(shadowRep));
       if (results) renderResults(results);
       renderCycleDecisions(status.last_cycle, status.recent_outcomes);
       renderCandidates(status.last_cycle);
@@ -2218,7 +2259,7 @@
   window.optplatVerdict = decisionVerdict;
   window.optplatDecisionFilter = filterDecisions;
   window.optplatTally = decisionTally;
-  window.optplatLaneVerdict = laneVerdict; window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
+  window.optplatLabGate = labGate; window.optplatLaneVerdict = laneVerdict; window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   S.since = lastSeen(); // the previous look, kept for this whole visit so the digest does not reset itself every refresh
   window.addEventListener("pagehide", markSeen);

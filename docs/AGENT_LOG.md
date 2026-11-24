@@ -1002,3 +1002,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 * Design proposal build step 3. Choosing an options lane or challenge trade (Trades page, Lanes page) now opens the same side drawer as the options account instead of a small inline note: result, the trade, why it entered, a stop/paid/target ladder, and how it ended with the post-mortem. Display only; no API, risk, order, sizing, auth, broker or schema change. Share lanes still open the inline file.
 * Verified: `python -m pytest -q` 746 pass; the drawer in a real browser on the fictional demo market, dark desktop and light phone, no script errors. Not verified: closed-trade post-mortem rendering in a browser, real data, the Mac.
+
+## 2026-11-25 (Lab page)
+
+* Design proposal build step 4. The Research page is now the Lab (nav label and title; route unchanged): a Phase 1 gate band at the top shows each gate line as a bar (trading days, underlyings, contracts followed, paths complete), a plain verdict, and where registered hypotheses stand. Display only; no API, risk, order, sizing, auth, broker or schema change.
+* Bug found and fixed: `app.js` had two functions named `renderResearch`; the later one silently replaced the earlier, so the "Registered experiments" table never rendered and the hypothesis list was fed to the progress renderer. Renamed to `renderHypotheses` and `renderResearchProgress`; a new test fails on any duplicate top-level function name.
+* Decisions made: the band never says the gate is passed; at best "Ready for your check", because the export streak is invisible to this page and registering a hypothesis stays a human decision. Fictional data always reads "Too early".
+* Verified: `python -m pytest -q` 748 pass; the page in a real browser, dark desktop and light phone, no script errors. Not verified: a populated hypothesis list, real data.
