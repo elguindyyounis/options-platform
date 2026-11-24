@@ -257,7 +257,7 @@ def test_decision_feed_verdicts_are_plain_and_unknown_is_never_fine():
         import pytest
         pytest.skip("node not installed")
     root = Path(__file__).resolve().parents[1] / "src" / "optplat" / "static"
-    assert "Taken or skipped, and why" in (root / "index.html").read_text()
+    assert "Routine skips are folded into one line" in (root / "index.html").read_text()  # renamed Activity (owner redesign 2026-11-25)
     harness = """
 const stub=()=>new Proxy(function(){},{get:(t,k)=>k==='matches'?false:(k==='style'||k==='classList'||k==='dataset')?stub():stub(),set:()=>true,apply:()=>stub()});
 global.document={getElementById:()=>stub(),createElement:()=>stub(),querySelectorAll:()=>[],addEventListener(){},createTextNode:()=>stub()};
