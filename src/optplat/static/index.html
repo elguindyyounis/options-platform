@@ -339,6 +339,15 @@
   .need:last-child { border-bottom:0; padding-bottom:0; }
   .need > div { flex:1 1 0; min-width:0; }
   .badge { margin-left:8px; background:var(--warn); color:#241a00; border-radius:99px; font-size:11px; font-weight:700; padding:1px 7px; }
+
+  /* ---- Lanes page (design proposal 2026-11-25) ---- */
+  .lb-row { display:grid; grid-template-columns:minmax(210px,2.3fr) minmax(90px,1fr) minmax(90px,1fr) minmax(130px,1.2fr) minmax(150px,1.5fr); gap:12px; align-items:center; padding:13px 18px; border-bottom:1px solid var(--line-soft); min-width:820px; width:100%; box-sizing:border-box; background:none; border-left:0; border-right:0; border-top:0; text-align:left; color:inherit; }
+  .lb-row:last-child { border-bottom:0; }
+  button.lb-row:hover { background:var(--raised); } .lb-row.sel { background:var(--info-bg); box-shadow:inset 3px 0 0 var(--series-1); }
+  .lb-head { color:var(--mut); font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+  .lb-row .r { text-align:right; } .lb-row .tag { justify-self:start; }
+  .xbar { display:flex; height:14px; border-radius:7px; overflow:hidden; background:var(--raised); margin:8px 0 6px; }
+  .xbar i { display:block; height:100%; } .xbar i.p { background:var(--loss); } .xbar i.c { background:var(--gain); }
 </style>
 </head>
 <body>
@@ -347,6 +356,7 @@
     <div class="brand"><b>options-platform</b><small>Paper trading desk</small></div>
     <a class="nav" href="#/desk" data-page="desk">Desk<span id="nav-needs" class="badge" hidden></span></a>
     <a class="nav" href="#/trades" data-page="trades">Trades</a>
+    <a class="nav" href="#/lanes" data-page="lanes">Lanes</a>
     <a class="nav" href="#/options" data-page="options">Options</a>
     <a class="nav" href="#/swing" data-page="swing">Swing</a>
     <a class="nav" href="#/shortterm" data-page="shortterm">Short-term</a>
@@ -471,6 +481,26 @@
           <p class="q" style="margin-top:8px">Loop, data source, last cycle and data quality.</p>
           <dl class="facts" id="trust"></dl>
         </details>
+      </section>
+
+      <section id="view-lanes" data-page="lanes" data-question="Which approach is working, and how sure are we?" hidden>
+        <div>
+          <div class="eyebrow">Lanes</div>
+          <h1 id="ln-headline" class="band-h">Reading the lanes</h1>
+          <p id="ln-lede" class="lede"></p>
+        </div>
+        <div class="panel" style="padding:0;overflow:hidden"><div class="scroll" id="ln-board"></div></div>
+        <div class="deskcols">
+          <div class="panel" id="ln-exposure-box">
+            <h2>Market exposure</h2>
+            <p class="q">Net direction of everything open, because a guard can stop a new put but only this shows the pile-up.</p>
+            <div id="ln-exposure"></div>
+          </div>
+          <div class="panel">
+            <h2 id="ln-detail-title">Lane detail</h2>
+            <div id="ln-detail"></div>
+          </div>
+        </div>
       </section>
 
       <section id="view-trades" data-page="trades" data-question="What did the platform trade, in options or shares, in which lane, and how did each trade end?" hidden>
