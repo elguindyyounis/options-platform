@@ -323,6 +323,26 @@ def create_app(
             return objections.build(rows, tracker.report(engine.store, fictional, now, session_day(now), unusual_criteria()),
                                     engine.status()["clock"], engine.option_lanes.challenge.report(now), fictional, now.isoformat())
 
+        @app.get("/api/reviews", dependencies=[Depends(auth)])
+        def reviews_report() -> dict[str, Any]:
+            import json as _json
+
+            from . import reviewer
+            from .contracts import contract_label
+
+            fictional = engine.provider.fictional
+            open_rows = []
+            for lane in engine.option_lanes.lanes:
+                for t in lane._held():
+                    rv = _json.loads(engine.store.get_state(f"optlane_review:{t['id']}", "") or "null")
+                    o = t["open_payload"]
+                    open_rows.append({"id": t["id"], "lane": lane.p.lane, "lane_label": lane.p.label, "symbol": t["symbol"],
+                                      "contract": contract_label(t["symbol"], o["right"], o["strike"], o["expiry"]), "opened_at": t["opened_at"],
+                                      "review": rv, "rule_text": {r: reviewer.RULES[r] for r in (rv or {}).get("flags", [])}})
+            calls = engine.store.review_calls(fictional)
+            return {"fictional": fictional, "open": sorted(open_rows, key=lambda r: (r["review"] or {}).get("verdict") != "CONSIDER_EXIT"),
+                    "scorecard": reviewer.scorecard(calls), "advisory": True}
+
         @app.get("/api/forecasts", dependencies=[Depends(auth)])
         def forecasts_report() -> dict[str, Any]:
             from . import forecast

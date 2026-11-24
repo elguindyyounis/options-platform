@@ -127,6 +127,14 @@ CREATE TABLE IF NOT EXISTS forecasts (
     resolved_day TEXT,
     UNIQUE (symbol, bar_day, model, horizon, fictional)
 );
+CREATE TABLE IF NOT EXISTS review_calls (
+    trade_id INTEGER NOT NULL,
+    rule TEXT NOT NULL,
+    called_at TEXT NOT NULL,
+    bid REAL NOT NULL,
+    pnl_pct REAL NOT NULL,
+    PRIMARY KEY (trade_id, rule)
+);
 CREATE TABLE IF NOT EXISTS agent_weights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,
@@ -458,6 +466,21 @@ class Store:
                 (ts.isoformat(), price, reason, json.dumps(payload, default=str), trade_id))
             self._db.commit()
             return cur.rowcount == 1
+
+    # ---- the advisory early-exit reviewer: the first time each rule said "consider exiting" on a trade ----
+    def record_review_call(self, trade_id: int, rule: str, called_at: datetime, bid: float, pnl_pct: float) -> bool:
+        with self._lock:
+            cur = self._db.execute("INSERT OR IGNORE INTO review_calls (trade_id, rule, called_at, bid, pnl_pct) VALUES (?,?,?,?,?)",
+                                   (trade_id, rule, called_at.isoformat(), bid, pnl_pct))
+            self._db.commit()
+            return cur.rowcount == 1
+
+    def review_calls(self, fictional: bool) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT c.trade_id, c.rule, c.called_at, c.bid, c.pnl_pct, t.lane, t.symbol, t.entry_price, t.exit_price, t.closed_at, t.close_reason"
+                " FROM review_calls c JOIN lane_trades t ON t.id = c.trade_id WHERE t.fictional=? ORDER BY c.called_at", (int(fictional),)).fetchall()
+        return [dict(r) for r in rows]
 
     def lane_trades(self, lane: str, fictional: bool, limit: int = 300) -> list[dict[str, Any]]:
         with self._lock:

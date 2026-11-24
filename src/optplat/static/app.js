@@ -1299,8 +1299,28 @@
     ], list, "No experiments registered", "Register one with: python -m optplat.research register. The baseline stays frozen.");
   }
   async function loadResearch() {
-    const [hyp, learn, fcast] = await Promise.all([api("/api/research/hypotheses"), api("/api/learning"), api("/api/forecasts").catch(() => null)]);
-    renderResearch(hyp); renderLearning(learn); renderForecasts(fcast);
+    const [hyp, learn, fcast, rev] = await Promise.all([api("/api/research/hypotheses"), api("/api/learning"), api("/api/forecasts").catch(() => null), api("/api/reviews").catch(() => null)]);
+    renderResearch(hyp); renderLearning(learn); renderForecasts(fcast); renderReviews(rev);
+  }
+  const RV_VERDICT = { earlier_helped: ["Leaving early helped", "gain"], earlier_hurt: ["Leaving early hurt", "loss"], no_clear_difference: ["No clear difference", ""], too_few: ["Too few to say", ""] };
+  function renderReviews(r) {
+    const note = $("rs-rv-note");
+    if (!r) { table($("rs-rv-open"), [], [], "Could not load the reviews"); table($("rs-rv-score"), [], [], ""); note.textContent = ""; return; }
+    table($("rs-rv-open"), [
+      { label: "Lane", get: (x) => x.lane_label }, { label: "Contract", get: (x) => x.contract },
+      { label: "Return", right: true, get: (x) => (x.review && x.review.pnl_pct !== null ? span(pct(x.review.pnl_pct), tone(x.review.pnl_pct)) : "not marked yet") },
+      { label: "Best so far", right: true, get: (x) => (x.review && x.review.peak_pnl_pct !== null ? pct(x.review.peak_pnl_pct) : "") },
+      { label: "Days held", right: true, get: (x) => (x.review && x.review.held_days !== null ? x.review.held_days : "") },
+      { label: "Review", get: (x) => (!x.review ? "waiting for the next check" : x.review.verdict === "CONSIDER_EXIT"
+          ? el("span", "Consider exiting: " + x.review.flags.map((f) => x.rule_text[f].toLowerCase()).join("; "), "tag warn") : "Hold: no concern raised") },
+    ], r.open, "No open research-lane options", "Positions appear here once a lane opens one.");
+    table($("rs-rv-score"), [
+      { label: "Early-exit rule", get: (x) => x.text }, { label: "Calls", right: true, get: (x) => x.calls }, { label: "Scored", right: true, get: (x) => x.scored },
+      { label: "Average gain from leaving early", right: true, get: (x) => (x.avg_benefit_pts === undefined ? "n/a" : span((x.avg_benefit_pts > 0 ? "+" : "") + x.avg_benefit_pts + " pts", tone(x.avg_benefit_pts))) },
+      { label: "Earlier was better", right: true, get: (x) => (x.earlier_was_better_pct === undefined ? "n/a" : x.earlier_was_better_pct + "%") },
+      { label: "Verdict", get: (x) => el("span", (RV_VERDICT[x.verdict] || [x.verdict, ""])[0], "tag " + (RV_VERDICT[x.verdict] || ["", ""])[1]) },
+    ], r.scorecard.rules, "No rules");
+    note.textContent = "Points are shares of the premium paid. A verdict needs " + r.scorecard.min_scored + " scored calls per rule. " + r.scorecard.note + (r.fictional ? " Fictional demo data." : "");
   }
   const FC_VERDICT = { ahead: ["Ahead so far", "gain"], behind: ["Not better than no change", "loss"], mixed: ["Mixed", "warn"], too_few: ["Too early", ""], none: ["No data", ""] };
   function renderForecasts(f) {

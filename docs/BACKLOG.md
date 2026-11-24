@@ -21,6 +21,10 @@ and tests better approaches, with entries and exits automated in paper mode only
 
 ## Next up
 
+000000. **Early-exit reviewer follow-ups.** (1) Extend it to the main account's positions and the 10x challenge. (2) After 20+ scored calls per rule, show the owner the
+   numbers and let them decide whether any rule should become a real exit (a change to exit thresholds is theirs to make). (3) Add a rule that uses the underlying
+   (the stock has not moved in the trade's favour) and, for the Kronos lane, a forecast that has flipped since entry.
+
 00000. **Kronos follow-ups.** (1) Score the forecast high and low (did the forecast target get hit?) before any exit ever uses them. (2) Add a plain
    trend-following control lane (buy in the direction of the last 3-day move) so Kronos is judged against something smarter than a coin flip.
    (3) Try it on intraday candles for entry timing, only after the daily scorecard has 20+ scored forecasts. (4) Add a Kronos line to the Desk objections.

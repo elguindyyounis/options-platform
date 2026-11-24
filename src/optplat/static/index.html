@@ -536,6 +536,14 @@
           <div class="panel"><h2>Over time</h2><p class="q">Milestones, weight changes and challenge attempts, newest first.</p><ol class="timeline" id="rs-timeline" style="margin-top:10px"></ol></div>
         </div>
         <div class="panel">
+          <h2>Should any open trade go early?</h2>
+          <p class="q">A second opinion on every open research-lane option at each check, even when neither the stop nor the target is hit. It only advises: it never closes a trade. When a trade later closes by its normal rule, each early call is scored against what really happened.</p>
+          <div class="scroll" id="rs-rv-open" style="margin-top:10px"></div>
+          <h3 style="margin:16px 0 4px">Would leaving early have helped?</h3>
+          <div class="scroll" id="rs-rv-score"></div>
+          <p class="muted" id="rs-rv-note" style="margin-top:8px"></p>
+        </div>
+        <div class="panel">
           <h2>Candle forecasts (Kronos)</h2>
           <p class="q">An experiment: a pretrained model forecasts the next three daily closes. Every forecast is written down before the outcome is known, then scored against guessing that nothing changes.</p>
           <p id="rs-fc-verdict" style="margin:10px 0"></p>

@@ -25,6 +25,7 @@ from typing import Any, Callable, Optional, Sequence
 from . import shortterm as st_mod
 from . import swing as sw_mod
 from . import forecast as fc_mod
+from . import reviewer
 from .dataquality import check_snapshot
 from .diagnostics import describe_exc
 from .events import ETFS, EventCalendar
@@ -392,8 +393,27 @@ class OptionLane:
                 {"short": self._step_short, "swing": self._step_swing, "flow": self._step_flow}[self.p.kind](now, out)
             except Exception as exc:  # noqa: BLE001 - a research lane must never raise into the engine
                 out["errors"].append(describe_exc(exc))
+            self._advise(now)
             self._remember(out)
             return out
+
+    def _advise(self, now: datetime) -> None:
+        """Second opinion on every position still open after this check. Advisory: it records, it never closes anything."""
+        try:
+            for t in self._held():
+                m = json.loads(self.store.get_state(f"lane_mark:{t['id']}", "") or "null")
+                if not m or m.get("at") != now.isoformat():
+                    continue                                          # no fresh mark this pass, so no review
+                peak_key = f"optlane_peak:{t['id']}"
+                peak = max(float(self.store.get_state(peak_key, "0") or 0), t["entry_price"], m["bid"])
+                self.store.set_state(peak_key, repr(peak))
+                o = t["open_payload"]
+                rv = reviewer.assess(kind=self.p.kind, entry=t["entry_price"], bid=m["bid"], peak_bid=peak, opened_at=t["opened_at"], expiry=o["expiry"], now=now)
+                self.store.set_state(f"optlane_review:{t['id']}", json.dumps(rv))
+                for rule in rv["flags"]:
+                    self.store.record_review_call(t["id"], rule, now, m["bid"], rv["pnl_pct"])
+        except Exception:  # noqa: BLE001 - an advisory note must never stop a lane
+            pass
 
     def _remember(self, out: dict[str, Any]) -> None:
         """Keep what the last check did and why it did not trade, so the dashboard can answer "why no trades?"."""

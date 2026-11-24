@@ -5,6 +5,25 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 
 
+## 2026-11-25: advisory early-exit reviewer for open option positions
+
+* Owner asked whether open options get a regular review for "should this go early?" beyond the stop and target. Answer from the code: no. Open
+  positions are checked by mechanical rules only (main account: expiry within 5 days, -30% stop, +40% target, max-days-held off by default;
+  research lanes: premium stop and target, expiry within 2 days, max hold, swing trend break, short-term VWAP loss and flat-by-close). Nothing
+  judged a trade that was neither at its stop nor its target.
+* `reviewer.py`: at every lane check each position still open gets a second opinion from premium-only rules: gave back half of a 25%+ peak gain,
+  never worked (3+ days, down 10%+, never up more than 5%, swing and flow), late and losing (within 7 days of expiry, swing and flow). The first call
+  per rule per trade is stored (`review_calls`); the latest review per trade is kept in `state`. When a trade later closes by its normal rule, each call is scored:
+  what exiting at the call would have saved, as a share of the entry premium. A verdict needs 20 scored calls per rule.
+* **Advisory only.** It closes nothing and changes no exit threshold (an owner decision). The thresholds in the rules are new, labelled research
+  settings of the reviewer, not exit policy.
+* `GET /api/reviews` and a "Should any open trade go early?" panel on Research (open positions with their review, and the scorecard).
+* Verified: 12 new tests (each rule and its boundaries, scoring arithmetic, the lane records calls and leaves the trade open, a stale mark is not
+  reviewed, the endpoint), full suite, headless Chromium at desktop and phone width on demo data. A name clash with the existing `_review` critic hook
+  was caught by the tests and the method is `_advise`.
+* Not covered: the main account's positions (only the research lanes are reviewed), so the main account still has only its
+  mechanical exits. Reviews only happen when a lane runs and has a fresh quote, so nothing is reviewed outside market hours.
+
 ## 2026-11-21: Kronos candle forecasts as an optional paper experiment
 
 * Owner asked to add the Kronos model (github.com/shiyu-coder/Kronos, MIT, AAAI 2026 paper) as a technical-analysis input for entries and
