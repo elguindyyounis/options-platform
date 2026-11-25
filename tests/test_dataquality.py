@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 from helpers import NOW
-from optplat.dataquality import (MAX_SNAPSHOT_AGE_S, check_snapshot, frozen_issue, quote_fingerprint)
+from optplat.dataquality import (MAX_FUTURE_SKEW_S, MAX_SNAPSHOT_AGE_S, check_snapshot, frozen_issue, quote_fingerprint)
 from optplat.marketdata import ChainRow
 from optplat.models import OptionContract, Right
 from test_engine import EXPIRY, UP, build, snapshot
@@ -175,3 +175,20 @@ def test_the_status_tells_the_owner_when_the_computers_clock_runs_behind_the_quo
     provider._clock = lambda: clock.now
     engine.run_cycle()
     assert engine.status()["clock"]["warning"] is None
+
+
+def test_a_slow_fetch_is_not_mistaken_for_a_clock_problem_but_a_future_snapshot_still_is():
+    """The snapshot is stamped when its download finishes, after the cycle began. Against the cycle's start time that read
+    as 'ahead of the clock'; the gate now compares with the clock as it is when the snapshot arrives."""
+    engine, manager, broker, provider, clock = build()
+    engine.run_cycle()
+    started = engine._cycle_now
+    clock.now = started + timedelta(seconds=30)  # the download took 30 s
+    fresh = replace(snapshot(), as_of=clock())
+    report = {"errors": [], "data_quality": []}
+    assert engine._vet(fresh, report) is fresh
+    assert report["clock_ahead_s"] <= 0
+    future = replace(snapshot(), as_of=clock() + timedelta(seconds=MAX_FUTURE_SKEW_S + 10))
+    report = {"errors": [], "data_quality": []}
+    assert engine._vet(future, report) is None
+    assert report["clock_ahead_s"] > MAX_FUTURE_SKEW_S
