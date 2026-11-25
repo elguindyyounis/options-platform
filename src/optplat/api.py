@@ -153,6 +153,8 @@ def create_app(
         from .deploy import build_id
 
         body: dict[str, Any] = {"ok": True, "mode": manager.broker.mode.value, "broker": broker, "build_id": build_id()}
+        if engine is not None and hasattr(engine.provider, "health"):
+            body["market_data"] = engine.provider.health()
         if runner is not None:
             body["runner"] = runner.health()  # counts and flags only; error text stays behind the token
         return body
