@@ -43,7 +43,7 @@ def with_row(snap, **kw):
 
 # ------------------------------------------------------------ agents
 def test_technical_supports_a_call_in_an_uptrend_and_opposes_a_put():
-    v = technical(ctx())
+    v = technical(ctx(replace(calm(), closes=tuple(100.0+i for i in range(60)))))
     assert v.stance == SUPPORT
     assert any("chasing" in r for r in v.reasons) and v.confidence < 0.5  # a steep, overbought run is marked down
     put = OptionContract("AAA", EXPIRY, Right.PUT, 160.0)

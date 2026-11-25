@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Callable, Optional, Sequence
 
 from .dataquality import check_snapshot
+from .strategy import opportunity
 from .diagnostics import describe_exc
 from .market_clock import HOLIDAYS, NY, OPEN, session_status
 from .marketdata import Bar, MarketDataProvider, MarketSnapshot
@@ -73,6 +74,7 @@ def rank_active(raw: dict[str, Sequence[Bar]], now: datetime, top: int = TOP_ACT
             "change_pct": round((last.close / prev.close - 1) * 100, 2), "volume": int(last.volume),
             "dollar_volume": round(last.close * last.volume),
             "relative_volume": None if rel is None else round(rel, 2),
+            "daily_move_rms_pct": round(100 * math.sqrt(sum(math.log(b.close/a.close)**2 for a,b in zip(done[-21:-1],done[-20:]))/20), 3),
             "surge": rel is not None and rel >= RELATIVE_VOLUME_SURGE,
         })
     rows.sort(key=lambda r: -r["dollar_volume"])
@@ -139,7 +141,8 @@ def unusual_contracts(snap: MarketSnapshot, now: datetime) -> list[dict[str, Any
         # liquidity grades the OPEN interest too, so a brand-new low-OI contract is tier C by design: the engine's
         # own entry filter would refuse it, and the dashboard says why instead of hiding it.
         tier = liquidity_tier(spread, vol, oi)
-        reviewable = tier in ("A", "B") and 7 <= dte <= 730
+        economics = opportunity(snap, r, now)
+        reviewable = economics["eligible"] and tier in ("A", "B") and 7 <= dte <= 730
         printed, side = trade_side(r.last, r.bid, r.ask)
         out.append({
             "symbol": c.underlying, "sector": SECTOR_OF.get(c.underlying), "contract": c.occ_symbol.strip(), "right": c.right.value,
@@ -152,7 +155,8 @@ def unusual_contracts(snap: MarketSnapshot, now: datetime) -> list[dict[str, Any
             "iv": r.iv, "quoted_turnover_usd": round(r.ask * vol * 100), "underlying_price": snap.underlying,
             "score": round(min(100.0, 10 * math.log1p(vol) + min(35.0, (ratio or 0) * 4) + (15 if low_oi else 0)), 1),
             "decision": "REVIEWABLE" if reviewable else "OBSERVE_ONLY",
-            "why_observe_only": None if reviewable else ("wide or thin market" if tier == "C" else "expiry outside 7-730 days"),
+            "opportunity": economics,
+            "why_observe_only": None if reviewable else (economics["reasons"][-1] if not economics["eligible"] else "wide or thin market" if tier == "C" else "expiry outside 7-730 days"),
         })
     return out
 
@@ -395,6 +399,8 @@ class Scanner:
         for p in prior.values():
             revisit[p["symbol"]] = max(revisit.get(p["symbol"], 0.0), p.get("score") or 0.0)
         pick = sorted(revisit, key=lambda sym: -revisit[sym])[:CHAINS_FOR_FOLLOW_UP]
+        movers = sorted(ranked, key=lambda r: -r["daily_move_rms_pct"])
+        pick += [r["symbol"] for r in movers[:20] if r["symbol"] not in pick]
         pick += [r["symbol"] for r in ranked[:CHAINS_BY_DOLLAR_VOLUME] if r["symbol"] not in pick]
         surging = sorted((r for r in ranked if r["surge"] and r["symbol"] not in pick), key=lambda r: -(r["relative_volume"] or 0))
         pick += [r["symbol"] for r in surging[:CHAINS_BY_RELATIVE_VOLUME]]
@@ -439,7 +445,7 @@ class Scanner:
         out["market_context"] = context.build(core_snaps, now, fict)
         annotate_with_history(out["unusual"], prior, self.store, day, fict)
         self.store.record_unusual(day.isoformat(), fict, out["unusual"][:400])
-        out["unusual"].sort(key=lambda r: (r["decision"] != "REVIEWABLE", -r["score"], -r["volume"]))
+        out["unusual"].sort(key=lambda r: (r["decision"] != "REVIEWABLE", -r["opportunity"].get("iv_down_net_return_pct", -10000), -r["score"], -r["volume"]))
         out["tracker_marks_added"] = marks_added
         out["shadow_followed"], out["shadow_points"] = shadow_followed, shadow_points
         out["unusual_total"] = len(out["unusual"])

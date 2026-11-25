@@ -25,8 +25,8 @@ def snap(closes, rows, underlying=None):
     return MarketSnapshot("AAA", underlying or closes[-1], tuple(closes), tuple(rows), NOW, "test", True)
 
 
-UP = [100.0 + i for i in range(60)]
-DOWN = [200.0 - i for i in range(60)]
+UP = [(100.0 + i) * (1.06 if i%2==0 else 1) for i in range(60)]
+DOWN = [(200.0 - i) * (.94 if i%2==0 else 1) for i in range(60)]
 FLAT = [100.0 + (i % 2) for i in range(60)]
 
 

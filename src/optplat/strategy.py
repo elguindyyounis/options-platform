@@ -13,6 +13,13 @@ from typing import Any
 from .marketdata import MarketSnapshot
 from .models import OptionContract, Right
 from .pricing import buy_limit_for
+from .opportunity import assess
+
+def opportunity(snapshot, row, now):
+    c=row.contract
+    return assess(snapshot.underlying,c.strike,c.right.value,row.bid,row.ask,row.iv,
+                  (c.expiry-now.date()).days,snapshot.closes,c.multiplier)
+
 
 
 @dataclass(frozen=True)
@@ -36,7 +43,7 @@ class LiquidTrendStrategy(Strategy):
     """Follow a clear 20/50-day trend with a liquid, near-the-money, mid-dated option."""
 
     name = "liquid-trend"
-    version = "0.1.0"
+    version = "0.2.0"
 
     def __init__(
         self,
@@ -69,7 +76,7 @@ class LiquidTrendStrategy(Strategy):
             right = Right.PUT
         else:
             return "No clear trend (price, 20-day and 50-day averages are not lined up), so no trade."
-        counts = {"expiry": 0, "quote": 0, "spread": 0, "liquidity_missing": 0, "liquidity": 0, "strike": 0}
+        counts = {"expiry": 0, "quote": 0, "spread": 0, "liquidity_missing": 0, "liquidity": 0, "strike": 0, "economics": 0}
         for row in snapshot.rows:
             c = row.contract
             if c.right is not right:
@@ -87,6 +94,8 @@ class LiquidTrendStrategy(Strategy):
                 counts["liquidity"] += 1
             elif abs(c.strike / snapshot.underlying - 1) * 100 > self.max_moneyness_pct:
                 counts["strike"] += 1
+            elif not opportunity(snapshot,row,now)['eligible']:
+                counts['economics'] += 1
         label = {
             "expiry": "expiry outside the allowed window",
             "quote": "no usable bid/ask",
@@ -94,6 +103,7 @@ class LiquidTrendStrategy(Strategy):
             "liquidity_missing": "volume or open interest not reported by the data provider (treated as failing)",
             "liquidity": "volume or open interest too low",
             "strike": "strike too far from the price",
+            "economics": "movement does not justify option cost or evidence is missing",
         }
         trend = "up" if right is Right.CALL else "down"
         parts = [f"{n} {label[k]}" for k, n in counts.items() if n]
@@ -133,13 +143,17 @@ class LiquidTrendStrategy(Strategy):
             moneyness = abs(c.strike / snapshot.underlying - 1) * 100
             if moneyness > self.max_moneyness_pct:
                 continue
+            economics = opportunity(snapshot, row, now)
+            if not economics['eligible']:
+                continue
             score = round(100 - spread * 2 - moneyness + min(row.open_interest or 0, 5000) / 500, 2)
             out.append(
                 Proposal(
                     contract=c,
                     limit_price=buy_limit_for(row.ask),
-                    score=score,
+                    score=round(.7*score+.3*min(100,50+economics["iv_down_net_return_pct"]),2),
                     rationale={
+                        "opportunity": economics,
                         "strategy": f"{self.name} {self.version}",
                         "trend": trend,
                         "sma20": round(sma20, 2),
@@ -170,7 +184,7 @@ class FlowFollowStrategy(Strategy):
     spread 15% or less), so proposals are not pre-rejected; the risk policy itself is untouched.
     """
 
-    version = "0.1.0"
+    version = "0.2.0"
 
     def __init__(
         self,
@@ -211,7 +225,7 @@ class FlowFollowStrategy(Strategy):
             return "No unusual turnover (volume far above open interest) in this chain, so nothing to follow."
         return (
             f"{len(flagged)} unusual-turnover contract(s) found, but none passed: premium at least "
-            f"${self.min_premium_usd:,.0f}, {self.min_dte}-{self.max_dte} days to expiry, an out-of-the-money strike, and a usable quote."
+            f"${self.min_premium_usd:,.0f}, {self.min_dte}-{self.max_dte} days to expiry, an out-of-the-money strike, and a usable quote, plus sufficient historical movement to justify option cost under the IV stress screen."
         )
 
     def propose(self, snapshot: MarketSnapshot, now: datetime) -> list[Proposal]:
@@ -236,9 +250,13 @@ class FlowFollowStrategy(Strategy):
                     and self._ok_quote(r) and (r.volume or 0) >= self.nearer_min_volume
                     and (r.open_interest or 0) >= self.nearer_min_open_interest
                     and self._otm(snapshot, r.contract) < f["otm_pct"]
+                    and opportunity(snapshot, r, now)["eligible"]
                 ]
                 pick = min(cands, key=lambda r: (abs(self._otm(snapshot, r.contract) - self.nearer_target_otm_pct), r.contract.strike), default=None)
             if pick is None or not self._ok_quote(pick):
+                continue
+            economics = opportunity(snapshot, pick, now)
+            if not economics['eligible']:
                 continue
             spread = (pick.ask - pick.bid) / pick.ask * 100
             otm = self._otm(snapshot, pick.contract)
@@ -248,6 +266,7 @@ class FlowFollowStrategy(Strategy):
                     limit_price=buy_limit_for(pick.ask),
                     score=round({"EXTREME": 90, "HIGH": 70, "ELEVATED": 50}[f["tier"]] - spread, 2),
                     rationale={
+                        "opportunity": economics,
                         "strategy": f"{self.name} {self.version}",
                         "trend": f"flow {f['right']}",
                         "flagged_contract": f["contract"],
