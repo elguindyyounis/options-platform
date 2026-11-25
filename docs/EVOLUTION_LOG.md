@@ -20,3 +20,5 @@ One line per run. Columns: date, followed candidates, trading days of shadow boo
 | 2026-11-25 | unknown (data repo not attached) | unknown | 0 / 0 | none (entry replay harness for E1-E4, S1, R1 added) |
 
 | 2026-11-26 | 35 local shadow follows; 0 shadow points | not established | 0 / 0 | none (read-only IBKR data consumer; fills vetoed until verified BBO time) |
+
+| 2026-11-26 (UX) | no new follows created | not established | 0 / 0 | none (descriptive common-risk comparison and evidence-led display; no promotion) |

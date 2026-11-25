@@ -136,7 +136,7 @@ window closes. Double-click `start-platform.command` (or run `python -m optplat`
 free port and prints it, so use the address it prints. The options-alerter is a different app on port 8787.
 
 `python -m optplat` serves a dashboard at http://127.0.0.1:8800. Paste your `OPTPLAT_API_TOKEN`, then
-**Run one cycle**. With the default demo market you can tick *Automatic entries* and *Save settings*
+**Run one cycle**. With market-sourced research data you can inspect candidates; quote and independent risk checks still gate every paper entry. Synthetic markets are available only in explicit in-memory software tests. You can tick *Automatic entries* and *Save settings*
 to watch positions open and close. The token is kept in `sessionStorage` for the tab only. Each panel is headed
 by the question it answers; the equity curve needs a few completed cycles, and below 30 closed trades the
 page says the results are not evidence.
@@ -146,7 +146,7 @@ Environment variables (see `.env.example`):
 | Variable | Meaning |
 |---|---|
 | `OPTPLAT_BROKER` | `sim` (default) or `ibkr_paper` |
-| `OPTPLAT_DATA` | `demo` (default with `sim`) or `yahoo` (needs `pip install -e ".[yahoo]"`) |
+| `OPTPLAT_DATA` | `yahoo` (default, needs `pip install -e ".[yahoo]"`) or `ibkr` (shared local research service); `demo` requires an explicit isolated in-memory test fixture |
 | `OPTPLAT_ALLOW_UNVERIFIED_QUOTES` | `1` lets unofficial quotes through the risk gate. Research only. `./run.sh yahoo` sets it |
 | `OPTPLAT_OPEN_BROWSER` | `1` opens the dashboard, already connected, when the server is ready. `./run.sh` sets it |
 | `OPTPLAT_AUTOSTART_LOOP` | `1` starts the cycle loop at launch. Does not change the saved entries setting |

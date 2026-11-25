@@ -5,6 +5,7 @@ import optplat.__main__ as entry
 
 @pytest.fixture(autouse=True)
 def quiet_env(monkeypatch):
+    monkeypatch.setenv('OPTPLAT_TEST_FIXTURES','1')
     monkeypatch.setenv("OPTPLAT_DB", ":memory:")
     monkeypatch.setenv("OPTPLAT_BROKER", "sim")
     monkeypatch.setenv("OPTPLAT_DATA", "demo")

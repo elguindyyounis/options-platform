@@ -91,6 +91,7 @@ def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
         committee = _committee_for(committee_index, t["contract"], entry_order.updated_at)
         held_to = datetime.fromisoformat(last_exit["time"]) if (last_exit and rem == 0) else None
         t.update({
+            "fictional": en["fictional"] if en is not None else None,
             "status": status, "remaining": rem, "mark": mark, "realized_pnl": realized, "unrealized_pnl": unrealized,
             "pnl": total, "pnl_pct": None if total is None or cost <= 0 else round(total / cost * 100, 2),
             "exit_price": round(t["exit_value"] / done, 4) if done else None,

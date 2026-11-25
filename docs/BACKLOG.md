@@ -131,6 +131,8 @@ Existing items, in order:
 
 ## Done
 
+* Evidence-led dashboard and common-risk recorded-fill comparison (2026-11-26 owner mandate): incumbent retained as benchmark, separate observed leader/champion, cost/capital overlay, provenance and synthetic-startup guard. Stacked review PR; not deployed. See `docs/UX_EVIDENCE.md`.
+
 * Shared read-only IBKR data consumer (owner priority, 2026-11-26): opt-in
   `OPTPLAT_DATA=ibkr` reads the authenticated localhost service maintained in
   Options Alerter. Preserves unverified BBO times and vetoes fills in both risk
