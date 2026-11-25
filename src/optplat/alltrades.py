@@ -31,6 +31,8 @@ def _main_rows(manager: Any) -> list[dict[str, Any]]:
         label = contract_label(t["symbol"], t["right"], t["strike"], t["expiry"])
         rows.append({
             "key": "main:" + t["id"], "id": t["id"], "source": "main", "source_label": "Options account", "horizon": "Long-term",
+            "synthetic": t.get("fictional"),
+            "partial_exits": t["status"]=="PARTIAL" or len(t.get("exit_orders",[]))>1,
             "instrument": "options", "symbol": t["symbol"], "label": label, "right": t["right"], "strike": t["strike"], "expiry": t["expiry"],
             "quantity": t["quantity"], "entry_price": t["entry_price"], "exit_price": t["exit_price"], "mark": t["mark"],
             "pnl": t["pnl"], "pnl_pct": t["pnl_pct"], "status": t["status"], "opened_at": t["entry_time"], "closed_at": t["exit_time"],
@@ -98,6 +100,8 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
     for s in sources.values():
         s.update(summarise([r for r in rows if r["source"] == s["source"]]))
     return {
+        "leaderboard": __import__('optplat.leaderboard',fromlist=['build']).build(
+            rows,now,fictional=fictional,history_complete=all(sum(r['source']==s for r in rows)<MAX_PER_SOURCE for s in sources)),
         "fictional": fictional, "as_of": now.isoformat(), "trades": rows,
         "summary": {"all": summarise(rows), "options": summarise([r for r in rows if r["instrument"] == "options"]),
                     "shares": summarise([r for r in rows if r["instrument"] == "shares"])},

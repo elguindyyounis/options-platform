@@ -113,8 +113,10 @@ def main() -> None:
     else:
         sys.exit("OPTPLAT_BROKER must be 'sim' or 'ibkr_paper'")
 
-    data = os.environ.get("OPTPLAT_DATA", "demo" if which == "sim" else "yahoo")
+    data = os.environ.get("OPTPLAT_DATA", "yahoo")
     if data == "demo":
+        if os.environ.get('OPTPLAT_TEST_FIXTURES')!='1' or os.environ.get('OPTPLAT_DB')!=':memory:':
+            sys.exit('Synthetic data is restricted to isolated in-memory software tests.')
         provider = DemoDataProvider()
     elif data == "yahoo":
         provider = YahooDataProvider()

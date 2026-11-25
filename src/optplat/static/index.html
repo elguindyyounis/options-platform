@@ -355,6 +355,8 @@
   .lb-row .r { text-align:right; } .lb-row .tag { justify-self:start; }
   .xbar { display:flex; height:14px; border-radius:7px; overflow:hidden; background:var(--raised); margin:8px 0 6px; }
   .xbar i { display:block; height:100%; } .xbar i.p { background:var(--loss); } .xbar i.c { background:var(--gain); }
+
+.strategy-evidence{display:grid;gap:14px}.strategy-evidence h2{font-size:21px}.strategy-evidence #strategy-leader{font-size:20px;font-weight:700;padding:16px;background:var(--info-bg);border-radius:10px}.strategy-evidence #strategy-champion{padding:12px 16px;border-left:3px solid var(--warn);background:var(--warn-bg);font-size:13px}.strategy-evidence table{min-width:900px}.strategy-evidence td{vertical-align:top;padding-block:14px}.strategy-evidence details{font-size:12px;line-height:1.7}.strategy-evidence li{margin-bottom:7px}.quote-evidence{flex-basis:100%;font-size:11px;color:var(--mut)}.incumbent-details .hero{padding:18px 0 0}.incumbent-details>summary{font-size:13px;color:var(--mut)}.lane-card.main{border-color:var(--line)}.lane-card.leader{border-color:var(--warn);background:var(--warn-bg)}
 </style>
 </head>
 <body>
@@ -384,7 +386,7 @@
       <span id="kill" class="pill"></span>
       <span id="runner" class="pill"></span>
       <span class="grow"></span>
-      <span id="updated" class="muted"></span>
+      <span id="updated" class="muted"></span><div id="quote-evidence" class="quote-evidence"></div>
     </header>
 
     <main class="content">
@@ -408,17 +410,24 @@
           </div>
           <div class="vitals">
             <div class="vital"><div class="eb">Safety</div><div id="vt-safety" class="vv"></div><p id="vt-safety-s" class="muted"></p></div>
-            <div class="vital"><div class="eb">Result vs baseline</div><div id="vt-result" class="vv num"></div><p id="vt-result-s" class="muted"></p></div>
+            <div class="vital"><div class="eb">Observed performance leader</div><div id="vt-result" class="vv num"></div><p id="vt-result-s" class="muted"></p></div>
             <div class="vital"><div class="eb">Evidence</div><div id="vt-ev" class="vv num"></div><div class="evrow"><div id="vt-meter" class="meter"></div><span id="vt-ev-s" class="muted"></span></div></div>
           </div>
+        </section>
+        <section class="panel strategy-evidence" data-question="Which strategy leads under common capital and cost assumptions, and has any earned champion status?">
+          <div class="eyebrow">Evidence before precedence</div><h2>Strategy performance leaderboard</h2>
+          <p class="q">Separate native ledgers. Identical comparison capital, premium ceilings and cost overlay.</p>
+          <div id="strategy-leader"></div><div id="strategy-champion"></div>
+          <div class="scroll" id="strategy-board"></div>
+          <details><summary>Comparison assumptions and promotion evidence</summary><div id="strategy-assumptions" class="muted"></div><div id="strategy-promotion"></div></details>
         </section>
         <section id="needs" class="panel needs" aria-label="Needs you" data-question="What can only the owner fix or decide right now?" hidden>
           <div class="needs-head"><h2 class="sect">Needs you</h2><span id="needs-count" class="tag warn"></span></div>
           <div id="needs-list"></div>
         </section>
-        <div class="panel hero">
+        <details class="panel incumbent-details"><summary>Incumbent benchmark · native ledger and historical equity</summary><div class="hero">
           <div class="hero-main">
-            <div class="eyebrow" id="desk-label">Profit and loss since start (paper)</div>
+            <div class="eyebrow" id="desk-label">Incumbent benchmark · paper results</div>
             <div id="desk-value" class="hero-value num">Loading</div>
             <div id="desk-change" class="hero-change"></div>
             <div class="hero-stats" id="tiles"></div>
@@ -433,7 +442,7 @@
             <button class="linkbtn" id="btn-table" type="button">Show as table</button>
             <div class="scroll" id="equity-table" hidden></div>
           </div>
-        </div>
+        </div></details>
         <div>
           <div class="sect-head"><h2 class="sect">Accounts and lanes</h2><span class="q">Every paper account and research lane side by side. Choose one to see its trades.</span></div>
           <div id="all-accounts" class="lane-grid"></div>

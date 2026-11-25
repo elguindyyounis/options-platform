@@ -249,11 +249,36 @@
   };
 
   // ---------------------------------------------------------------- Desk
+  function dataEvidence(health, status) {
+    const md=health.market_data, source=status.data_source||{};
+    if(!md)return {label:source.fictional?"Synthetic fixtures · execution blocked":/yahoo/i.test(source.name||"")?"Delayed Data":"Disconnected",detail:"Source: "+(source.name||"unknown")+". Latest successful quote: unavailable from this provider status. Quote exchange times are unverified. Paper Execution is separate from data status."};
+    const at=Date.parse(md.last_successful_quote_update||""),age=(Date.now()-at)/1000,mode=md.observed_market_data_type;
+    const label=!md.connected?"Disconnected":mode===2?"IBKR Frozen Data":[3,4].includes(mode)?"Delayed Data":Number.isFinite(age)&&(age>30||age< -5)?"Stale Data":mode===1&&Number.isFinite(age)&&md.entitlement_evidence?"IBKR Live Data":"Awaiting Data";
+    return {label,detail:"IBKR paper TWS · "+md.state+" · Latest successful quote: "+(md.last_successful_quote_update||"not observed")+" · "+md.active_lines+"/"+md.max_lines+" subscriptions. Feed delivery does not verify executable option BBO times; fills remain vetoed."};
+  }
+  function renderStrategyBoard(data) {
+    const r=data&&data.leaderboard,host=$("strategy-board");
+    if(!r){empty(host,"Comparison unavailable","No strategy receives priority from implementation order.");$("strategy-champion").textContent="No independently validated champion.";return;}
+    const leader=r.accounts.find(x=>x.id===r.observed_leader_id);
+    $("strategy-leader").textContent=leader?"Observed leader: "+leader.name+" · "+sgn(leader.comparison.net_pnl_usd)+" common-risk net · "+leader.comparison.closed_trades+" closed trades":"Observed leader not established";
+    $("strategy-champion").textContent="Validated trading champion: Not established. An observed lead changes display priority, never trading permissions.";
+    const a=r.assumptions;
+    $("strategy-assumptions").textContent="Common window "+r.window_start.slice(0,10)+" to "+r.window_end.slice(0,10)+"; "+money(a.capital_usd)+" capital, "+money(a.per_trade_premium_usd)+" per-idea and "+money(a.total_premium_cap_usd)+" total premium cap. "+money(a.fee_per_contract_each_way_usd)+" commission and "+a.extra_slippage_each_way_pct+"% extra slippage each way. Per-underlying premium cap "+money(a.per_symbol_premium_cap_usd)+". Recorded-fill overlay; historical BBOs and opportunity sets are not identical. Full portfolio drawdown is unavailable. "+(!r.history_complete?"History is truncated: no observed leader may be named.":"");
+    table(host,[{label:"Strategy / sample",get:x=>{const box=el("div");box.appendChild(el("b",x.name));box.appendChild(el("div",(x.incumbent?"Incumbent benchmark · ":"Challenger · ")+x.comparison.closed_trades+" closed / "+x.comparison.open_trades+" open","muted"));const skipped=Object.entries(x.comparison.excluded||{});if(skipped.length)box.appendChild(el("div",skipped.map(([k,n])=>k.replaceAll("_"," ")+": "+n).join("; "),"muted"));return box;}},
+      {label:"Common-risk net",right:true,get:x=>x.comparison.closed_trades?sgn(x.comparison.net_pnl_usd):"Not measured"}, {label:"Return",right:true,get:x=>x.comparison.closed_trades?pct(x.comparison.return_pct):"n/a"},
+      {label:"Expectancy",right:true,get:x=>money(x.comparison.expectancy_usd)}, {label:"Closed drawdown",right:true,get:x=>pct(x.comparison.closed_only_drawdown_pct)},
+      {label:"Profit factor",right:true,get:x=>num(x.comparison.profit_factor)}, {label:"Capital efficiency",right:true,get:x=>pct(x.comparison.capital_efficiency_pct)},
+      {label:"Entries / calendar day",right:true,get:x=>num(x.comparison.trades_per_calendar_day)}],r.accounts,"No comparable trades");
+    const criteria=$("strategy-promotion");criteria.replaceChildren();
+    [ ["Before champion promotion",r.promotion_criteria],["Suspension and demotion review",r.demotion_criteria] ].forEach(([title,list])=>{criteria.appendChild(el("h3",title));const ul=el("ul");list.forEach(text=>ul.appendChild(el("li",text)));criteria.appendChild(ul);});
+  }
   function renderStrip(health, status, portfolio) {
     pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
-    const md = health.market_data;
-    pill("data", md ? "IBKR " + md.state + " - fills paused: BBO time unverified" : status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), md || status.data_source.fictional ? "warn" : "");
-    if (md) $("data").title = "Last BBO receipt: " + (md.last_bbo_received_at || "none") + "; subscriptions " + md.active_lines + "/" + md.max_lines + ". Receipt time does not verify exchange BBO freshness.";
+    S.lastDataContext={health,status};
+    const de = dataEvidence(health, status);
+    pill("mode", health.mode === "PAPER" ? "Paper Execution" : "Execution blocked", health.mode === "PAPER" ? "ok" : "bad");
+    pill("data", de.label, de.label === "IBKR Live Data" ? "ok" : "warn");
+    $("quote-evidence").textContent = de.detail;
     pill("market", "market " + (status.market.open ? "open" : "closed") + ": " + status.market.reason, status.market.open ? "ok" : "");
     S.killState = !!portfolio.kill_switch;
     pill("kill", S.killState ? "KILL SWITCH ON" : "kill switch off", S.killState ? "bad" : "");
@@ -349,14 +374,15 @@
     const sources = data.sources.slice();
     // The paper account always has a row, even before it has taken a trade.
     if (!sources.some((x) => x.source === "main")) sources.push({ source: "main", label: "Options account", instrument: "options", total: 0, open: 0, closed: 0, wins: 0, win_rate_pct: null, realized_pnl: 0, open_pnl: 0 });
-    const rows = sources.sort((a, b) => (a.source === "main" ? -1 : b.source === "main" ? 1 : b.realized_pnl - a.realized_pnl));
+    const rank=data.leaderboard?.accounts?.map(x=>x.id)||[];
+    const rows = sources.sort((a,b)=>{const ai=rank.indexOf(a.source),bi=rank.indexOf(b.source);return (ai<0?999:ai)-(bi<0?999:bi);});
     const all = data.summary.all;
     const goTo = (src) => { S.source = src; S.kind = "all"; S.filter = "all"; S.shown = 100; location.hash = "#/trades"; };
-    rows.unshift({ source: "", label: "All together", total: all.total, open: all.open, closed: all.closed, wins: all.wins, win_rate_pct: all.win_rate_pct, realized_pnl: all.realized_pnl, open_pnl: all.open_pnl, instrument: "", total_row: true });
+
     host.replaceChildren();
     const maxAbs = Math.max(1, ...rows.filter((r) => !r.total_row).map((r) => Math.abs(r.realized_pnl) + Math.abs(r.open_pnl || 0)));
     rows.forEach((r) => {
-      const card = el("button", null, "lane-card" + (r.total_row ? " total" : "") + (r.source === "main" ? " main" : ""));
+      const card = el("button", null, "lane-card" + (r.total_row ? " total" : "") + (r.source === data.leaderboard?.observed_leader_id ? " leader" : ""));
       card.type = "button";
       if (r.total_row) card.disabled = true; else card.addEventListener("click", () => goTo(r.source));
       const head = el("div", null, "lc-head");
@@ -380,7 +406,7 @@
       kids(card, kidsList);
       host.appendChild(card);
     });
-    note.textContent = "Realized is after fees on closed trades; open is marked at the bid. The options account is the only one that trades the paper broker. Lanes and the challenge are experiments with their own sizes and simulated fills, so the total adds simulated dollars and is not an account balance." + (data.fictional ? " Fictional demo data." : "") + " Small samples prove nothing.";
+    note.textContent = "Realized is after fees on closed trades; open is marked at the bid. The incumbent is a retained benchmark, not a validated champion. Lanes and the challenge are experiments with their own sizes and simulated fills, so their balances must not be added as a funded portfolio." + (data.fictional ? " Fictional demo data." : "") + " Small samples prove nothing.";
   }
 
   // An OCC symbol (padded or not) -> days to expiry. Anything unparseable is shown as unknown, never guessed.
@@ -2020,17 +2046,16 @@
     guards.push(ctx.health.mode === "PAPER" ? "paper only" : "NOT PAPER");
     guards.push(pf && pf.kill_switch ? "kill switch ON" : "kill switch off");
     guards.push(rn.stalled ? "loop stalled" : rn.running ? "loop running" : "loop stopped");
-    $("vt-safety").textContent = (ctx.health.mode === "PAPER" && !(pf && pf.kill_switch) && !rn.stalled) ? "Within limits" : "Look here";
-    $("vt-safety").className = "vv " + ((ctx.health.mode === "PAPER" && !(pf && pf.kill_switch) && !rn.stalled) ? "gain" : "loss");
-    $("vt-safety-s").textContent = guards.join(" · ");
-    const rep = ctx.report, base = (ctx.trades && ctx.trades.sources || []).find((x) => /frozen-baseline/.test(x.source));
-    $("vt-result").textContent = rep.closed_trades ? sgn(rep.realized_pnl) : "No closed trades";
-    $("vt-result").className = "vv num " + (rep.closed_trades ? tone(rep.realized_pnl) : "muted");
-    $("vt-result-s").textContent = base ? "Frozen baseline lane: " + (base.closed ? sgn(base.realized_pnl) + " on " + base.closed + " closed" : "no closed trades yet") : "Long-term account. Baseline lane not found.";
-    const lvl = evidenceLevel(rep.closed_trades);
-    $("vt-ev").textContent = rep.closed_trades + " of " + MIN_TRADES;
-    renderMeter($("vt-meter"), lvl);
-    $("vt-ev-s").textContent = EVIDENCE_WORDS[lvl] + (ctx.shadow && typeof ctx.shadow.trading_days === "number" && ctx.shadow.gate ? " · shadow book " + ctx.shadow.trading_days + " of " + ctx.shadow.gate.trading_days + " days" : "");
+    const verifiedExecution=ctx.health.market_data?.execution_eligible===true;
+    $("vt-safety").textContent = !verifiedExecution ? "Research only" : (ctx.health.mode === "PAPER" && !(pf && pf.kill_switch) && !rn.stalled) ? "Within limits" : "Look here";
+    $("vt-safety").className = "vv " + (!verifiedExecution ? "warn" : ctx.health.mode === "PAPER" && !(pf && pf.kill_switch) && !rn.stalled ? "gain" : "loss");
+    $("vt-safety-s").textContent = guards.join(" · ")+(!verifiedExecution?" · executable quote evidence unverified":"");
+    const lb=ctx.trades?.leaderboard,lead=lb?.accounts?.find(x=>x.id===lb.observed_leader_id);
+    $("vt-result").textContent=lead?pct(lead.comparison.return_pct):"Not established";
+    $("vt-result-s").textContent=lead?lead.name+" · common-risk observation, not a champion":"No complete common-risk comparison";
+    $("vt-ev").textContent="No validated champion";
+    renderMeter($("vt-meter"),0);
+    $("vt-ev-s").textContent="Forward holdout evidence required";
     // Needs you
     const box = $("needs"), list = $("needs-list"), badge = $("nav-needs");
     list.replaceChildren();
@@ -2196,6 +2221,7 @@
       renderTrust(status);
       renderDesk(portfolio, report, eq, status);
       renderAccounts(allTrades);
+      renderStrategyBoard(allTrades);
       renderLanes(allTrades);
       renderPositions(report, status.config, status.exit_plans);
       renderDecisions(decisions);
@@ -2302,4 +2328,5 @@
   showPage();
   refresh();
   setInterval(refresh, 10000);
+  setInterval(()=>{if(S.lastDataContext){const d=dataEvidence(S.lastDataContext.health,S.lastDataContext.status);pill("data",d.label,d.label==="IBKR Live Data"?"ok":"warn");}},5000);
 })();
