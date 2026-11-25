@@ -18,3 +18,4 @@ One line per run. Columns: date, followed candidates, trading days of shadow boo
 | 2026-11-24 | unknown | unknown | 0 / 0 (R1 registered 11-23, guard live) | none (market-regime guard on new entries) |
 | 2026-11-24 (run 2) | unknown (data repo not attached) | unknown | 0 / 0 (R1 now runnable once data accrues) | none (regime reading recorded per shadow follow, for R1) |
 | 2026-11-25 | unknown (data repo not attached) | unknown | 0 / 0 | none (entry replay harness for E1-E4, S1, R1 added) |
+| 2026-11-26 | unknown (data repo not attached) | unknown | 0 / 0 | none (E6 entry-replay group added) |

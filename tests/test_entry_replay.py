@@ -79,3 +79,13 @@ def test_callouts_are_never_mixed_in():
     f, p = follow(0, "AAA", 3.0, 3.0)
     f["source"] = "callout:someone"
     assert er.outcomes([f], [p], TODAY) == []
+
+
+def test_e6_groups_calls_after_earnings_against_calls_before():
+    assert er.e6({"right": "C", "days_since_earnings": 2}) is True
+    assert er.e6({"right": "C", "days_since_earnings": 5}) is None  # neither window
+    assert er.e6({"right": "C", "days_to_earnings": 4}) is False
+    assert er.e6({"right": "C", "days_to_earnings": 12}) is None
+    assert er.e6({"right": "P", "days_since_earnings": 2}) is None  # calls only
+    assert er.e6({"right": "C"}) is None  # unknown is left out, never guessed
+    assert "E6" in er.HYPOTHESES
