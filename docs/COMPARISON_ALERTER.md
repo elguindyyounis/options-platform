@@ -162,3 +162,19 @@ These are challenges raised by reading the alerter. None is proven.
 * Platform comparison: the platform scans a short fixed list and has no wide, honest-about-gaps underlying discovery step. Cloud runs cannot reach Yahoo,
   so this could not be tried. Possible later item (display-only): a breadth watch feeding the shadow book. Not started.
 * Not read: `server.py`, `opportunity.py`; alerter tests not run.
+
+## Addendum 2026-11-25: `market_rebound.py` and `single_decider.py` (alerter at `14f7d15`, 9 commits since `3dd2733`)
+
+* `market_rebound.py` is the alerter's version of this platform's regime guard (`regime.py`, R1). It reads **5-minute** bars of SPY, QQQ and SMH
+  against the previous session's close bar; the rebound is ACTIVE when SPY is up 2% and at least one other benchmark is over its threshold
+  (QQQ 2%, SMH 3%), and is released only when SPY closes below its opening-bar low and fewer than two benchmarks remain over. It defers
+  **new puts only** on an index/mega-cap list, and a held put only gets a review flag; exits stay with the premium rules.
+* Where the alerter is stricter: **a missing or stale (over 15 min, or other-session) reading counts as HOLD for puts** ("a failed or stale feed cannot
+  clear a pending bearish setup"). The platform's guard does the opposite: `RegimeSource.allows` returns allowed when SPY data is unknown ("unknown never
+  blocks"). Tightening that is a change to what lanes trade, so it is logged in `docs/CHALLENGES.md` (challenge 12) for the owner, not done here.
+* Also worth copying: every reading carries `exchange_timestamp_verified: false`, `entry_or_exit_authorized: false` and its data source, so the number
+  cannot be mistaken for an order signal. The platform's `Regime.to_dict` has no source or "authorizes nothing" field.
+* `single_decider.py` (central playbook filter v1) is the alerter's D1 analogue: frozen, shadow-only, may only stay in cash, evaluated on a forward
+  sample registered at a fixed time (`REGISTERED_AT`, no retrospective credit) and only on already risk-admitted candidates. The platform's D1 in
+  `docs/EVOLUTION_PLAN.md` should copy the pre-registered start time and "cannot originate an order" wording.
+* Not read: `shadow_lane_runner.py` changes, `position_plans.py` IV additions; alerter tests not run.

@@ -43,3 +43,23 @@ def test_insufficient_cash_does_not_fill():
     broker.set_quote(make_quote(1.90, 2.00))
     status = broker.submit_limit_order(make_intent(qty=1, limit=2.50))
     assert status.status == "SUBMITTED" and status.filled_qty == 0
+
+
+def test_account_says_when_a_position_is_carried_at_cost():
+    """No bid means the balance holds the position at what was paid; the account must say so, not look like a mark."""
+    broker = SimBroker(starting_cash=10_000, slippage_pct=0.0)
+    broker.set_quote(make_quote(1.90, 2.00))
+    broker.submit_limit_order(make_intent(qty=2, limit=2.50))
+    marked = broker.get_account()
+    assert marked.carried_at_cost == 0 and marked.to_dict()["carried_at_cost"] == 0
+    assert marked.equity == round(10_000 - 2.00 * 200 + 1.90 * 200, 2)  # marked at the bid
+    # The quote goes bad (crossed market): the position is held at cost and counted.
+    broker.set_quote(make_quote(0.0, 0.0))
+    carried = broker.get_account()
+    assert carried.carried_at_cost == 1
+    assert carried.equity == 10_000  # cost, however far the option has really fallen
+    assert carried.to_dict()["carried_at_cost"] == 1
+
+
+def test_account_with_no_positions_carries_nothing():
+    assert SimBroker().get_account().carried_at_cost == 0

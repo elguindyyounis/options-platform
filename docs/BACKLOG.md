@@ -131,6 +131,8 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-25: paper balance says when positions are carried at cost (no bid): `Account.carried_at_cost`, Desk "(estimate)" label (challenge 10 / UX-10). Next candidates: UX-9 current-regime line on the Desk; challenge 12 needs the owner.
+
 * 2026-11-23: UX-7 follow-up / challenge 10: the Desk "All accounts" table and the Trades sources table now say "partial, N unmarked" when an open trade has no bid (`open_complete`, `open_unmarked` in `/api/alltrades`; number unchanged). Still unchecked: Desk KPI cards, Orders page, Desk paper equity. New: UX-8 (browser check of the new label).
 
 * 2026-11-21: challenge 9, pinned the exit rules saved at entry for open option-lane trades (3 tests in `tests/test_optionlanes.py`). Follow-up: save `expiry_near` days, `FLAT_BY` and the trend rule per trade (owner may decide).

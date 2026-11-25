@@ -323,7 +323,7 @@
       kpi(String(report.closed_trades), "Closed trades", "minimum " + MIN_TRADES + " before judging"),
       kpi(report.win_rate_pct === null ? "n/a" : report.win_rate_pct + "%", "Winners", report.closed_trades ? "of closed trades" : "no closed trades"),
       kpi(sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "%", "Below its peak", "worst -" + (sm.max_drawdown_pct || 0) + "%"),
-      kpi(money(a.equity), "Paper balance", "cash " + money(a.cash) + (report.closed_trades ? "" : "; untouched"), "dim"),
+      kpi(money(a.equity) + (a.carried_at_cost > 0 ? " (estimate)" : ""), "Paper balance", "cash " + money(a.cash) + (a.carried_at_cost > 0 ? "; " + a.carried_at_cost + " open position(s) have no bid and are counted at cost, so a loss on them is not in this number" : report.closed_trades ? "" : "; untouched"), "dim"),
     ]);
     $("sample").textContent = report.caveat;
     S.lastPoints = eq.points;

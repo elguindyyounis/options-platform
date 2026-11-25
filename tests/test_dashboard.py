@@ -174,3 +174,11 @@ def test_options_page_and_market_additions_have_every_element_the_script_writes(
     # direction is never carried by colour alone: the heat map and the figures use arrows and signs
     assert "\u25b2" in js and "\u25bc" in js
     assert "innerHTML" not in js
+
+
+def test_portfolio_account_reports_positions_carried_at_cost_and_desk_says_so(client):
+    c = client[0]
+    account = c.get("/api/portfolio", headers=H).json()["account"]
+    assert account["carried_at_cost"] == 0
+    js = c.get("/static/app.js").text
+    assert "a.carried_at_cost > 0" in js and "counted at cost" in js
