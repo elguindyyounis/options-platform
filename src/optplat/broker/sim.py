@@ -110,15 +110,23 @@ class SimBroker(BrokerAdapter):
         with self._lock:
             open_premium = 0.0
             marks = 0.0
+            carried = 0
             for contract, (qty, avg_cost) in self._positions.items():
+                if qty <= 0:
+                    continue
                 open_premium += avg_cost * contract.multiplier * qty
                 quote = self._quotes.get(contract)
-                mark = quote.bid if quote and quote.is_valid() else avg_cost
+                if quote and quote.is_valid():
+                    mark = quote.bid
+                else:
+                    mark = avg_cost
+                    carried += 1
                 marks += mark * contract.multiplier * qty
             return Account(
                 equity=round(self.cash + marks, 2),
                 cash=round(self.cash, 2),
                 open_premium=round(open_premium, 2),
+                carried_at_cost=carried,
             )
 
     def get_positions(self) -> list[Position]:

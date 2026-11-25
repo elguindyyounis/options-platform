@@ -150,9 +150,13 @@ class Account:
     equity: float
     cash: float
     open_premium: float  # cost basis of open long options
+    # Open positions with no valid bid, carried in ``equity`` at their entry cost instead of a market value. A loss on
+    # such a position is invisible in ``equity``; a non-zero count means the balance is an estimate, not a mark.
+    carried_at_cost: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        return {"equity": self.equity, "cash": self.cash, "open_premium": self.open_premium}
+        return {"equity": self.equity, "cash": self.cash, "open_premium": self.open_premium,
+                "carried_at_cost": self.carried_at_cost}
 
 
 @dataclass(frozen=True)
