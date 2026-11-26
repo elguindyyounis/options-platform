@@ -382,6 +382,14 @@
   .lanepick { background:none; border:0; padding:0; text-align:left; color:inherit; }
   .ck.pass { color:var(--gain); } .ck.fail { color:var(--loss); } .ck.wait, .ck.na { color:var(--mut); }
   .small { font-size:12px; }
+  .ctlgrid { display:flex; flex-wrap:wrap; gap:16px; }
+  .ctl { flex:1 1 300px; min-width:0; border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--raised); display:grid; gap:8px; align-content:start; }
+  .ctl-state { font-weight:600; }
+  .ctl > .btn { justify-self:start; }
+  .cfg-groups { display:flex; flex-wrap:wrap; gap:16px; margin-top:12px; }
+  .cfg-group { flex:1 1 360px; min-width:0; margin:0; border:1px solid var(--line); border-radius:12px; padding:10px 16px 14px; display:grid; gap:10px; align-content:start; }
+  .cfg-group legend { padding:0 6px; font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mut); }
+  .cfg-group.risky { border-color:var(--warn); } .cfg-group.risky legend { color:var(--warn); }
   #ln-board .legend { padding:10px 14px 12px; font-size:12.5px; }
 </style>
 </head>
@@ -797,42 +805,58 @@
             <div><h3 style="font-size:14px;margin:0 0 4px">Guardrails (read-only)</h3><div id="sys-guard"></div></div>
           </div>
         </section>
-        <div class="panel">
-          <h2>Run</h2>
-          <div class="toolbar" style="margin-top:12px">
-            <button id="btn-cycle" class="btn primary">Run one cycle</button>
-            <button id="btn-start" class="btn">Start loop</button>
-            <button id="btn-stop" class="btn">Stop loop</button>
-            <button id="btn-kill" class="btn danger">Toggle kill switch</button>
+        <div class="panel ctlgrid">
+          <div class="ctl">
+            <div class="eyebrow">New entries</div>
+            <p id="kill-state" class="ctl-state"></p>
+            <button id="btn-kill" class="btn danger" type="button">Stop all new entries</button>
+          </div>
+          <div class="ctl">
+            <div class="eyebrow">Loop</div>
+            <p id="loop-state" class="ctl-state"></p>
+            <div class="toolbar">
+              <button id="btn-start" class="btn primary" type="button">Start loop</button>
+              <button id="btn-stop" class="btn" type="button">Stop loop</button>
+              <button id="btn-cycle" class="btn" type="button">Run one cycle</button>
+            </div>
           </div>
         </div>
         <div class="panel">
-          <h2>Settings</h2>
-          <div class="toolbar" style="margin-top:12px">
-            <label class="check"><input id="cfg-entries" type="checkbox"> Automatic entries</label>
-            <label class="check"><input id="cfg-exits" type="checkbox"> Automatic exits</label>
-            <label class="check"><input id="cfg-hours" type="checkbox"> Enforce market hours</label>
-            <label class="check"><input id="cfg-swing" type="checkbox"> Swing research lane (shares)</label>
-            <label class="check"><input id="cfg-optlanes" type="checkbox"> Options research lanes</label>
-            <label class="check"><input id="cfg-shortterm" type="checkbox"> Short-term research lane (shares)</label>
+          <div class="sect-head" style="justify-content:space-between">
+            <h2>Settings</h2>
+            <div class="toolbar"><span id="cfg-dirty" class="warn" hidden>&#9679; Unsaved changes: not in effect until saved</span><button id="btn-save" class="btn primary" type="button">Save settings</button></div>
           </div>
-          <div class="toolbar" style="margin-top:12px">
-            <label class="check">Agent committee
-              <select id="cfg-committee"><option value="off">off</option><option value="shadow">shadow (records only)</option><option value="active">active</option></select>
-            </label>
-            <label class="check">Market scan
-              <select id="cfg-scan"><option value="0">off</option><option value="900">every 15 minutes</option><option value="1800">every 30 minutes</option><option value="3600">every hour</option></select>
-            </label>
-            <input id="cfg-watch" type="text" placeholder="Watchlist: SPY, QQQ" aria-label="Watchlist">
-            <select id="cfg-sector" aria-label="Add the most traded names from a sector"></select>
-            <button id="btn-sector" class="btn" type="button">Add to watchlist</button>
-            <button id="btn-save" class="btn">Save settings</button>
+          <div class="cfg-groups">
+            <fieldset class="cfg-group risky">
+              <legend>Changes what gets traded</legend>
+              <label class="check"><input id="cfg-entries" type="checkbox"> Automatic entries</label>
+              <label class="check"><input id="cfg-exits" type="checkbox"> Automatic exits</label>
+              <label class="check"><input id="cfg-hours" type="checkbox"> Enforce market hours</label>
+              <label class="check">Agent committee
+                <select id="cfg-committee"><option value="off">off</option><option value="shadow">shadow (records only)</option><option value="active">active</option></select>
+              </label>
+              <div class="toolbar">
+                <input id="cfg-watch" type="text" placeholder="Watchlist: SPY, QQQ" aria-label="Watchlist">
+                <select id="cfg-sector" aria-label="Add the most traded names from a sector"></select>
+                <button id="btn-sector" class="btn" type="button">Add to watchlist</button>
+              </div>
+            </fieldset>
+            <fieldset class="cfg-group">
+              <legend>Research only: no paper-account orders</legend>
+              <label class="check"><input id="cfg-swing" type="checkbox"> Swing research lane (shares)</label>
+              <label class="check"><input id="cfg-shortterm" type="checkbox"> Short-term research lane (shares)</label>
+              <label class="check"><input id="cfg-optlanes" type="checkbox"> Options research lanes</label>
+              <label class="check">Market scan
+                <select id="cfg-scan"><option value="0">off</option><option value="900">every 15 minutes</option><option value="1800">every 30 minutes</option><option value="3600">every hour</option></select>
+              </label>
+            </fieldset>
           </div>
           <p class="muted" id="cfg-watch-note" style="margin-top:10px">The watchlist holds up to 20 names. SPY and QQQ are index funds; single stocks add earnings dates (the events agent opposes entries around them), wider spreads (the risk limits may refuse more of them) and one option chain read per name each cycle. "Add to watchlist" fills the box with the sector's most traded names from the latest scan; nothing changes until you choose Save settings. Risk limits are not affected.</p>
         </div>
         <div class="panel">
           <h2>Orders</h2>
-          <p class="q">What did the broker actually do with the orders sent?</p>
+          <p class="q">What did the broker do with each order, and did IBKR paper fill where the simulator assumed? If IBKR keeps filling worse, every simulated result is too optimistic.</p>
+          <p id="mirror-line" class="muted"></p>
           <div class="scroll" id="orders"></div>
         </div>
       </section>

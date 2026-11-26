@@ -55,6 +55,11 @@ console.log(JSON.stringify({
     W.optplatSystem({config:{auto_entries:true,auto_exits:false},data_source:{fictional:true},kill_switch:false,runner:{stalled:false}},2,null),
     W.optplatSystem({config:{auto_entries:true,auto_exits:true},data_source:{fictional:false},kill_switch:true,runner:{stalled:true}},12,null),
   ],
+  broker:[
+    W.optplatSystem({config:{},data_source:{fictional:false},kill_switch:false,runner:{}},0,null,{broker:{connected:true,ibkr_mirror:{state:'idle'}}}),
+    W.optplatSystem({config:{},data_source:{fictional:false},kill_switch:false,runner:{}},0,null,{broker:{connected:true}}),
+    W.optplatSystem({config:{},data_source:{fictional:false},kill_switch:false,runner:{}},0,null),
+  ].map((r)=>r.guard.find((g)=>g[0]==='Broker connection')[1]),
   none:W.optplatDigest([dec('ENTRY','FILLED','2026-11-23T10:00:00Z')],since),
   gap:[0,2,9,10,29,30,null].map(W.optplatEvidenceGap),
   fix:['Automatic actions are enabled but the loop is stopped, so nothing runs on its own.','Market-hours check is OFF: the engine may act','Kill switch is ON: no new orders are accepted.','Market data is FICTIONAL demo data'].map(W.optplatNeedAction),
@@ -79,6 +84,18 @@ console.log(JSON.stringify({
       split:W.optplatReadiness(lane,{...ctx,trades:mk('lane-a',20,-30).concat(mk('lane-a',20,130,20))}),
       shares:W.optplatReadiness({source:'swing-pullback',label:'Swing',instrument:'shares',closed:3,realized_pnl:5,hypothesis:{id:'SW1',first_day:'2026-11-27'}},ctx),
       main:W.optplatReadiness({source:'main',label:'Options account',instrument:'options',closed:2,realized_pnl:-617},ctx),
+    };
+  })(),
+  mirror:(()=>{
+    const o={intent:{idempotency_key:'k1'}}, byKey={k1:{ibkr_avg_fill_price:1.95,ibkr_better_by_per_share:0.05,ibkr_status:'FILLED'},k2:{ibkr_avg_fill_price:null,ibkr_better_by_per_share:null,ibkr_status:'SUBMITTED'}};
+    const lane={source:'lane-a',label:'Lane A',instrument:'options',closed:2,realized_pnl:0};
+    const ctx=(sm)=>({base:null,trades:[],fictional:false,dataName:'ibkr',mirror:sm?{summary:sm}:null});
+    return {
+      cells:[W.optplatMirrorCells(o,byKey),W.optplatMirrorCells({intent:{idempotency_key:'k2'}},byKey),W.optplatMirrorCells({intent:{idempotency_key:'zz'}},byKey)],
+      none:W.optplatMirrorLine({summary:{mirrored_orders:0},notes:[]}),
+      some:W.optplatMirrorLine({summary:{mirrored_orders:5,both_filled:4,ibkr_better_by_per_share_median:-0.03,sim_filled_ibkr_not:1},notes:['Only 4 orders filled in both books; too few.']}),
+      f6:[null,{mirrored_orders:3,both_filled:3},{mirrored_orders:40,both_filled:31,ibkr_better_by_per_share_median:0.01},{mirrored_orders:40,both_filled:31,ibkr_better_by_per_share_median:-0.02}]
+        .map((sm)=>W.optplatReadiness(lane,ctx(sm)).checks.find((c)=>c.id==='fills')),
     };
   })(),
   why:[W.optplatWhy({payload:{rank:1,of:6,score:96.15}}),W.optplatWhy({payload:{score:88.6}}),W.optplatWhy({payload:{rank:1,of:1,risk_failures:['too wide']}}),W.optplatWhy({payload:{rank:3,of:9,score:50}})],
@@ -216,7 +233,7 @@ def test_readiness_never_says_ready_while_a_check_is_waiting_or_failing(out):
     good = _ck(r["good"])
     assert [c["id"] for c in r["good"]["checks"]] == ["data", "sample", "beats", "registered", "halves", "fills"]
     assert good == {"data": "pass", "sample": "pass", "beats": "pass", "registered": "pass", "halves": "pass", "fills": "wait"}
-    assert r["good"]["ready"] is False  # the IBKR fill check is not on the dashboard yet, so nothing is ready
+    assert r["good"]["ready"] is False  # no IBKR mirror data, so the fill check waits and nothing is ready
     assert _ck(r["fict"])["data"] == "fail" and _ck(r["yahoo"])["data"] == "fail"
     assert _ck(r["oneday"])["sample"] == "fail"  # 40 trades on one day are one observation, not 40
     assert _ck(r["unreg"])["registered"] == "fail"
@@ -229,3 +246,24 @@ def test_readiness_marks_what_does_not_apply(out):
     assert sh["fills"] == "na" and sh["beats"] == "wait" and sh["registered"] == "pass"
     assert main["beats"] == "na" and main["registered"] == "na" and main["sample"] == "fail"
     assert r["main"]["gap"]["more"] == 8 and r["main"]["ready"] is False
+
+
+def test_orders_show_the_ibkr_fill_and_the_gap_from_the_traders_side(out):
+    m = out["mirror"]
+    filled, working, unknown = m["cells"]
+    assert filled == {"fill": "1.95", "gap": "+0.05 IBKR better"}
+    assert working == {"fill": "Submitted", "gap": ""} and unknown == {"fill": "", "gap": ""}
+    assert "switches it on" in m["none"]
+    assert "median IBKR worse by 0.03" in m["some"] and "not at IBKR" in m["some"] and "too few" in m["some"]
+
+
+def test_fill_check_waits_for_30_paired_fills_then_needs_ibkr_no_worse(out):
+    states = [c["state"] for c in out["mirror"]["f6"]]
+    assert states == ["wait", "wait", "pass", "fail"]
+    assert out["mirror"]["f6"][1]["text"] == "3 of 30 paired fills"
+
+
+def test_system_guardrail_says_whether_orders_are_mirrored_to_ibkr_paper(out):
+    mirrored, sim, unknown = out["broker"]
+    assert "IBKR paper mirror" in mirrored and "DU" in mirrored
+    assert sim == "Simulator only" and unknown == "Unknown"

@@ -174,6 +174,15 @@ def create_app(
     def list_orders(open_only: bool = False) -> list[dict[str, Any]]:
         return [o.to_dict() for o in manager.list(open_only=open_only)]
 
+    @app.get("/api/mirror", dependencies=[Depends(auth)])
+    def mirror() -> dict[str, Any]:
+        """Read-only: simulated fills against the IBKR paper mirror, per order (the mirror report, newest 200 orders)."""
+        from . import mirror_report
+
+        out = mirror_report.report(manager.store)
+        out["orders"] = out["orders"][-200:]
+        return out
+
     @app.post("/api/paper/orders", dependencies=[Depends(auth)])
     def submit_order(body: OrderBody) -> dict[str, Any]:
         intent = OrderIntent(

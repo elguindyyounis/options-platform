@@ -606,17 +606,48 @@
     }
   }
 
-  function renderOrders(orders) {
+  // IBKR paper vs simulated fill for one order, from the mirror report. Positive gap: IBKR filled better for the trader.
+  function mirrorCells(o, byKey) {
+    const m = byKey && byKey[o.intent.idempotency_key];
+    if (!m) return { fill: "", gap: "" };
+    const fill = m.ibkr_avg_fill_price === null || m.ibkr_avg_fill_price === undefined ? words(m.ibkr_status || "") : String(m.ibkr_avg_fill_price);
+    const g = m.ibkr_better_by_per_share;
+    return { fill, gap: g === null || g === undefined ? "" : (g > 0 ? "+" : "") + g.toFixed(2) + (g > 0 ? " IBKR better" : g < 0 ? " IBKR worse" : " same") };
+  }
+  function mirrorLine(mir) {
+    if (!mir || !mir.summary) return "IBKR paper mirror: report unavailable.";
+    const sm = mir.summary;
+    if (!sm.mirrored_orders) return "IBKR paper mirror: no mirrored orders yet. It only runs when the owner switches it on (OPTPLAT_IBKR_MIRROR=1).";
+    return "IBKR paper mirror: " + sm.mirrored_orders + " orders sent, " + sm.both_filled + " filled in both books" +
+      (sm.ibkr_better_by_per_share_median === null ? "" : "; median IBKR " + (sm.ibkr_better_by_per_share_median >= 0 ? "better" : "worse") + " by " + Math.abs(sm.ibkr_better_by_per_share_median).toFixed(2) + " per share") +
+      (sm.sim_filled_ibkr_not ? "; " + sm.sim_filled_ibkr_not + " filled in the simulator but not at IBKR" : "") + ". " + (mir.notes || []).join(" ");
+  }
+  function renderOrders(orders, mir) {
+    const byKey = {};
+    ((mir && mir.orders) || []).forEach((m) => { byKey[m.idempotency_key] = m; });
+    $("mirror-line").textContent = mirrorLine(mir);
     table($("orders"), [
       { label: "Time", get: (o) => fmtTime(o.created_at) }, { label: "Side", get: (o) => o.intent.side },
       { label: "Contract", get: (o) => ticket({ symbol: o.intent.contract.underlying, right: o.intent.contract.right, strike: o.intent.contract.strike, expiry: o.intent.contract.expiry }) },
       { label: "Qty", right: true, get: (o) => o.filled_qty + "/" + o.intent.quantity }, { label: "Limit", right: true, get: (o) => o.intent.limit_price },
-      { label: "Fill", right: true, get: (o) => o.avg_fill_price === null ? "" : o.avg_fill_price },
-      { label: "State", get: (o) => o.state }, { label: "Why", get: (o) => o.risk_failures.join("; ") },
+      { label: "Sim fill", right: true, get: (o) => o.avg_fill_price === null ? "" : o.avg_fill_price },
+      { label: "IBKR fill", right: true, get: (o) => mirrorCells(o, byKey).fill }, { label: "IBKR vs sim", right: true, get: (o) => mirrorCells(o, byKey).gap },
+      { label: "State", get: (o) => o.state === "RISK_REJECTED" ? "Blocked by risk (as designed)" : words(o.state) }, { label: "Why", get: (o) => o.risk_failures.join("; ") },
     ], orders.slice(0, 30), "No orders yet");
   }
 
   function syncControls(status, cfg) {
+    // Kill switch and loop buttons say what pressing them will do, from the current state.
+    const kb = $("btn-kill");
+    kb.textContent = S.killState ? "Allow new entries again" : "Stop all new entries";
+    kb.className = "btn " + (S.killState ? "primary" : "danger");
+    $("kill-state").textContent = S.killState ? "Kill switch ON: no new entries. Exits keep running." : "New entries allowed. The kill switch stops them; exits keep running.";
+    const running = !!(status.runner && status.runner.running);
+    $("btn-start").disabled = running; $("btn-stop").disabled = !running;
+    $("loop-state").textContent = running ? (status.runner.stalled ? "Loop running but stalled." : "Loop running.") : "Loop stopped: nothing runs on its own.";
+    // Unsaved edits are never overwritten by the periodic refresh; the marker says they are not in effect yet.
+    $("cfg-dirty").hidden = !S.cfgDirty;
+    if (S.cfgDirty) return;
     $("cfg-entries").checked = status.config.auto_entries;
     $("cfg-exits").checked = status.config.auto_exits;
     $("cfg-shortterm").checked = !!cfg.shortterm_enabled;
@@ -2067,7 +2098,7 @@
     for (let n = 1; n <= 3; n++) host.appendChild(el("i", null, n <= level ? "on" : ""));
   }
   // The System band: which autonomy step the settings put it on, and the readiness evidence. Read-only; the owner judges.
-  function systemReadiness(status, closed, shadow) {
+  function systemReadiness(status, closed, shadow, health) {
     const c = status.config || {}, fict = !!(status.data_source && status.data_source.fictional);
     const step = status.kill_switch ? 1 : (c.auto_entries && c.auto_exits) ? 3 : 2;
     const ev = evidenceLevel(closed);
@@ -2080,11 +2111,12 @@
       { key: "ops", title: "Operations", sub: "Restart recovery, runner health and a tested kill switch. This page cannot see whether the kill switch was ever tested.", tag: status.runner && status.runner.stalled ? "Runner stalled" : "You confirm", level: status.runner && status.runner.stalled ? "bad" : "warn" },
     ];
     return { step: step, checks: checks, guard: [["Per cycle", (c.max_new_per_cycle || "?") + " new entr" + (c.max_new_per_cycle === 1 ? "y" : "ies")], ["Take profit / stop", "+" + c.take_profit_pct + "% / -" + c.stop_loss_pct + "% of the premium"],
-      ["Kill switch", status.kill_switch ? "ON: no new orders" : "Off"], ["Live order path", "None exists"], ["Broker connection", "Read-only"]] };
+      ["Kill switch", status.kill_switch ? "ON: no new orders" : "Off"], ["Live order path", "None exists"],
+      ["Broker connection", health && health.broker && health.broker.ibkr_mirror ? "Simulator + IBKR paper mirror (DU accounts, limit orders)" : health ? "Simulator only" : "Unknown"]] };
   }
   const STEPS = [["Off", "Kill switch on. No new orders."], ["Observe", "Automatic entries or exits are off, so nothing is placed on its own."], ["Paper, auto", "Places simulated orders and exits within limits, without asking."], ["Real money", "Not built. No live order path exists. An owner decision, never an automatic one."]];
-  function renderSystemBand(status, closed, shadow) {
-    const r = systemReadiness(status, closed, shadow), host = $("sys-ladder");
+  function renderSystemBand(status, closed, shadow, health) {
+    const r = systemReadiness(status, closed, shadow, health), host = $("sys-ladder");
     host.replaceChildren();
     STEPS.forEach((st, i) => {
       const n = i + 1, now = n === r.step, lock = n === 4;
@@ -2199,8 +2231,14 @@
       const older = sum(sorted.slice(0, mid)), newer = sum(sorted.slice(mid));
       add("halves", "Halves agree", (older > 0) === (newer > 0) ? "pass" : "fail", "older " + sgn(older) + ", newer " + sgn(newer));
     }
+    // Check 6: does IBKR paper fill where the simulator assumed? The mirror report itself says under 30 paired fills is
+    // too few; after that, IBKR must be no worse than the simulator at the median (engineering bar, not an edge test).
+    const ms = ctx.mirror && ctx.mirror.summary;
     if (shares) add("fills", "IBKR fills match", "na", "Shares, not mirrored");
-    else add("fills", "IBKR fills match", "wait", "No IBKR fill check yet");
+    else if (!ms || !ms.mirrored_orders) add("fills", "IBKR fills match", "wait", "No mirrored orders yet");
+    else if (ms.both_filled < 30) add("fills", "IBKR fills match", "wait", ms.both_filled + " of 30 paired fills");
+    else add("fills", "IBKR fills match", ms.ibkr_better_by_per_share_median >= 0 ? "pass" : "fail",
+      "median IBKR " + (ms.ibkr_better_by_per_share_median >= 0 ? "better" : "worse") + " by " + Math.abs(ms.ibkr_better_by_per_share_median).toFixed(2));
     const applies = c.filter((k) => k.state !== "na");
     return { checks: c, ready: applies.length > 0 && applies.every((k) => k.state === "pass"), gap: evidenceGap(x.closed) };
   }
@@ -2213,7 +2251,7 @@
     const watch = verdicts.filter((v) => v.tone === "warn" && /^Watch/.test(v.text)).length;
     const enough = rows.filter((x) => evidenceLevel(x.closed) >= 2).length;
     const dataName = S.core && S.core.status && S.core.status.data_source ? S.core.status.data_source.name : "";
-    const ready = rows.map((x) => laneReadiness(x, { base, trades: all, fictional: data.fictional, dataName }));
+    const ready = rows.map((x) => laneReadiness(x, { base, trades: all, fictional: data.fictional, dataName, mirror: S.mirror }));
     const nReady = ready.filter((r) => r.ready).length;
     const waiting = rows.map((x, n) => ({ x, g: ready[n].gap })).filter((o) => laneRole(o.x) !== "Benchmark" && o.g.level < 3).sort((a, b) => a.g.more - b.g.more)[0];
     $("ln-headline").textContent = watch ? "Watch: " + watch + " lane" + (watch === 1 ? " holds" : "s hold") + " a one-sided book."
@@ -2341,6 +2379,8 @@
         api("/api/results").catch(() => null), api("/api/risk/policy").catch(() => null),
         api("/api/shadow").catch(() => null),
       ]);
+      const mirror = await api("/api/mirror").catch(() => null);
+      S.mirror = mirror;
       api("/api/regime").then(renderRegime).catch(() => renderRegime(null));
       api("/api/exposure").then(renderExposure).catch(() => renderExposure(null));
       S.connected = true; S.core = { status, report };
@@ -2354,14 +2394,14 @@
       renderLanes(allTrades);
       renderPositions(report, status.config, status.exit_plans);
       renderDecisions(decisions);
-      renderOrders(orders);
+      renderOrders(orders, mirror);
       syncControls(status, status.config);
       const glanceItems = buildGlance(health, status, portfolio, results, policy);
       (S.readyLanes || []).forEach((l) => glanceItems.push({ level: "warn", text: "Lane " + l + " passed every decision check: review it on the Lanes page. Promoting or switching it off is your decision." }));
       const now = renderNow(glanceItems, { health, status, portfolio, report, trades: allTrades, decisions, shadow: shadowRep, since: S.since });
       renderGlance(glanceItems, now.needs.length);
       renderResearchProgress(buildResearchProgress(shadowRep));
-      renderSystemBand(status, (report.closed_trades !== undefined ? report.closed_trades : (allTrades && allTrades.trades ? allTrades.trades.filter((t) => t.status === "CLOSED").length : 0)), shadowRep);
+      renderSystemBand(status, (report.closed_trades !== undefined ? report.closed_trades : (allTrades && allTrades.trades ? allTrades.trades.filter((t) => t.status === "CLOSED").length : 0)), shadowRep, health);
       if (results) renderResults(results);
       renderCycleDecisions(status.last_cycle, status.recent_outcomes);
       renderCandidates(status.last_cycle);
@@ -2395,7 +2435,7 @@
   $("btn-stop").addEventListener("click", () => act(() => api("/api/engine/stop", { method: "POST" })));
   $("btn-kill").addEventListener("click", () => act(() =>
     api("/api/risk/kill-switch", { method: "POST", body: JSON.stringify({ active: !S.killState, reason: "dashboard" }) })));
-  $("btn-save").addEventListener("click", () => act(async () => { S.watchDirty = false; return api("/api/engine/config", {
+  $("btn-save").addEventListener("click", () => act(async () => { S.watchDirty = false; S.cfgDirty = false; return api("/api/engine/config", {
     method: "PUT",
     body: JSON.stringify({
       auto_entries: $("cfg-entries").checked, auto_exits: $("cfg-exits").checked,
@@ -2405,6 +2445,8 @@
     }),
   }); }));
   $("cfg-watch").addEventListener("input", () => { S.watchDirty = true; });
+  ["cfg-entries", "cfg-exits", "cfg-hours", "cfg-swing", "cfg-optlanes", "cfg-shortterm", "cfg-committee", "cfg-scan", "cfg-watch"].forEach((id) =>
+    $(id).addEventListener(id === "cfg-watch" ? "input" : "change", () => { S.cfgDirty = true; $("cfg-dirty").hidden = false; }));
   $("btn-sector").addEventListener("click", async () => { try {
     const sector = $("cfg-sector").value;
     if (!sector) return;
@@ -2451,7 +2493,7 @@
   window.optplatDecisionFilter = filterDecisions;
   window.optplatTally = decisionTally;
   window.optplatSystem = systemReadiness; window.optplatLabGate = labGate; window.optplatLaneVerdict = laneVerdict; window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
-  window.optplatEvidenceGap = evidenceGap; window.optplatNeedAction = needAction; window.optplatDisagreement = disagreement; window.optplatWhy = whyOf; window.optplatReadiness = laneReadiness;
+  window.optplatEvidenceGap = evidenceGap; window.optplatNeedAction = needAction; window.optplatDisagreement = disagreement; window.optplatWhy = whyOf; window.optplatReadiness = laneReadiness; window.optplatMirrorCells = mirrorCells; window.optplatMirrorLine = mirrorLine;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   S.since = lastSeen(); // the previous look, kept for this whole visit so the digest does not reset itself every refresh
   window.addEventListener("pagehide", markSeen);
