@@ -56,6 +56,15 @@ console.log(JSON.stringify({
     W.optplatSystem({config:{auto_entries:true,auto_exits:true},data_source:{fictional:false},kill_switch:true,runner:{stalled:true}},12,null),
   ],
   none:W.optplatDigest([dec('ENTRY','FILLED','2026-11-23T10:00:00Z')],since),
+  gap:[0,2,9,10,29,30,null].map(W.optplatEvidenceGap),
+  fix:['Automatic actions are enabled but the loop is stopped, so nothing runs on its own.','Market-hours check is OFF: the engine may act','Kill switch is ON: no new orders are accepted.','Market data is FICTIONAL demo data'].map(W.optplatNeedAction),
+  dis:[
+    W.optplatDisagreement({kind:'ENTRY',disposition:'FILLED',payload:{committee:{decision:'WOULD_REJECT',mode:'shadow',reasons:['net conviction -0.16 is below 0.25']}}}),
+    W.optplatDisagreement({kind:'ENTRY',disposition:'FILLED',payload:{committee:{decision:'WOULD_ENTER',mode:'shadow',reasons:[]}}}),
+    W.optplatDisagreement({kind:'ENTRY',disposition:'RISK_REJECTED',payload:{committee:{decision:'WOULD_REJECT',mode:'shadow'}}}),
+    W.optplatDisagreement({kind:'ENTRY',disposition:'FILLED',payload:{}}),
+  ],
+  why:[W.optplatWhy({payload:{rank:1,of:6,score:96.15}}),W.optplatWhy({payload:{score:88.6}}),W.optplatWhy({payload:{rank:1,of:1,risk_failures:['too wide']}}),W.optplatWhy({payload:{rank:3,of:9,score:50}})],
 }));
 """
 
@@ -149,3 +158,33 @@ def test_system_ladder_follows_the_settings_and_real_money_is_never_a_step_you_c
     assert o["entry"]["tag"] == "Too early" and o["real"]["level"] == "warn" and o["exit"]["tag"] == "Exits off"
     assert {c["key"]: c for c in killed["checks"]}["ops"]["tag"] == "Runner stalled"
     assert ["Live order path", "None exists"] in live["guard"]
+
+
+def test_evidence_gap_says_how_far_to_the_next_level(out):
+    words = [g["decide"] for g in out["gap"]]
+    assert words == ["No", "No", "No", "Not yet", "Not yet", "Look", "No"]  # unknown counts as no evidence
+    assert out["gap"][1]["more"] == 8 and "8 more closed trades to directional" in out["gap"][1]["text"]
+    assert out["gap"][2]["text"].startswith("1 more closed trade to")  # singular
+    assert out["gap"][3]["more"] == 20 and "until it counts" in out["gap"][3]["text"]
+    assert "not proof of an edge" in out["gap"][5]["text"]
+
+
+def test_needs_you_buttons_only_switch_safe_things_back_on(out):
+    start, hours, kill, fict = out["fix"]
+    assert start == {"id": "start", "label": "Start loop"}
+    assert hours["id"] == "hours"
+    assert kill is None and fict is None  # turning the kill switch off or accepting demo data stays a System-page choice
+
+
+def test_disagreement_flags_only_a_taken_trade_the_committee_would_refuse(out):
+    flagged, agreed, blocked, none = out["dis"]
+    assert flagged and "would have rejected" in flagged and "net conviction" in flagged
+    assert agreed is None and blocked is None and none is None
+
+
+def test_activity_shows_rank_not_a_bare_score(out):
+    ranked, legacy, failed, lower = out["why"]
+    assert "did not fit the size cap" not in ranked and "did not fit the size cap" in lower
+    assert ranked.startswith("ranked #1 of 6 eligible candidates") and "ranking only" in ranked
+    assert "no pass mark" in legacy  # older journal lines without a rank
+    assert failed == "too wide"  # a risk refusal is still the reason shown

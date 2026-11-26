@@ -114,7 +114,9 @@ def test_equity_points_come_back_in_time_order_even_if_inserted_out_of_order():
 def test_every_nav_link_has_a_page_with_a_question(client):
     html = client[0].get("/").text
     pages = re.findall(r'<a class="nav" href="#/([a-z]+)" data-page="([a-z]+)"', html)
-    assert [p for p, _ in pages] == ["desk", "trades", "lanes", "options", "swing", "shortterm", "market", "context", "agents", "research", "system", "tracker"]
+    # Grouped by what the owner does with them (2026-11-27): Daily, Research, Market. Same twelve pages.
+    assert [p for p, _ in pages] == ["desk", "trades", "lanes", "system", "research", "agents", "options", "swing", "shortterm", "tracker", "market", "context"]
+    assert re.findall(r'<div class="navgroup"[^>]*>([A-Za-z]+)</div>', html) == ["Daily", "Research", "Market"]
     for route, page in pages:
         assert route == page
         tag = re.search(rf'<section[^>]*data-page="{page}"[^>]*>', html)

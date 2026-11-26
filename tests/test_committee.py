@@ -213,6 +213,22 @@ def test_shadow_mode_changes_no_order_and_records_the_committee_vote():
     assert not any(d["kind"] == cmt.KIND for d in m_off.store.list_decisions())
 
 
+def test_entry_journal_line_carries_its_rank_and_the_committee_view_for_display():
+    # Display only (Desk Activity feed): the rank among eligible candidates, and what the shadow committee said.
+    engine, manager, *_ = build(auto_entries=True, committee_mode="shadow")
+    engine.run_cycle()
+    placed = [o.intent.contract.occ_symbol.strip() for o in manager.list()]
+    entries = [d for d in manager.store.list_decisions() if d["kind"] == "ENTRY" and d["contract"] in placed]
+    assert entries, "the cycle should have placed and journaled an entry"
+    p = entries[0]["payload"]
+    assert p["rank"] == 1 and p["of"] >= 1
+    assert p["committee"]["mode"] == "shadow" and p["committee"]["decision"] in (cmt.ENTER, cmt.REJECT)
+    engine_off, m_off, *_ = build(auto_entries=True, committee_mode="off")
+    engine_off.run_cycle()
+    off = [d["payload"] for d in m_off.store.list_decisions() if d["kind"] == "ENTRY" and "rank" in d["payload"]]
+    assert off and all("committee" not in x for x in off)
+
+
 def test_active_mode_takes_no_more_than_the_baseline_and_journals_the_vote():
     engine_b, m_b, *_ = build(auto_entries=True, committee_mode="off")
     engine_a, m_a, *_ = build(auto_entries=True, committee_mode="active")

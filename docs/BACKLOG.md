@@ -131,6 +131,7 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-27: Decision-first Desk (owner request, UX proposal 1 of 3): evidence before money (hero shows closed trades against 30 with the Too early / Directional / Counts bar; P&L sits under it with its sample), "Can I decide yet?" replaces "Result vs baseline" in the band, fix buttons on "Needs you" (Start loop, Turn on market-hours check; nothing that loosens), one attention count, Activity shows rank instead of a bare score and flags trades the committee would have refused (engine journals `rank`, `of`, `committee` on the entry line, display only), lane cards lead with evidence, GEX / flow / candidates moved to Market, nav grouped Daily / Research / Market. Next: Lanes decision-readiness row (2 of 3), System controls and IBKR fill columns (3 of 3).
 * 2026-11-26: IBKR paper orders (owner decision, CLAUDE.md rule 1 amended): `broker/ibkr.py` implemented and passing the conformance suite on a fake IB; `MirroredSimBroker` copies main-account orders to IBKR paper behind `OPTPLAT_IBKR_MIRROR=1` (default off). Not yet run against a real paper account.
 
 * 2026-11-26: registered SW1 (swing lane vs SPY) and ST1 (short-term lane vs zero) with pass criteria in code (`lane_hypotheses.py`), on the owner's instruction with criteria delegated to the agent. Confirmatory trades start 2026-11-27. Next: show their status (COLLECTING n/60, n/100) on the Lab page; display only.

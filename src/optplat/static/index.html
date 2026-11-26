@@ -355,24 +355,43 @@
   .lb-row .r { text-align:right; } .lb-row .tag { justify-self:start; }
   .xbar { display:flex; height:14px; border-radius:7px; overflow:hidden; background:var(--raised); margin:8px 0 6px; }
   .xbar i { display:block; height:100%; } .xbar i.p { background:var(--loss); } .xbar i.c { background:var(--gain); }
+  /* ---- decision-first Desk (owner, 2026-11-27): evidence before money, fixes beside problems, grouped nav ---- */
+  .navgroup { font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--mut); padding:14px 14px 4px; }
+  .navgroup:first-of-type { padding-top:4px; }
+  @media (max-width:860px) { .navgroup { display:none; } }
+  .hero-value small { font-size:.4em; font-weight:500; letter-spacing:0; }
+  .evbar { display:grid; grid-template-columns:10fr 20fr 6fr; gap:3px; margin:12px 0 6px; max-width:460px; }
+  .evbar span { display:block; height:10px; border-radius:5px; background:var(--line); overflow:hidden; }
+  .evbar i { display:block; height:100%; background:var(--series-1); }
+  .evbar span.cur i { background:var(--warn); }
+  .evkeys { display:grid; grid-template-columns:10fr 20fr 6fr; gap:3px; max-width:460px; font-size:12px; color:var(--mut); }
+  .evkeys .on { color:var(--fg); font-weight:600; }
+  .hero-result { font-size:15px; margin-top:4px; }
+  .need .need-act { flex:0 0 auto; align-self:center; }
+  .feed-item.disagree { border-left:3px solid var(--warn); padding-left:10px; background:var(--warn-bg); }
+  .lc-ev { font-size:12.5px; }
+  .lane-card .lc-big { font-size:19px; }
 </style>
 </head>
 <body>
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <div class="brand"><b>options-platform</b><small>Paper trading desk</small></div>
+    <div class="navgroup" aria-hidden="true">Daily</div>
     <a class="nav" href="#/desk" data-page="desk">Desk<span id="nav-needs" class="badge" hidden></span></a>
     <a class="nav" href="#/trades" data-page="trades">Trades</a>
     <a class="nav" href="#/lanes" data-page="lanes">Lanes</a>
+    <a class="nav" href="#/system" data-page="system">System</a>
+    <div class="navgroup" aria-hidden="true">Research</div>
+    <a class="nav" href="#/research" data-page="research">Lab</a>
+    <a class="nav" href="#/agents" data-page="agents">Agents</a>
     <a class="nav" href="#/options" data-page="options">Options</a>
     <a class="nav" href="#/swing" data-page="swing">Swing</a>
     <a class="nav" href="#/shortterm" data-page="shortterm">Short-term</a>
+    <a class="nav" href="#/tracker" data-page="tracker">Tracker</a>
+    <div class="navgroup" aria-hidden="true">Market</div>
     <a class="nav" href="#/market" data-page="market">Market</a>
     <a class="nav" href="#/context" data-page="context">Context</a>
-    <a class="nav" href="#/agents" data-page="agents">Agents</a>
-    <a class="nav" href="#/research" data-page="research">Lab</a>
-    <a class="nav" href="#/system" data-page="system">System</a>
-    <a class="nav" href="#/tracker" data-page="tracker" style="font-size:12.5px;opacity:.7">Tracker (rarely used)</a>
     <div class="rail-foot">Paper trading only. No live orders exist in this app.</div>
   </nav>
 
@@ -400,7 +419,7 @@
 
       <section id="view-desk" data-page="desk" data-question="How is the paper account doing, and can I trust the numbers?" hidden>
         <div id="trust-verdict" class="verdict" hidden></div>
-        <section id="now-band" class="band clear" aria-label="Verdict" data-question="Is it safe, does anything need me, and is it ahead of the baseline?">
+        <section id="now-band" class="band clear" aria-label="Verdict" data-question="Is it safe, does anything need me, and can the results be judged yet?">
           <div class="band-main">
             <div class="band-state"><span id="now-glyph" aria-hidden="true">&#9679;</span><span id="now-label" class="eb">Checking</span></div>
             <h1 id="now-headline" class="band-h">Reading the platform status</h1>
@@ -408,8 +427,7 @@
           </div>
           <div class="vitals">
             <div class="vital"><div class="eb">Safety</div><div id="vt-safety" class="vv"></div><p id="vt-safety-s" class="muted"></p></div>
-            <div class="vital"><div class="eb">Result vs baseline</div><div id="vt-result" class="vv num"></div><p id="vt-result-s" class="muted"></p></div>
-            <div class="vital"><div class="eb">Evidence</div><div id="vt-ev" class="vv num"></div><div class="evrow"><div id="vt-meter" class="meter"></div><span id="vt-ev-s" class="muted"></span></div></div>
+                        <div class="vital"><div class="eb">Can I decide yet?</div><div id="vt-ev" class="vv num"></div><div class="evrow"><div id="vt-meter" class="meter"></div><span id="vt-ev-s" class="muted"></span></div></div>
           </div>
         </section>
         <p id="regime-line" class="verdict" data-question="Why might a new put or call be held back right now?" hidden></p>
@@ -420,9 +438,10 @@
         </section>
         <div class="panel hero">
           <div class="hero-main">
-            <div class="eyebrow" id="desk-label">Profit and loss since start (paper)</div>
+            <div class="eyebrow" id="desk-label">Evidence: closed trades, options account</div>
             <div id="desk-value" class="hero-value num">Loading</div>
             <div id="desk-change" class="hero-change"></div>
+<p id="desk-result" class="hero-result"></p>
             <div class="hero-stats" id="tiles"></div>
             <p id="desk-headline" class="hero-line"></p>
             <details class="notes"><summary>About these numbers</summary>
@@ -469,21 +488,6 @@
           <summary>Why trades were taken or skipped (last cycle)</summary>
           <div id="decisions-note" class="muted"></div>
           <div class="scroll" id="decisions-table"></div>
-        </details>
-        <details class="panel">
-          <summary>Top candidates (last cycle, ranking heuristic only)</summary>
-          <div id="candidates-note" class="muted"></div>
-          <div class="scroll" id="candidates-table"></div>
-        </details>
-        <details class="panel">
-          <summary>Unusual options turnover (research radar, not a signal)</summary>
-          <div id="flow-note" class="muted"></div>
-          <div class="scroll" id="flow-table"></div>
-        </details>
-        <details class="panel">
-          <summary>Modeled net GEX (assumption, research only)</summary>
-          <div id="gex-note" class="muted"></div>
-          <div class="scroll" id="gex-table"></div>
         </details>
         <details class="panel health">
           <summary>System health</summary>
@@ -622,6 +626,21 @@
           <div class="scroll" id="scan-unusual"></div>
         </div>
         <div class="panel" id="scan-options-panel" hidden><div class="scroll" id="scan-options"></div></div>
+        <details class="panel">
+          <summary>Top candidates (last cycle, ranking heuristic only)</summary>
+          <div id="candidates-note" class="muted"></div>
+          <div class="scroll" id="candidates-table"></div>
+        </details>
+        <details class="panel">
+          <summary>Unusual options turnover (research radar, not a signal)</summary>
+          <div id="flow-note" class="muted"></div>
+          <div class="scroll" id="flow-table"></div>
+        </details>
+        <details class="panel">
+          <summary>Modeled net GEX (assumption, research only)</summary>
+          <div id="gex-note" class="muted"></div>
+          <div class="scroll" id="gex-table"></div>
+        </details>
         <details class="notes panel">
           <summary>What this can and cannot tell you</summary>
           <ul class="plain" id="scan-notes" style="margin-top:10px"></ul>

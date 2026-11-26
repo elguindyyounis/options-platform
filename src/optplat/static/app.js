@@ -348,13 +348,30 @@
 
   function renderDesk(portfolio, report, eq, status) {
     const a = portfolio.account, sm = eq.summary;
-    // Headline is realized profit and loss, not the account balance: a balance of $100,000 with nothing traded says nothing.
+    // Headline is the evidence, not the money: a result on a handful of trades is noise, so the count comes first and the
+    // profit and loss sits under it at normal size, always with its sample next to it.
+    const gap = evidenceGap(report.closed_trades);
     const dv = $("desk-value");
-    dv.textContent = report.closed_trades ? sgn(report.realized_pnl) : "No closed trades yet";
-    dv.className = "hero-value num " + (report.closed_trades ? tone(report.realized_pnl) : "muted");
+    dv.replaceChildren(span(String(report.closed_trades)), el("small", " of " + MIN_TRADES + " closed", "muted"));
+    dv.className = "hero-value num";
     const ch = $("desk-change");
     ch.replaceChildren();
-    ch.appendChild(span(report.closed_trades ? "After fees, " + report.closed_trades + " closed" + (report.win_rate_pct === null ? "" : ", " + report.win_rate_pct + "% winners") : "Nothing has been bought and sold yet", "muted"));
+    const bar = el("div", null, "evbar");
+    bar.setAttribute("role", "img");
+    bar.setAttribute("aria-label", EVIDENCE_WORDS[gap.level] + ": " + report.closed_trades + " of " + MIN_TRADES + " closed trades");
+    [[0, 10], [10, MIN_TRADES], [MIN_TRADES, MIN_TRADES + 6]].forEach((r, i) => {
+      const seg = el("span", null, i + 1 === gap.level ? "cur" : ""), fill = el("i");
+      fill.style.width = Math.max(0, Math.min(100, (report.closed_trades - r[0]) / (r[1] - r[0]) * 100)) + "%";
+      seg.appendChild(fill); bar.appendChild(seg);
+    });
+    const keys = el("div", null, "evkeys");
+    kids(keys, [el("span", "Too early 0-9", gap.level === 1 ? "on" : ""), el("span", "Directional 10-29", gap.level === 2 ? "on" : ""), el("span", "Counts 30+", gap.level === 3 ? "on" : "")]);
+    kids(ch, [bar, keys, el("p", gap.level === 3 ? gap.text + "." : gap.text + ". Watch only: fix broken things, do not change rules.", "hero-line")]);
+    const res = $("desk-result");
+    res.replaceChildren();
+    if (report.closed_trades) kids(res, [el("span", "Result since start (paper, after fees) ", "muted"), span(arrow(report.realized_pnl) + sgn(report.realized_pnl), "num " + tone(report.realized_pnl)),
+      el("span", " · " + (report.win_rate_pct === null ? "" : report.win_rate_pct + "% winners · ") + (gap.level === 1 ? "not a signal yet" : gap.level === 2 ? "directional only" : "large enough to look at"), "muted")]);
+    else res.appendChild(el("span", "Nothing has been bought and sold yet.", "muted"));
     const fict = eq.fictional ? " Fictional demo data." : "";
     $("desk-headline").textContent = "Holds " + report.open.length + " open position" + (report.open.length === 1 ? "" : "s") + " and has closed " + report.closed_trades + " trade" + (report.closed_trades === 1 ? "" : "s") + "." + fict;
     const need = Math.max(0, MIN_TRADES - report.closed_trades);
@@ -366,7 +383,6 @@
     const kpi = (v, l, sub, cls) => { const k = el("div", null, "kpi " + (cls || "")); k.appendChild(el("div", v, "v num")); k.appendChild(el("div", l, "l")); if (sub) k.appendChild(el("div", sub, "s")); return k; };
     kids(t, [
       kpi(String(report.open.length), "Open positions", money(a.open_premium) + " at cost"),
-      kpi(String(report.closed_trades), "Closed trades", "minimum " + MIN_TRADES + " before judging"),
       kpi(report.win_rate_pct === null ? "n/a" : report.win_rate_pct + "%", "Winners", report.closed_trades ? "of closed trades" : "no closed trades"),
       kpi(sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "%", "Below its peak", "worst -" + (sm.max_drawdown_pct || 0) + "%"),
       kpi(money(a.equity) + (a.carried_at_cost > 0 ? " (estimate)" : ""), "Paper balance", "cash " + money(a.cash) + (a.carried_at_cost > 0 ? "; " + a.carried_at_cost + " open position(s) have no bid and are counted at cost, so a loss on them is not in this number" : report.closed_trades ? "" : "; untouched"), "dim"),
@@ -412,7 +428,13 @@
       const open = el("div", null, "lc-open num");
       open.appendChild(el("span", "Open ", "muted")); open.appendChild(openNow(r, ""));
       const foot = el("div", r.open + " open, " + r.closed + " closed" + (r.win_rate_pct === null ? "" : ", " + r.win_rate_pct + "% winners"), "lc-foot muted");
-      const kidsList = [head, big, open];
+      const kidsList = [head];
+      if (!r.total_row) { // evidence first on every lane card, then the money
+        const g = evidenceGap(r.closed), ev = el("div", null, "lc-ev");
+        kids(ev, [el("span", EVIDENCE_WORDS[g.level], "tag " + (g.level === 3 ? "info" : "warn")), el("span", " " + r.closed + " closed · " + g.text)]);
+        kidsList.push(ev);
+      }
+      kidsList.push(big, open);
       if (!r.total_row) {
         // A small bar: the share of the largest lane's size, split into closed (solid) and open (faded) results.
         const bar = el("div", null, "lc-bar");
@@ -480,7 +502,17 @@
   function whyOf(d) {
     const p = d.payload || {};
     if (p.risk_failures && p.risk_failures.length) return p.risk_failures.join("; ");
-    return p.why || p.reason || (p.reasons && p.reasons.join("; ")) || (p.score !== undefined ? "score " + Number(p.score).toFixed(2) : "");
+    // The score only ranks candidates (there is no pass mark), so say where it ranked rather than show a bare number.
+    if (p.rank && p.of) return "ranked #" + p.rank + " of " + p.of + " eligible candidate" + (p.of === 1 ? "" : "s") + (p.score !== undefined ? " (score " + Number(p.score).toFixed(1) + ", ranking only)" : "") +
+      (p.rank > 1 ? "; the higher-ranked ones did not fit the size cap" + (p.committee && p.committee.mode === "active" ? " or the committee declined them" : "") : "");
+    return p.why || p.reason || (p.reasons && p.reasons.join("; ")) || (p.score !== undefined ? "score " + Number(p.score).toFixed(2) + " (ranking only, no pass mark)" : "");
+  }
+  // A trade the rule took although the committee would have refused it. Worth seeing on its own: how these end is a
+  // direct test of the committee. Pure function of one journal line, exposed for tests.
+  function disagreement(d) {
+    const p = (d && d.payload) || {}, c = p.committee;
+    if (!c || decisionVerdict(d).id !== "taken" || c.decision !== "WOULD_REJECT") return null;
+    return "Committee (" + (c.mode || "shadow") + ") would have rejected it" + (c.reasons && c.reasons.length ? ": " + c.reasons.join("; ") : "") + ". How it ends is tracked.";
   }
   // One plain verdict per journal line so "taken or skipped, and why" reads in one feed. Pure function of the record.
   // Anything not recognised is shown as "Other" with its raw name, never as taken or fine.
@@ -557,11 +589,12 @@
       const who = el("div", null, "ticket");
       who.appendChild(el("span", words(d.kind), "muted"));
       if (d.contract) who.appendChild(ticketOcc(d.contract)); else if (d.symbol) who.appendChild(el("b", d.symbol));
-      const v = decisionVerdict(d);
-      const tag = el("span", v.text + (d.fictional ? " (fictional)" : ""), "tag " + (v.id === "taken" || v.id === "exit" ? "info" : v.id === "blocked" ? "warn" : ""));
+      const v = decisionVerdict(d), dis = disagreement(d);
+      if (dis) item.classList.add("disagree");
+      const tag = el("span", (dis ? "Taken, committee disagreed" : v.text) + (d.fictional ? " (fictional)" : ""), "tag " + (dis ? "warn" : v.id === "taken" || v.id === "exit" ? "info" : v.id === "blocked" ? "warn" : ""));
       kids(item, [el("span", fmtTime(d.ts), "feed-time"), who, tag]);
       const why = whyOf(d);
-      item.appendChild(el("div", why ? "Rule: " + why : "No reason was recorded for this line (" + words(d.disposition) + ").", "feed-why"));
+      item.appendChild(el("div", (why ? "Rule: " + why : "No reason was recorded for this line (" + words(d.disposition) + ").") + (dis ? ". " + dis : ""), "feed-why"));
       feed.appendChild(item);
     });
     host.appendChild(feed);
@@ -1953,19 +1986,19 @@
     return c;
   }
 
-  function renderGlance(items) {
+  // needs: the same count the verdict band and the nav badge show, so the page never gives two different numbers.
+  function renderGlance(items, needs) {
     const box = $("glance");
     box.replaceChildren();
     const c = glanceCounts(items);
     const worst = c.bad ? "bad" : c.warn ? "warn" : "ok";
     const sum = $("attn-summary");
     if (sum) {
-      const top = orderGlance(items)[0];
+      const n = typeof needs === "number" ? needs : c.bad + c.warn;
       sum.replaceChildren();
-      sum.appendChild(el("span", worst === "bad" ? "Needs you" : worst === "warn" ? "Check" : "All clear", "pill " + worst));
-      sum.appendChild(el("span", c.bad ? c.bad + " action, " + c.warn + " notes" : c.warn + " notes, nothing urgent", "muted"));
-      if (top && top.level !== "ok") sum.appendChild(el("span", top.text.length > 110 ? top.text.slice(0, 107) + "..." : top.text, top.level));
-      $("attn").open = worst === "bad";
+      sum.appendChild(el("span", "Full status notes", ""));
+      sum.appendChild(el("span", (n ? n + " need you (listed above)" : "nothing needs you") + " · " + items.length + " lines in all", "muted"));
+      $("attn").open = false;
     }
     box.appendChild(el("div", worst === "bad" ? "Needs your attention" : worst === "warn" ? "Check these" : "Nothing needs you right now", "pill " + worst));
     box.appendChild(el("span", " " + c.bad + " action, " + c.warn + " note, " + c.ok + " ok (most urgent first)", "muted"));
@@ -1982,6 +2015,20 @@
   // Evidence level of a sample of closed trades: 1 too early, 2 building, 3 enough to look at (never proof of an edge).
   function evidenceLevel(n) { return !(n >= 10) ? 1 : n >= MIN_TRADES ? 3 : 2; }
   const EVIDENCE_WORDS = ["", "Too early", "Building", "Enough to look at"];
+  // How far a sample is from the next evidence level, in plain words. Pure function, exposed for tests.
+  function evidenceGap(n) {
+    const c = Number(n) || 0, lvl = evidenceLevel(c);
+    if (lvl === 1) return { level: 1, more: 10 - c, decide: "No", text: (10 - c) + " more closed trade" + (10 - c === 1 ? "" : "s") + " to directional" };
+    if (lvl === 2) return { level: 2, more: MIN_TRADES - c, decide: "Not yet", text: (MIN_TRADES - c) + " more closed trade" + (MIN_TRADES - c === 1 ? "" : "s") + " until it counts" };
+    return { level: 3, more: 0, decide: "Look", text: "Enough closed trades to look at (still not proof of an edge)" };
+  }
+  // The fix the owner can make from the Desk for a "Needs you" line, if there is one. Only switches back on things
+  // that make the platform safer or simply running (start the loop, enforce market hours); never loosens anything.
+  function needAction(text) {
+    if (/loop is stopped|but the loop is stopped/.test(text)) return { id: "start", label: "Start loop" };
+    if (/Market-hours check is OFF/.test(text)) return { id: "hours", label: "Turn on market-hours check" };
+    return null;
+  }
   function exposure(trades) {
     // Share of OPEN option trades that are puts, and across how many names. Only measures what is open; never predicts.
     const open = (trades || []).filter((t) => t.instrument === "options" && t.status !== "CLOSED" && t.right);
@@ -2067,14 +2114,12 @@
     $("vt-safety").textContent = (ctx.health.mode === "PAPER" && !(pf && pf.kill_switch) && !rn.stalled) ? "Within limits" : "Look here";
     $("vt-safety").className = "vv " + ((ctx.health.mode === "PAPER" && !(pf && pf.kill_switch) && !rn.stalled) ? "gain" : "loss");
     $("vt-safety-s").textContent = guards.join(" · ");
-    const rep = ctx.report, base = (ctx.trades && ctx.trades.sources || []).find((x) => /frozen-baseline/.test(x.source));
-    $("vt-result").textContent = rep.closed_trades ? sgn(rep.realized_pnl) : "No closed trades";
-    $("vt-result").className = "vv num " + (rep.closed_trades ? tone(rep.realized_pnl) : "muted");
-    $("vt-result-s").textContent = base ? "Frozen baseline lane: " + (base.closed ? sgn(base.realized_pnl) + " on " + base.closed + " closed" : "no closed trades yet") : "Long-term account. Baseline lane not found.";
-    const lvl = evidenceLevel(rep.closed_trades);
-    $("vt-ev").textContent = rep.closed_trades + " of " + MIN_TRADES;
+    // Evidence before result: "can I decide yet?" is the question; the money figure lives in the panel below with its count.
+    const rep = ctx.report, gap = evidenceGap(rep.closed_trades), lvl = gap.level;
+    $("vt-ev").textContent = gap.decide;
+    $("vt-ev").className = "vv " + (lvl === 3 ? "gain" : "warn");
     renderMeter($("vt-meter"), lvl);
-    $("vt-ev-s").textContent = EVIDENCE_WORDS[lvl] + (ctx.shadow && typeof ctx.shadow.trading_days === "number" && ctx.shadow.gate ? " · shadow book " + ctx.shadow.trading_days + " of " + ctx.shadow.gate.trading_days + " days" : "");
+    $("vt-ev-s").textContent = rep.closed_trades + " of " + MIN_TRADES + " closed · " + gap.text + (ctx.shadow && typeof ctx.shadow.trading_days === "number" && ctx.shadow.gate ? " · shadow book " + ctx.shadow.trading_days + " of " + ctx.shadow.gate.trading_days + " days" : "");
     // Needs you
     const box = $("needs"), list = $("needs-list"), badge = $("nav-needs");
     list.replaceChildren();
@@ -2085,9 +2130,18 @@
       const row = el("div", null, "need");
       row.appendChild(el("span", i.level === "bad" ? "Act" : "Look", "tag " + (i.level === "bad" ? "loss" : "warn")));
       row.appendChild(el("div", i.text));
+      const fix = needAction(i.text);
+      if (fix) {
+        const b = el("button", fix.label, "btn primary need-act");
+        b.type = "button";
+        b.addEventListener("click", () => act(() => fix.id === "start" ? api("/api/engine/start", { method: "POST" })
+          : api("/api/engine/config", { method: "PUT", body: JSON.stringify({ enforce_market_hours: true }) })));
+        row.appendChild(b);
+      }
       list.appendChild(row);
     });
     if (st.needs.length > 5) list.appendChild(el("p", "+ " + (st.needs.length - 5) + " more in the full status notes below.", "muted"));
+    return st;
   }
 
   // ---- Lanes page (design proposal 2026-11-25): every lane on the same terms, sorted by evidence, with exposure ----
@@ -2248,8 +2302,8 @@
       renderOrders(orders);
       syncControls(status, status.config);
       const glanceItems = buildGlance(health, status, portfolio, results, policy);
-      renderGlance(glanceItems);
-      renderNow(glanceItems, { health, status, portfolio, report, trades: allTrades, decisions, shadow: shadowRep, since: S.since });
+      const now = renderNow(glanceItems, { health, status, portfolio, report, trades: allTrades, decisions, shadow: shadowRep, since: S.since });
+      renderGlance(glanceItems, now.needs.length);
       renderResearchProgress(buildResearchProgress(shadowRep));
       renderSystemBand(status, (report.closed_trades !== undefined ? report.closed_trades : (allTrades && allTrades.trades ? allTrades.trades.filter((t) => t.status === "CLOSED").length : 0)), shadowRep);
       if (results) renderResults(results);
@@ -2341,6 +2395,7 @@
   window.optplatDecisionFilter = filterDecisions;
   window.optplatTally = decisionTally;
   window.optplatSystem = systemReadiness; window.optplatLabGate = labGate; window.optplatLaneVerdict = laneVerdict; window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
+  window.optplatEvidenceGap = evidenceGap; window.optplatNeedAction = needAction; window.optplatDisagreement = disagreement; window.optplatWhy = whyOf;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   S.since = lastSeen(); // the previous look, kept for this whole visit so the digest does not reset itself every refresh
   window.addEventListener("pagehide", markSeen);
