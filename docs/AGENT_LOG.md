@@ -1109,3 +1109,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 ## 2026-11-27 (Claude, owner request): IBKR paper account read from TWS
 
 * Owner asked not to have to type the paper account id. `IBKR_PAPER_ACCOUNT` is now optional: unset, the adapter uses the session's account only when TWS manages exactly one account and it is `DU`; several accounts, any non-`DU` account or none means no orders and a disconnect. A set value must still be `DU` + digits. CLAUDE.md rule 1 updated with the owner's decision. The test case "empty account is refused" was replaced by this decision with stricter cases (placeholder, spaces) and new refusal tests. Verified: pytest. Merged on the owner's standing instruction.
+
+## 2026-11-27 (owner request): greeks of open option trades on the Desk
+
+* Owner asked whether the platform considers greeks. Finding (read from code): only gamma (GEX, Context page) and IV percentile (entry replay E2) were used; no delta, theta or vega anywhere, and no rule uses any greek. Owner said yes to a display-only view.
+* New `exposure.py`, `GET /api/exposure` (authenticated) and a Desk line: net delta (share-equivalents), time decay (USD/day) and vega (USD per vol point) summed over open option lane trades, the challenge account included. Black-Scholes, rate 0, no dividends. Spot and IV are the values recorded at trade entry (the lanes store no current ones), so the line says "approximate"; only days to expiry is current. Trades with a missing or implausible IV, or past expiry, are left out and counted, and the line says "Partial" rather than showing a partial sum as the whole.
+* Decisions made: display only, so no sizing, risk, order, exit or schema change; IBKR model greeks not used (adapter is the owner's; they would replace the entry-time estimate once a live greeks feed exists).
+* Verified: `python -m pytest -q` 876 pass (5 new in `tests/test_exposure.py`, including the Desk text under node); `node --check app.js`. Not verified: the line in a browser, real data, the Mac.
