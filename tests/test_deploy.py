@@ -75,3 +75,20 @@ def test_the_updater_only_fast_forwards_stable():
     text = (Path(deploy.ROOT) / "deploy" / "update.sh").read_text()
     assert "origin stable" in text and "--ff-only" in text and "is-ancestor" in text
     assert "--force" not in text and "push" not in text
+
+
+def test_the_updater_installs_the_ibkr_extra_only_when_the_owner_switched_it_on(tmp_path):
+    import subprocess
+    text = (Path(deploy.ROOT) / "deploy" / "update.sh").read_text()
+    assert 'pip install --quiet -e "$SPEC"' in text and ". \"$DATA/config.env\"" not in text  # read, never sourced
+    start = text.index('SPEC="."')
+    probe = text[start:text.index("\nfi\n", start) + 4]
+    probe = probe.replace('"$APP/.venv/bin/python" -c "import ib_async"', "true")  # pretend it is installed
+    for config, want in [("", "."), ("OPTPLAT_IBKR_MIRROR=1\n", ".[ibkr]"), ("export OPTPLAT_IBKR_MIRROR='1'\n", ".[ibkr]"),
+                         ("OPTPLAT_BROKER=ibkr_paper\n", ".[ibkr]"), ("# OPTPLAT_IBKR_MIRROR=1\n", "."),
+                         ("OPTPLAT_IBKR_MIRROR=0\n", ".")]:
+        (tmp_path / "config.env").write_text(config)
+        out = subprocess.run(["bash", "-c", f'DATA="{tmp_path}"; APP=/nonexistent; LABEL=x\n{probe}\necho "$SPEC"'],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        assert out == want, (config, out)
+

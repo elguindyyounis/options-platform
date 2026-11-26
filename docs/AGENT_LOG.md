@@ -1090,3 +1090,7 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * `IBKRDataProvider.execution_quote` calls the shared service's `/v1/execution-quote` (live bid/ask matched with IBKR's timestamped BID_ASK within 5 s). Any doubt (status, type, contract identity, age, prices) returns None. The engine calls it only right before an entry or exit order, at most 3 times per cycle, and seeds the simulator with the verified quote. `decision_quotes_for` gives held contracts live **unverified** quotes so exits can trigger; the risk policy still refuses an order on them. The verified-time rule is not loosened; lanes are unchanged (`quotes_for` still returns nothing).
 * Verified: `python -m pytest -q` passes (21 new tests in `tests/test_ibkr_verified_fills.py`). Not verified: the live service during a session (US markets closed today).
 
+
+## 2026-11-27 (Claude): updater installs ib_async when IBKR paper is switched on
+
+* `deploy/update.sh` reinstalled with `pip install -e .`, so the Mac's managed install would never have the optional `ib_async`, and the mirror would only log errors. It now reads (never sources) `config.env`: with `OPTPLAT_IBKR_MIRROR=1` or `OPTPLAT_BROKER=ibkr_paper` it installs `.[ibkr]`, including on runs with no new release, and restarts once. Verified: `tests/test_deploy.py` exercises the detection on six config lines; `bash -n`. Not verified: on the Mac.
