@@ -251,7 +251,9 @@
   // ---------------------------------------------------------------- Desk
   function renderStrip(health, status, portfolio) {
     pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
-    pill("data", status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), status.data_source.fictional ? "warn" : "");
+    const md = health.market_data;
+    pill("data", md ? "IBKR " + md.state + " - fills paused: BBO time unverified" : status.data_source.name + (status.data_source.fictional ? " - FICTIONAL" : ""), md || status.data_source.fictional ? "warn" : "");
+    if (md) $("data").title = "Last BBO receipt: " + (md.last_bbo_received_at || "none") + "; subscriptions " + md.active_lines + "/" + md.max_lines + ". Receipt time does not verify exchange BBO freshness.";
     pill("market", "market " + (status.market.open ? "open" : "closed") + ": " + status.market.reason, status.market.open ? "ok" : "");
     S.killState = !!portfolio.kill_switch;
     pill("kill", S.killState ? "KILL SWITCH ON" : "kill switch off", S.killState ? "bad" : "");

@@ -1055,3 +1055,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Decision made: the endpoint calls the cached `RegimeSource.read()` (5-minute TTL), so a dashboard refresh does not add a data request per refresh.
 * Verified: `python -m pytest -q` 764 pass (4 new in `tests/test_regime.py`, one of them under node); `node --check app.js`. Not verified: the line in a browser (light theme, phone width), real data, the Mac. Thursday, so no weekend scan.
 * Deploy: the platform is not auto-deployed; the owner's Mac copy is a git clone they update themselves, so arrival there is unconfirmed.
+
+## 2026-11-26 (owner: shared read-only IBKR data)
+
+* Built an opt-in localhost data consumer, with receipt provenance, no delayed fallback, health status and independent vetoes on unverified IBKR fills in the main risk engine and experimental option lanes. Reuses Alerter's shared service; does not implement or modify the TWS broker adapter.
+* Audited main/stable and open PRs #39/#49; no conflicting implementation was reused or merged. Installed Mac build is 2ade38de9c49, PAPER mode, port 8800, runner healthy. Owner's direct read-only integration authorization supersedes the older broker-data block, while no-merge and no-live-order policies remain in force.
+* Read-only Mac counts: 1,245 market snapshots, 1,361,621 market quote rows, 35 shadow follows, zero shadow points. Phase 1 gate and any exit/entry improvement remain unestablished. No hypothesis registered, evaluated or promoted.
+* Validation: full pytest suite and Node syntax check; synthetic fixtures exercise delayed/frozen/stale/missing exclusions, provenance round-trip, missing-service behavior, no executable marks, independent risk vetoes and the experimental selector. Local TWS probes returned equity/history/chain and option BBO/OI/IV/Greeks via the shared implementation. This Claude provider has not been deployed; submit only a feature-branch PR for human review.

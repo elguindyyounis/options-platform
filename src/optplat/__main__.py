@@ -118,12 +118,15 @@ def main() -> None:
         provider = DemoDataProvider()
     elif data == "yahoo":
         provider = YahooDataProvider()
+    elif data == "ibkr":
+        from .ibkr_data import IBKRDataProvider
+        provider = IBKRDataProvider()
     else:
-        sys.exit("OPTPLAT_DATA must be 'demo' or 'yahoo'")
+        sys.exit("OPTPLAT_DATA must be 'demo', 'yahoo' or 'ibkr'")
 
     # Unofficial quotes carry no verified timestamp; the safe default rejects them. Allowing them is an
     # explicit, visible choice.
-    allow_unverified = os.environ.get("OPTPLAT_ALLOW_UNVERIFIED_QUOTES") == "1"
+    allow_unverified = os.environ.get("OPTPLAT_ALLOW_UNVERIFIED_QUOTES") == "1" and data != "ibkr"
     policy = RiskPolicy(require_verified_quote_time=not allow_unverified)
 
     store = Store(os.environ.get("OPTPLAT_DB", "optplat.db"))

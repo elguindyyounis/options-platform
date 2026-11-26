@@ -132,6 +132,13 @@ Existing items, in order:
 ## Done
 
 * 2026-11-26: Desk regime line (UX-9): `GET /api/regime` and a one-line Desk reading of the market-regime guard (blocked puts/calls and the rule, "unknown" and "off" never shown as all-clear, fictional data labelled). Display only. Next candidates: challenge 11 "effective positions" count (display only); challenges 12 and 11's cap need the owner.
+
+* Shared read-only IBKR data consumer (owner priority, 2026-11-26): opt-in
+  `OPTPLAT_DATA=ibkr` reads the authenticated localhost service maintained in
+  Options Alerter. Preserves unverified BBO times and vetoes fills in both risk
+  paths and experimental options lanes. No TWS order adapter implemented;
+  deployment awaits human review/merge. See `docs/IBKR_DATA.md`.
+
 * 2026-11-25: paper balance says when positions are carried at cost (no bid): `Account.carried_at_cost`, Desk "(estimate)" label (challenge 10 / UX-10). Next candidates: UX-9 current-regime line on the Desk; challenge 12 needs the owner.
 
 * 2026-11-23: UX-7 follow-up / challenge 10: the Desk "All accounts" table and the Trades sources table now say "partial, N unmarked" when an open trade has no bid (`open_complete`, `open_unmarked` in `/api/alltrades`; number unchanged). Still unchecked: Desk KPI cards, Orders page, Desk paper equity. New: UX-8 (browser check of the new label).
