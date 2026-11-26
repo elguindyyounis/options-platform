@@ -1080,3 +1080,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * New `src/optplat/lane_hypotheses.py` (read-only evaluator, CLI `python -m optplat.lane_hypotheses --db <path>`) and rows SW1/ST1 in `docs/EVOLUTION_PLAN.md`. Only trades opened from 2026-11-27 count; fixed first-N sample (60 / 100 independent observations), one final verdict; extra stressed cost; SW1 against SPY over the same dates; the plan's bar, Bonferroni-corrected for the pair.
 * Verified: `python -m pytest -q` passes (13 new tests in `tests/test_lane_hypotheses.py`, synthetic fixtures only). Not verified: a run against the Mac's database (not reachable from here), or SPY bars from Yahoo/IBKR. No lane rule, ledger, risk, order, auth or schema change.
 
+## 2026-11-27 (Claude, owner request "use IBKR data going forward"): verified IBKR quotes for main-account orders
+
+* Gap found while merging #68 and #74: with `OPTPLAT_DATA=ibkr` the risk policy refuses every unverified IBKR quote and IBKR never timestamps option bid/ask, so the main account could never fill and the IBKR paper mirror would never be used.
+* `IBKRDataProvider.execution_quote` calls the shared service's `/v1/execution-quote` (live bid/ask matched with IBKR's timestamped BID_ASK within 5 s). Any doubt (status, type, contract identity, age, prices) returns None. The engine calls it only right before an entry or exit order, at most 3 times per cycle, and seeds the simulator with the verified quote. `decision_quotes_for` gives held contracts live **unverified** quotes so exits can trigger; the risk policy still refuses an order on them. The verified-time rule is not loosened; lanes are unchanged (`quotes_for` still returns nothing).
+* Verified: `python -m pytest -q` passes (21 new tests in `tests/test_ibkr_verified_fills.py`). Not verified: the live service during a session (US markets closed today).
+
