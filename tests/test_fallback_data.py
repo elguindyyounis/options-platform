@@ -201,3 +201,11 @@ def test_a_yahoo_suggested_entry_fills_only_on_ibkrs_verified_quote():
     report = engine.run_cycle()
     assert report["entries"][0]["result"] == "FILLED" and len(broker.get_positions()) == 1
     assert ibkr.asked == [C]
+
+
+def test_earnings_dates_come_from_yahoo_on_ibkr_data_unless_the_fallback_is_off():
+    from optplat.events import earnings_source_for, yahoo_earnings_dates
+    assert earnings_source_for("ibkr") is yahoo_earnings_dates
+    assert earnings_source_for("ibkr", "none") is None
+    assert earnings_source_for("yahoo") is yahoo_earnings_dates
+    assert earnings_source_for("demo") is None
