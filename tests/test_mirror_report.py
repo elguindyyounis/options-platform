@@ -118,3 +118,23 @@ def test_an_order_ibkr_cannot_find_stops_being_followed_after_max_misses():
     asked = m.calls.count("status")
     b.poll_working()
     assert asked == mod.MAX_MISSES and m.calls.count("status") == asked
+
+
+def test_the_dashboard_endpoint_needs_the_token_and_is_read_only():
+    from fastapi.testclient import TestClient
+
+    from optplat.api import create_app
+    from optplat.broker import SimBroker
+    from optplat.orders import OrderManager
+
+    s = Store()
+    _order(s, "buy")
+    _ib(s, "ibkr_mirror_status", "buy", "FILLED", 4, 1.95)
+    manager = OrderManager(SimBroker(), s)
+    token = "t" * 24
+    before = len(s.list_orders(limit=1000))
+    with TestClient(create_app(manager, token, None, None)) as c:
+        assert c.get("/api/mirror").status_code == 401
+        body = c.get("/api/mirror", headers={"X-API-Token": token}).json()
+    assert body["summary"]["both_filled"] == 1 and body["orders"][0]["ibkr_better_by_per_share"] == 0.05
+    assert len(s.list_orders(limit=1000)) == before  # reading the report changes nothing
