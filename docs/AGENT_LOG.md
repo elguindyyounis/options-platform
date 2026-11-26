@@ -1101,3 +1101,7 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Merged `origin/main` (21 commits, no conflicts) into `agent/integration` first.
 * Data repo `options-platform-data` is not attached (access denied, no `add_repo` here), so the Phase 1 gate and any real result are unknown. No hypothesis registered or resolved. No risk, sizing, order, auth or schema change.
 * Verified: `python -m pytest -q` 864 pass; the new scanner test fails without the fix. Not verified: on real data or the Mac. Merged to main: see PR note below if added.
+
+## 2026-11-27 (Claude): a bad IBKR mirror setting no longer stops the platform
+
+* The owner's Mac stopped starting after IBKR settings were added; the likely cause is `IBKRPaperBroker()` refusing the account/port at startup, which crashed `__main__`. Now a `ValueError` from those paper-only checks turns the mirror off (plain simulator), prints why, and `/api/health` shows `broker.ibkr_mirror.state = disabled` with the reason. No check was loosened: IBKR still gets nothing unless the settings are valid. Verified: pytest. Not verified: the Mac's actual log (not readable from here). Merged on the owner's standing instruction.

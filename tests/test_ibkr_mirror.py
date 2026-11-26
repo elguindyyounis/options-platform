@@ -121,3 +121,19 @@ def test_restart_restore_does_not_resend_old_orders(tmp_path):
     fresh, m2, _ = mirrored()
     fresh.restore(store.list_orders(limit=1000))
     assert sent and fresh.get_positions() == b.get_positions() != [] and m2.calls == []
+
+
+def test_bad_mirror_settings_disable_the_mirror_instead_of_the_platform(monkeypatch):
+    """__main__'s guard: an invalid paper setting raises ValueError, and the platform runs on the plain simulator."""
+    import inspect
+    from optplat import __main__ as entry
+    from optplat.broker.ibkr import IBKRPaperBroker
+    monkeypatch.setenv("IBKR_PAPER_ACCOUNT", "DUxxxxxxx")
+    with pytest.raises(ValueError):
+        IBKRPaperBroker()
+    src = inspect.getsource(entry)
+    assert "except ValueError as exc:" in src and "mirror_disabled_reason" in src
+    sim = SimBroker()
+    sim.mirror_disabled_reason = "A paper account id beginning with DU is required"
+    assert sim.healthcheck()["ibkr_mirror"] == {"state": "disabled", "reason": sim.mirror_disabled_reason}
+    assert "ibkr_mirror" not in SimBroker().healthcheck()
