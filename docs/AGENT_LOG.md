@@ -1080,3 +1080,7 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * New `src/optplat/lane_hypotheses.py` (read-only evaluator, CLI `python -m optplat.lane_hypotheses --db <path>`) and rows SW1/ST1 in `docs/EVOLUTION_PLAN.md`. Only trades opened from 2026-11-27 count; fixed first-N sample (60 / 100 independent observations), one final verdict; extra stressed cost; SW1 against SPY over the same dates; the plan's bar, Bonferroni-corrected for the pair.
 * Verified: `python -m pytest -q` passes (13 new tests in `tests/test_lane_hypotheses.py`, synthetic fixtures only). Not verified: a run against the Mac's database (not reachable from here), or SPY bars from Yahoo/IBKR. No lane rule, ledger, risk, order, auth or schema change.
 
+## 2026-11-27 (Claude, owner request): agents in a conversation with the owner merge their own PRs
+
+* Owner: "Always merge for me." CLAUDE.md rule 6 amended: merge via the GitHub API after CI and a local test run on the merged result; scheduled unattended runs still only open PRs. Merged #68, #73 (retargeted to main), #74 and #72 on the owner's instruction, resolving only append-only log conflicts.
+
