@@ -131,6 +131,8 @@ def intrinsic(right: str, strike: float, spot: Optional[float]) -> float:
 
 def pick_contract(snap: MarketSnapshot, right: Right, now: datetime, p: Params) -> Optional[ChainRow]:
     """The row nearest the aimed strike inside the expiry window that passes the lane's quote limits, or None."""
+    if snap.source.startswith('ibkr') and not snap.timestamp_verified:
+        return None
     spot = snap.underlying
     target = spot * (1 + p.otm_pct / 100) if right is Right.CALL else spot * (1 - p.otm_pct / 100)
     mid_dte = (p.dte_min + p.dte_max) / 2
@@ -288,6 +290,9 @@ class OptionLane:
 
     # -- marking
     def _marks(self, held: list[dict[str, Any]], now: datetime, out: dict[str, Any]) -> dict[str, tuple[float, float]]:
+        if getattr(self.provider, 'execution_veto', False):
+            out['errors'].append('IBKR BBO exchange time unverified; simulated marks and fills paused')
+            return {}
         if not held:
             return {}
         contracts = []
