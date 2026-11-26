@@ -22,6 +22,7 @@ import random
 from datetime import date
 from typing import Any, Callable, Optional
 
+from . import robustness
 from .exit_replay import BASELINE, BOOTSTRAP_RESAMPLES, BOOTSTRAP_SEED, LATER_FRACTION, _group_points, _path_key, replay_path
 from .shadow import is_callout, one_per_underlying_day
 
@@ -136,9 +137,14 @@ def compare_hypothesis(hid: str, rows: list[dict[str, Any]], key: str = "ret_str
     mean = sum(t) / len(t) - mc
     trimmed = t[:-3]
     t_mean = (sum(trimmed) / len(trimmed) - mc) if trimmed else None
+    passed = bool(t_mean is not None and mean > 0 and lo > 0 and t_mean > 0)
+    pairs = {g: [(r["followed_day"], r[key]) for r in done[g]] for g in (True, False)}
+    robust = robustness.check([p for p in pairs[True] if p[0] in later], pairs[True], passed,
+                              later_baseline=[p for p in pairs[False] if p[0] in later], whole_baseline=pairs[False],
+                              scale=100)
     return {**out, "mean_diff_pct": round(mean * 100, 2), "ci95_pct": [round(lo * 100, 2), round(hi * 100, 2)],
             "mean_diff_without_top3_pct": None if t_mean is None else round(t_mean * 100, 2),
-            "plan_bar_mechanical": bool(t_mean is not None and mean > 0 and lo > 0 and t_mean > 0),
+            "plan_bar_mechanical": passed, "robustness": robust,
             "note": "Mechanical check of the plan's bar only; not proof of an edge. Groups are unpaired, so contract mix can differ between them."}
 
 

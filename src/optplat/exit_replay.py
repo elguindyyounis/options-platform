@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Optional
 
+from . import robustness
 from .exits import ExitPolicy
 from .shadow import MAX_AGE, one_per_underlying_day
 
@@ -167,8 +168,11 @@ def compare(challenger: list[dict[str, Any]], baseline: list[dict[str, Any]], ke
     mean = sum(diffs) / len(diffs)
     trimmed = diffs[:-3]
     t_mean = sum(trimmed) / len(trimmed)
+    passed = mean > 0 and lo > 0 and t_mean > 0
+    paired = [(c["followed_day"], c[key] - b[key]) for c, b in pairs]
+    robust = robustness.check([p for p in paired if p[0] in later], paired, passed, scale=100)
     return {**out, "mean_diff_pct": round(mean * 100, 2), "ci95_pct": [round(lo * 100, 2), round(hi * 100, 2)],
-            "mean_diff_without_top3_pct": round(t_mean * 100, 2), "plan_bar_mechanical": mean > 0 and lo > 0 and t_mean > 0,
+            "mean_diff_without_top3_pct": round(t_mean * 100, 2), "plan_bar_mechanical": passed, "robustness": robust,
             "note": "Mechanical check of the plan's bar only. Sample minimums and the number of rules tried (a stricter bar) are applied at registration."}
 
 
