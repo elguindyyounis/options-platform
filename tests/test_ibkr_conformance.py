@@ -125,7 +125,7 @@ class TestIBKRPaperConformance(BrokerConformance):
 
 @pytest.mark.parametrize("env,value", [("IBKR_PAPER_PORT", "7496"), ("IBKR_PAPER_PORT", "4001"),
                                        ("IBKR_HOST", "10.0.0.5"), ("IBKR_PAPER_ACCOUNT", "U1234567"),
-                                       ("IBKR_PAPER_ACCOUNT", "")])
+                                       ("IBKR_PAPER_ACCOUNT", "DUxxxxxxx"), ("IBKR_PAPER_ACCOUNT", "DU 123")])
 def test_refuses_live_ports_remote_hosts_and_non_paper_accounts(monkeypatch, env, value):
     monkeypatch.setenv(env, value)
     with pytest.raises(ValueError):
@@ -222,3 +222,24 @@ def test_other_accounts_orders_are_invisible():
                                       orderStatus=SimpleNamespace(status="Submitted", filled=0, avgFillPrice=0.0)))
     broker = make(ib)
     assert broker.get_open_orders() == [] and broker.find_order_by_client_id("key-x") is None
+
+
+# ---- account taken from TWS when IBKR_PAPER_ACCOUNT is unset (owner decision 2026-11-27)
+def test_unset_account_uses_the_sessions_only_paper_account(monkeypatch):
+    monkeypatch.delenv("IBKR_PAPER_ACCOUNT")
+    ib = FakeIB(accounts=("DU7654321",))
+    broker = make(ib)
+    assert broker.account_id is None
+    broker.submit_limit_order(make_intent(limit=2.50))
+    assert broker.account_id == "DU7654321" and ib.placed[0].account == "DU7654321"
+
+
+@pytest.mark.parametrize("accounts", [("DU1111111", "DU2222222"), ("U1234567",), ("DU1111111", "U1234567"), ()])
+def test_unset_account_refuses_anything_but_exactly_one_paper_account(monkeypatch, accounts):
+    monkeypatch.delenv("IBKR_PAPER_ACCOUNT")
+    ib = FakeIB(accounts=accounts)
+    broker = make(ib)
+    with pytest.raises(RuntimeError):
+        broker.submit_limit_order(make_intent(limit=2.50))
+    assert ib.placed == [] and broker.account_id is None and not ib.connected
+

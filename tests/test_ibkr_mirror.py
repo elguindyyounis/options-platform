@@ -128,7 +128,7 @@ def test_bad_mirror_settings_disable_the_mirror_instead_of_the_platform(monkeypa
     import inspect
     from optplat import __main__ as entry
     from optplat.broker.ibkr import IBKRPaperBroker
-    monkeypatch.setenv("IBKR_PAPER_ACCOUNT", "DUxxxxxxx")
+    monkeypatch.setenv("IBKR_PAPER_ACCOUNT", "DUxxxxxxx")  # set but not DU + digits: still refused
     with pytest.raises(ValueError):
         IBKRPaperBroker()
     src = inspect.getsource(entry)
