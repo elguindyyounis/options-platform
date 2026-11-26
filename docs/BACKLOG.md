@@ -106,7 +106,7 @@ Existing items, in order:
 
 * **Daily loss halt.** Stop new entries once equity is down X% from the day's start; exits keep
   working. Needs the owner to choose X (a risk-limit default) before anyone builds it.
-* **Real broker adapter (IBKR paper).** Owner is implementing `broker/ibkr.py`. Do not start it.
+* ~~Real broker adapter (IBKR paper).~~ Built 2026-11-26 on the owner's instruction (see Done). Next: a report comparing IBKR paper fills with the simulator's from the `ibkr_mirror_*` audit; a first live paper run during market hours.
 * **Licensed, timestamped options data.** Needs an account and budget decision.
 * **Earnings and event blackout.** Needs a trustworthy event-calendar source.
 * **FOMC table beyond 2027.** `events.py` fails closed for later dates. Add a year only from federalreserve.gov.
@@ -131,8 +131,17 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-26: IBKR paper orders (owner decision, CLAUDE.md rule 1 amended): `broker/ibkr.py` implemented and passing the conformance suite on a fake IB; `MirroredSimBroker` copies main-account orders to IBKR paper behind `OPTPLAT_IBKR_MIRROR=1` (default off). Not yet run against a real paper account.
+
 * 2026-11-26: registered SW1 (swing lane vs SPY) and ST1 (short-term lane vs zero) with pass criteria in code (`lane_hypotheses.py`), on the owner's instruction with criteria delegated to the agent. Confirmatory trades start 2026-11-27. Next: show their status (COLLECTING n/60, n/100) on the Lab page; display only.
 * 2026-11-26: Desk regime line (UX-9): `GET /api/regime` and a one-line Desk reading of the market-regime guard (blocked puts/calls and the rule, "unknown" and "off" never shown as all-clear, fictional data labelled). Display only. Next candidates: challenge 11 "effective positions" count (display only); challenges 12 and 11's cap need the owner.
+
+* Shared read-only IBKR data consumer (owner priority, 2026-11-26): opt-in
+  `OPTPLAT_DATA=ibkr` reads the authenticated localhost service maintained in
+  Options Alerter. Preserves unverified BBO times and vetoes fills in both risk
+  paths and experimental options lanes. No TWS order adapter implemented;
+  deployment awaits human review/merge. See `docs/IBKR_DATA.md`.
+
 * 2026-11-25: paper balance says when positions are carried at cost (no bid): `Account.carried_at_cost`, Desk "(estimate)" label (challenge 10 / UX-10). Next candidates: UX-9 current-regime line on the Desk; challenge 12 needs the owner.
 
 * 2026-11-23: UX-7 follow-up / challenge 10: the Desk "All accounts" table and the Trades sources table now say "partial, N unmarked" when an open trade has no bid (`open_complete`, `open_unmarked` in `/api/alltrades`; number unchanged). Still unchecked: Desk KPI cards, Orders page, Desk paper equity. New: UX-8 (browser check of the new label).

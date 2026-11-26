@@ -124,7 +124,7 @@ def _evaluate_buy(
         age = quote.age_seconds(now)
         if age < -policy.max_clock_skew_s or age > policy.max_quote_age_s:
             failures.append(f"Quote is stale or from the future (age {age:.0f}s)")
-        if policy.require_verified_quote_time and not quote.timestamp_verified:
+        if (policy.require_verified_quote_time or quote.source.startswith("ibkr")) and not quote.timestamp_verified:
             failures.append("Quote time is not verified by the broker or venue")
 
     cost: Optional[float] = None
@@ -218,7 +218,7 @@ def _evaluate_sell(
         age = quote.age_seconds(now)
         if age < -policy.max_clock_skew_s or age > policy.max_quote_age_s:
             failures.append(f"Quote is stale or from the future (age {age:.0f}s)")
-        if policy.require_verified_quote_time and not quote.timestamp_verified:
+        if (policy.require_verified_quote_time or quote.source.startswith("ibkr")) and not quote.timestamp_verified:
             failures.append("Quote time is not verified by the broker or venue")
 
     return RiskDecision(

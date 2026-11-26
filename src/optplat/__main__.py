@@ -104,7 +104,14 @@ def main() -> None:
         sys.exit("OPTPLAT_API_TOKEN must be at least 16 characters (or leave it unset to get a generated one).")
 
     which = os.environ.get("OPTPLAT_BROKER", "sim")
-    if which == "sim":
+    if which == "sim" and os.environ.get("OPTPLAT_IBKR_MIRROR") == "1":
+        # Owner decision 2026-11-26: the simulated account stays the record; its orders are copied to IBKR paper.
+        from .broker.ibkr import IBKRPaperBroker
+        from .broker.mirror import MirroredSimBroker
+
+        broker = MirroredSimBroker(IBKRPaperBroker())
+        print("IBKR paper mirror ON: main-account orders are also sent to the IBKR paper account.", flush=True)
+    elif which == "sim":
         broker = SimBroker()
     elif which == "ibkr_paper":
         from .broker.ibkr import IBKRPaperBroker
@@ -118,16 +125,21 @@ def main() -> None:
         provider = DemoDataProvider()
     elif data == "yahoo":
         provider = YahooDataProvider()
+    elif data == "ibkr":
+        from .ibkr_data import IBKRDataProvider
+        provider = IBKRDataProvider()
     else:
-        sys.exit("OPTPLAT_DATA must be 'demo' or 'yahoo'")
+        sys.exit("OPTPLAT_DATA must be 'demo', 'yahoo' or 'ibkr'")
 
     # Unofficial quotes carry no verified timestamp; the safe default rejects them. Allowing them is an
     # explicit, visible choice.
-    allow_unverified = os.environ.get("OPTPLAT_ALLOW_UNVERIFIED_QUOTES") == "1"
+    allow_unverified = os.environ.get("OPTPLAT_ALLOW_UNVERIFIED_QUOTES") == "1" and data != "ibkr"
     policy = RiskPolicy(require_verified_quote_time=not allow_unverified)
 
     store = Store(os.environ.get("OPTPLAT_DB", "optplat.db"))
     manager = OrderManager(broker, store, policy)
+    if hasattr(broker, "attach_audit"):
+        broker.attach_audit(store.audit)
     if isinstance(broker, SimBroker):
         # The simulated broker lives in memory. Replay the saved fills so a restart does not forget open positions
         # or reset cash (which would hide real simulated losses).

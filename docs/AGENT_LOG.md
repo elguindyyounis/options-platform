@@ -1056,6 +1056,24 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Verified: `python -m pytest -q` 764 pass (4 new in `tests/test_regime.py`, one of them under node); `node --check app.js`. Not verified: the line in a browser (light theme, phone width), real data, the Mac. Thursday, so no weekend scan.
 * Deploy: the platform is not auto-deployed; the owner's Mac copy is a git clone they update themselves, so arrival there is unconfirmed.
 
+## 2026-11-26 (owner: shared read-only IBKR data)
+
+* Built an opt-in localhost data consumer, with receipt provenance, no delayed fallback, health status and independent vetoes on unverified IBKR fills in the main risk engine and experimental option lanes. Reuses Alerter's shared service; does not implement or modify the TWS broker adapter.
+* Audited main/stable and open PRs #39/#49; no conflicting implementation was reused or merged. Installed Mac build is 2ade38de9c49, PAPER mode, port 8800, runner healthy. Owner's direct read-only integration authorization supersedes the older broker-data block, while no-merge and no-live-order policies remain in force.
+* Read-only Mac counts: 1,245 market snapshots, 1,361,621 market quote rows, 35 shadow follows, zero shadow points. Phase 1 gate and any exit/entry improvement remain unestablished. No hypothesis registered, evaluated or promoted.
+* Validation: full pytest suite and Node syntax check; synthetic fixtures exercise delayed/frozen/stale/missing exclusions, provenance round-trip, missing-service behavior, no executable marks, independent risk vetoes and the experimental selector. Local TWS probes returned equity/history/chain and option BBO/OI/IV/Greeks via the shared implementation. This Claude provider has not been deployed; submit only a feature-branch PR for human review.
+
+## 2026-11-26 (Claude, owner request "use IBKR data going forward"): daily-bar budget for the IBKR consumer
+
+* Stacked on #68. `IBKRDataProvider.daily_bars` caches each name's bars (6 h, never past the New York day), starts at most 15 new fetches per 10 minutes so the Alerter keeps most of the shared service's 55, skips a failing name instead of failing the batch, and leaves `^VIX` out unasked (the service serves stocks only). Callers already treat a missing name as no data, no entry.
+* Verified: `python -m pytest -q` passes (3 new tests in `tests/test_ibkr_data.py`). Not verified: against the live service.
+
+## 2026-11-26 (Claude, owner request): IBKR paper orders
+
+* Owner: "change the rules so I can make trade orders through IBKR just on the paper account"; chose automatic with limits, mirroring the main account. CLAUDE.md hard rule 1 and the human-decision list amended with those words and the paper-only conditions.
+* `broker/ibkr.py`: ib_async on its own loop thread; refuses non-local hosts, non-paper ports (now 7497/4002 only; 7947 removed), non-DU accounts, and any session managing a non-DU account; DAY limit orders only, at most 10 contracts / $5,000 premium; orderRef idempotency searched in working and completed orders; lookups that cannot run raise rather than answer "no such order". `broker/mirror.py`: `MirroredSimBroker`, simulator stays the record, one background worker copies accepted orders and cancels, all outcomes audited.
+* Verified: `python -m pytest -q` 810 pass (28 in `tests/test_ibkr_conformance.py`, 18 in `tests/test_ibkr_mirror.py`; the shared conformance suite runs against both). Not verified: a real TWS paper session, IBKR's price-tick rules for non-penny options (an off-tick limit is rejected by IBKR and audited), the startup wiring in `__main__` (not covered by a test).
+
 ## 2026-11-26 (Claude, owner request): register SW1 and ST1
 
 * The owner asked for the swing and short-term share lanes to be registered as experiments with pass criteria and delegated the criteria ("determine these on your own"). This is that owner decision; it is not a change to any risk default, sizing cap or exit threshold.
