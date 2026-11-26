@@ -23,8 +23,13 @@ money, risk limits, brokers, or credentials. Agents improve the code around thos
    print secrets into logs, PR text, or docs.
 5. **No fake data presented as real.** Demo and synthetic data must stay labeled fictional. Never
    claim a strategy has an edge. Paper results, especially on synthetic data, prove nothing.
-6. **Do not touch `main` directly and do not merge.** Work on a branch named `agent/<yyyy-mm-dd>-<topic>`,
-   push it, and open a pull request for the human to review. Never force-push.
+6. **Do not touch `main` directly.** Work on a branch named `agent/<yyyy-mm-dd>-<topic>`, push it, and open a pull
+   request. Never force-push.
+   *Owner decision, 2026-11-27 (the owner said: "Always merge for me"):* an agent working **with the owner in a
+   conversation** merges its own pull request (GitHub merge API, never a direct push to `main`) once CI passes on the
+   PR's latest commit, `python -m pytest -q` passes on the result merged with current `main`, and the agent has read
+   its own diff for anything that breaks hard rules 1-5 or 7. It says in the PR and in `docs/AGENT_LOG.md` that it
+   merged. Unattended scheduled runs keep opening PRs for review unless the owner extends this to them.
 7. **Do not change auth.** Token checks, host checks and security headers in `api.py` may only be
    made stricter.
    *Owner exception, 2026-11-19 (the owner said: fine to lose authentication for now, keep everything automatic, moving to a cloud later):*
