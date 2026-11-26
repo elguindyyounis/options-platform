@@ -325,6 +325,27 @@
     p.textContent = v.text;
   }
 
+  // One line: net greeks of the open option lane trades (display only; entry-time spot and IV, so approximate).
+  function exposureText(x) {
+    if (!x) return { cls: "", text: "" };
+    const fict = x.fictional ? " Fictional demo data." : "";
+    if (!x.valued && !x.unknown) return { cls: "", text: "" };
+    if (!x.valued) return { cls: "warn", text: x.unknown + " open option trade" + (x.unknown === 1 ? "" : "s") + " could not be valued (entry price or volatility missing), so the exposure is unknown." + fict };
+    const sg = (v) => (v >= 0 ? "+" : "") + v;
+    const part = x.unknown ? " Partial: " + x.unknown + " more trade" + (x.unknown === 1 ? "" : "s") + " could not be valued and are left out." : "";
+    return { cls: x.unknown ? "warn" : "", text: "Open option lane trades (" + x.valued + "): net delta " + sg(x.net_delta_shares) + " shares, time decay " + sg(x.theta_usd_per_day) +
+      " USD per day, " + sg(x.vega_usd_per_point) + " USD per volatility point. Approximate: entry-time price and volatility, simulated." + part + fict };
+  }
+  window.optplatExposureText = exposureText;
+  function renderExposure(x) {
+    const p = $("exposure-line");
+    if (!p) return;
+    const v = exposureText(x);
+    p.hidden = !v.text;
+    p.className = "verdict " + v.cls;
+    p.textContent = v.text;
+  }
+
   function renderDesk(portfolio, report, eq, status) {
     const a = portfolio.account, sm = eq.summary;
     // Headline is realized profit and loss, not the account balance: a balance of $100,000 with nothing traded says nothing.
@@ -2212,6 +2233,7 @@
         api("/api/shadow").catch(() => null),
       ]);
       api("/api/regime").then(renderRegime).catch(() => renderRegime(null));
+      api("/api/exposure").then(renderExposure).catch(() => renderExposure(null));
       S.connected = true; S.core = { status, report };
       checkForNewBuild(health.build_id);
       if (allTrades) S.trades = allTrades;
