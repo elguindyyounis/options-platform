@@ -250,6 +250,14 @@ def create_app(
 
             return describe(engine.regime, data_source=getattr(engine.provider, "name", "provider") + " daily bars (SPY)", fictional=engine.provider.fictional)
 
+        @app.get("/api/exposure", dependencies=[Depends(auth)])
+        def open_exposure_report() -> dict[str, Any]:
+            from .exposure import open_exposure
+            from .optionlanes import ALL_PARAMS
+
+            lanes = [p.lane for p in ALL_PARAMS] + ["challenge-10x"]
+            return open_exposure(engine.store, lanes, engine.provider.fictional, engine.clock())
+
         @app.get("/api/engine/status", dependencies=[Depends(auth)])
         def engine_status() -> dict[str, Any]:
             return {**engine.status(), "runner": runner.status() if runner else {"running": False}}
