@@ -1049,3 +1049,8 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Audited main/stable and open PRs #39/#49; no conflicting implementation was reused or merged. Installed Mac build is 2ade38de9c49, PAPER mode, port 8800, runner healthy. Owner's direct read-only integration authorization supersedes the older broker-data block, while no-merge and no-live-order policies remain in force.
 * Read-only Mac counts: 1,245 market snapshots, 1,361,621 market quote rows, 35 shadow follows, zero shadow points. Phase 1 gate and any exit/entry improvement remain unestablished. No hypothesis registered, evaluated or promoted.
 * Validation: full pytest suite and Node syntax check; synthetic fixtures exercise delayed/frozen/stale/missing exclusions, provenance round-trip, missing-service behavior, no executable marks, independent risk vetoes and the experimental selector. Local TWS probes returned equity/history/chain and option BBO/OI/IV/Greeks via the shared implementation. This Claude provider has not been deployed; submit only a feature-branch PR for human review.
+
+## 2026-11-26 (Claude, owner request "use IBKR data going forward"): daily-bar budget for the IBKR consumer
+
+* Stacked on #68. `IBKRDataProvider.daily_bars` caches each name's bars (6 h, never past the New York day), starts at most 15 new fetches per 10 minutes so the Alerter keeps most of the shared service's 55, skips a failing name instead of failing the batch, and leaves `^VIX` out unasked (the service serves stocks only). Callers already treat a missing name as no data, no entry.
+* Verified: `python -m pytest -q` passes (3 new tests in `tests/test_ibkr_data.py`). Not verified: against the live service.

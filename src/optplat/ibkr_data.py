@@ -5,7 +5,8 @@ dependency, TWS socket, credentials or order methods exist in this consumer.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from collections import deque
+from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
 from typing import Sequence
@@ -13,8 +14,12 @@ from urllib.parse import urlencode
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
 
 from .marketdata import Bar, ChainRow, IntradayBar, MarketDataProvider, MarketSnapshot
+from .market_clock import NY
 from .models import OptionContract, Quote, Right
 
+DAILY_BUDGET = 15          # new daily-bar fetches per window: leaves most of the shared budget to the Alerter
+DAILY_WINDOW_S = 600
+DAILY_TTL_S = 6 * 3600
 TOKEN_PATH = Path.home() / 'Library/Application Support/OptionsMarketData/token'
 
 
@@ -45,8 +50,11 @@ class IBKRDataProvider(MarketDataProvider):
     # Experimental lanes must honor this independently of the main risk policy.
     execution_veto = True
 
-    def __init__(self, transport=request):
+    def __init__(self, transport=request, clock=lambda: datetime.now(timezone.utc)):
         self._request = transport
+        self._clock = clock
+        self._daily: dict[str, tuple[date, datetime, list[Bar]]] = {}
+        self._fetches: deque[datetime] = deque()
 
     def health(self):
         try:
@@ -84,8 +92,36 @@ class IBKRDataProvider(MarketDataProvider):
         return []
 
     def daily_bars(self, symbols: Sequence[str], months: int = 2) -> dict[str, list[Bar]]:
-        return {s: [Bar(date.fromisoformat(b['timestamp'][:10]), b['close'], b['volume'])
-                    for b in self._request('history', {'symbol': s})['bars']] for s in symbols}
+        """Daily stock bars for the symbols the shared budget allows; the rest are left out (no data, no entry).
+
+        The service allows about 55 history requests per 10 minutes for every consumer together, and the scan
+        universe is about 200 names, so this consumer caches each name's bars for DAILY_TTL_S (never past the New York
+        day they were fetched) and starts at most DAILY_BUDGET new fetches per DAILY_WINDOW_S. One name failing does
+        not fail the others. Index symbols such as ^VIX are not served by the service and are left out unasked.
+        """
+        now = self._clock()
+        today = now.astimezone(NY).date()
+        while self._fetches and now - self._fetches[0] > timedelta(seconds=DAILY_WINDOW_S):
+            self._fetches.popleft()
+        out: dict[str, list[Bar]] = {}
+        for s in symbols:
+            if not s or not s[0].isalpha():
+                continue
+            hit = self._daily.get(s)
+            if hit and hit[0] == today and now - hit[1] <= timedelta(seconds=DAILY_TTL_S):
+                out[s] = hit[2]
+                continue
+            if len(self._fetches) >= DAILY_BUDGET:
+                continue
+            self._fetches.append(now)
+            try:
+                bars = [Bar(date.fromisoformat(b['timestamp'][:10]), b['close'], b['volume'])
+                        for b in self._request('history', {'symbol': s})['bars']]
+            except Exception:  # noqa: BLE001 - this name is unknown this round; the others still count
+                continue
+            self._daily[s] = (today, now, bars)
+            out[s] = bars
+        return out
 
     def intraday_bars(self, symbol: str) -> list[IntradayBar]:
         raw = self._request('history', {'symbol': symbol, 'interval': '5 mins'})
