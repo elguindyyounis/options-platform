@@ -1109,3 +1109,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 ## 2026-11-27 (Claude, owner request): IBKR paper account read from TWS
 
 * Owner asked not to have to type the paper account id. `IBKR_PAPER_ACCOUNT` is now optional: unset, the adapter uses the session's account only when TWS manages exactly one account and it is `DU`; several accounts, any non-`DU` account or none means no orders and a disconnect. A set value must still be `DU` + digits. CLAUDE.md rule 1 updated with the owner's decision. The test case "empty account is refused" was replaced by this decision with stricter cases (placeholder, spaces) and new refusal tests. Verified: pytest. Merged on the owner's standing instruction.
+
+## 2026-11-27 (Claude, owner request): five outside repositories reviewed; mirror fill report
+
+* Owner asked to check Vibe-Trading, OpenBB (openbq-org link), investorskills, TauricResearch and BijectiveLabs for use in the agents. Findings in `docs/EXTERNAL_REPOS_2026-11-27.md`: none installed; the openbq-org OpenBB is not the official repository; TradingAgents v1.0 is now a research terminal needing an API key. Ideas queued in BACKLOG Ideas; those touching order types, sizing or data sources are marked for the owner.
+* Built the one idea that needed no decision (Vibe-Trading's reconcile tool, status-doc next step 2): `mirror_report.py` pairs each simulated order with IBKR paper's last outcome; `MirroredSimBroker.poll_working` reads back still-working IBKR orders when the worker is idle for 60 s (read-only `get_order_status`; stops after a terminal status or 30 failed reads). No order, risk or auth change.
+* Verified: `python -m pytest -q` (5 new tests in `tests/test_mirror_report.py`; existing mirror tests unchanged). Not verified: against a real TWS paper session (none today before the half-day session); IBKR's completed-orders lookup per key may be slow with many working orders.

@@ -115,6 +115,11 @@ Existing items, in order:
 
 ## Ideas (unscheduled)
 
+* From the outside-repository review (`docs/EXTERNAL_REPOS_2026-11-27.md`): a seeded random-entry null row in exit replay and
+  lane results; TRA's typed-judge pattern if a news source is chosen; Cboe chains as a quote cross-check (owner: data source);
+  resting stop/target orders at IBKR paper (owner: order types under hard rule 1); swing-lane "reason to buy" hypotheses
+  (relative strength, volatility contraction), registered before use.
+
 * Recorder storage: snapshots are about 20 KB of JSON each. At the default 5-minute interval and two
   symbols that is roughly 3 MB a day (about 90 MB for the 30-day default). Compress, or store only
   rows near the money, before running a short interval or a long watchlist.
@@ -130,6 +135,9 @@ Existing items, in order:
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-27: IBKR paper vs simulated fill report (`python -m optplat.mirror_report --db <path>`, read-only), and the mirror
+  reads back still-working IBKR orders while idle so later fills are audited (`ibkr_mirror_status`). Status-doc next step 2.
 
 * 2026-11-26: IBKR paper orders (owner decision, CLAUDE.md rule 1 amended): `broker/ibkr.py` implemented and passing the conformance suite on a fake IB; `MirroredSimBroker` copies main-account orders to IBKR paper behind `OPTPLAT_IBKR_MIRROR=1` (default off). Not yet run against a real paper account.
 

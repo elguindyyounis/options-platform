@@ -4,6 +4,8 @@ The simulated broker stays the account of record: its fills, cash, positions and
 IBKR does or fails to do can alter them. Every order the simulator accepts (after the risk policy and kill switch in
 ``OrderManager``) is also sent, in order, by one background worker, to ``IBKRPaperBroker`` with the same idempotency
 key; cancels follow. Each outcome is written to the audit log (``ibkr_mirror_*``) so the two books can be compared.
+While the queue is idle the worker reads back (never changes) IBKR orders still working, so a later fill is audited
+too (``ibkr_mirror_status``). ``python -m optplat.mirror_report`` compares the two books.
 
 Off unless ``OPTPLAT_IBKR_MIRROR=1``. A paper fill at IBKR is IBKR's simulator, not a real market.
 """
@@ -14,12 +16,17 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
-from ..models import STATUS_FILLED, STATUS_PARTIALLY_FILLED, STATUS_SUBMITTED, BrokerOrderStatus, OrderIntent
+from ..models import (STATUS_CANCELLED, STATUS_FILLED, STATUS_PARTIALLY_FILLED, STATUS_REJECTED, STATUS_SUBMITTED,
+                      BrokerOrderStatus, OrderIntent)
 from .base import BrokerAdapter, BrokerRejected
 from .ibkr import ID_PREFIX
 from .sim import SimBroker
 
 MAX_BACKLOG = 200   # beyond this, new mirror work is dropped and audited, never blocking the simulator
+POLL_S = 60.0       # idle worker reads back still-working IBKR orders this often
+MAX_TRACKED = 200   # still-working IBKR orders followed at once; the oldest is dropped beyond this
+MAX_MISSES = 30     # read-backs in a row that fail before an order stops being followed (about 30 idle minutes)
+TERMINAL = (STATUS_FILLED, STATUS_CANCELLED, STATUS_REJECTED)
 
 Audit = Callable[[str, Optional[str], dict[str, Any]], None]
 
@@ -32,6 +39,8 @@ class MirroredSimBroker(SimBroker):
         self.mirror = mirror
         self._audit: Audit = lambda *_a: None
         self._keys: dict[str, str] = {}
+        self._working: dict[str, tuple[str, int]] = {}   # key -> last IBKR (status, filled); touched by the worker only
+        self._misses: dict[str, int] = {}
         self._background = background
         self._work: "queue.Queue[tuple[Callable[..., None], tuple[Any, ...]]]" = queue.Queue(MAX_BACKLOG)
         self.last_mirror: dict[str, Any] = {"state": "idle", "at": None}
@@ -72,11 +81,43 @@ class MirroredSimBroker(SimBroker):
 
     def _drain(self) -> None:
         while True:
-            fn, args = self._work.get()
+            try:
+                fn, args = self._work.get(timeout=POLL_S)
+            except queue.Empty:
+                fn, args = self.poll_working, ()
             try:
                 fn(*args)
             except Exception as exc:  # noqa: BLE001 - the worker must survive anything
                 self._record("ibkr_mirror_error", {"error": type(exc).__name__}, "error")
+
+    def _track(self, key: str, status: str, filled: int) -> None:
+        if status in TERMINAL:
+            self._working.pop(key, None)
+            self._misses.pop(key, None)
+            return
+        self._working[key] = (status, filled)
+        while len(self._working) > MAX_TRACKED:
+            oldest = next(iter(self._working))
+            self._working.pop(oldest)
+            self._misses.pop(oldest, None)
+
+    def poll_working(self) -> None:
+        """Read back IBKR orders still working and audit any change. Read-only: never submits, cancels or retries."""
+        for key, last in list(self._working.items()):
+            try:
+                s = self.mirror.get_order_status(ID_PREFIX + key)
+            except Exception:  # noqa: BLE001 - unreachable or unknown now; try again next idle period, then give up
+                self._misses[key] = self._misses.get(key, 0) + 1
+                if self._misses[key] >= MAX_MISSES:
+                    self._working.pop(key, None)
+                    self._misses.pop(key, None)
+                continue
+            self._misses.pop(key, None)
+            if (s.status, s.filled_qty) != last:
+                self._record("ibkr_mirror_status", {"idempotency_key": key, "status": s.status,
+                                                    "filled_qty": s.filled_qty, "avg_fill_price": s.avg_fill_price},
+                             s.status)
+            self._track(key, s.status, s.filled_qty)
 
     def _mirror_submit(self, intent: OrderIntent) -> None:
         base = {"idempotency_key": intent.idempotency_key, "side": intent.side.value, "quantity": intent.quantity,
@@ -90,6 +131,7 @@ class MirroredSimBroker(SimBroker):
         else:
             self._record("ibkr_mirror_submitted", {**base, "status": s.status, "filled_qty": s.filled_qty,
                                                    "avg_fill_price": s.avg_fill_price}, s.status)
+            self._track(intent.idempotency_key, s.status, s.filled_qty)
 
     def _mirror_cancel(self, key: str) -> None:
         try:
@@ -97,8 +139,9 @@ class MirroredSimBroker(SimBroker):
         except Exception as exc:  # noqa: BLE001
             self._record("ibkr_mirror_cancel_error", {"idempotency_key": key, "error": type(exc).__name__}, "error")
         else:
-            self._record("ibkr_mirror_cancelled", {"idempotency_key": key, "status": s.status, "filled_qty": s.filled_qty},
-                         s.status)
+            self._record("ibkr_mirror_cancelled", {"idempotency_key": key, "status": s.status, "filled_qty": s.filled_qty,
+                                                   "avg_fill_price": s.avg_fill_price}, s.status)
+            self._track(key, s.status, s.filled_qty)
 
     def _record(self, kind: str, payload: dict[str, Any], state: str) -> None:
         self.last_mirror = {"state": state, "at": datetime.now(timezone.utc).isoformat(), "kind": kind}
