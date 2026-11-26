@@ -115,6 +115,11 @@ Existing items, in order:
 
 ## Ideas (unscheduled)
 
+* From the outside-repository review (`docs/EXTERNAL_REPOS_2026-11-27.md`): a seeded random-entry null row in exit replay and
+  lane results; TRA's typed-judge pattern if a news source is chosen; Cboe chains as a quote cross-check (owner: data source);
+  resting stop/target orders at IBKR paper (owner: order types under hard rule 1); swing-lane "reason to buy" hypotheses
+  (relative strength, volatility contraction), registered before use.
+
 * Recorder storage: snapshots are about 20 KB of JSON each. At the default 5-minute interval and two
   symbols that is roughly 3 MB a day (about 90 MB for the 30-day default). Compress, or store only
   rows near the money, before running a short interval or a long watchlist.
@@ -132,6 +137,16 @@ Existing items, in order:
 ## Done
 
 * 2026-11-27: Decision-first Desk (owner request, UX proposal 1 of 3): evidence before money (hero shows closed trades against 30 with the Too early / Directional / Counts bar; P&L sits under it with its sample), "Can I decide yet?" replaces "Result vs baseline" in the band, fix buttons on "Needs you" (Start loop, Turn on market-hours check; nothing that loosens), one attention count, Activity shows rank instead of a bare score and flags trades the committee would have refused (engine journals `rank`, `of`, `committee` on the entry line, display only), lane cards lead with evidence, GEX / flow / candidates moved to Market, nav grouped Daily / Research / Market. Next: Lanes decision-readiness row (2 of 3), System controls and IBKR fill columns (3 of 3).
+* 2026-11-27: robustness beside every registered pass rule (`robustness.py`, from BijectiveLabs' falsification chain):
+  an interval resampled by whole days and the mean in three consecutive blocks of days, on SW1/ST1, entry hypotheses and
+  exit-rule comparisons. Warns, never changes a verdict. Next: show the warning on the Lab page (display only).
+
+* 2026-11-27: IBKR first, Yahoo only where IBKR has no research data (owner decision): `fallback_data.py`, on by default
+  with `OPTPLAT_DATA=ibkr` (`OPTPLAT_DATA_FALLBACK=none` turns it off). Order quotes stay IBKR-only; option lanes refuse
+  `yahoo-fallback` chains. Cboe as a second source was dropped: its data file returns a Cloudflare block to programs.
+* 2026-11-27: IBKR paper vs simulated fill report (`python -m optplat.mirror_report --db <path>`, read-only), and the mirror
+  reads back still-working IBKR orders while idle so later fills are audited (`ibkr_mirror_status`). Status-doc next step 2.
+
 * 2026-11-26: IBKR paper orders (owner decision, CLAUDE.md rule 1 amended): `broker/ibkr.py` implemented and passing the conformance suite on a fake IB; `MirroredSimBroker` copies main-account orders to IBKR paper behind `OPTPLAT_IBKR_MIRROR=1` (default off). Not yet run against a real paper account.
 
 * 2026-11-26: registered SW1 (swing lane vs SPY) and ST1 (short-term lane vs zero) with pass criteria in code (`lane_hypotheses.py`), on the owner's instruction with criteria delegated to the agent. Confirmatory trades start 2026-11-27. Next: show their status (COLLECTING n/60, n/100) on the Lab page; display only.

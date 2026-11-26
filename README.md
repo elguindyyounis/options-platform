@@ -146,7 +146,8 @@ Environment variables (see `.env.example`):
 | Variable | Meaning |
 |---|---|
 | `OPTPLAT_BROKER` | `sim` (default) or `ibkr_paper` |
-| `OPTPLAT_DATA` | `demo` (default with `sim`) or `yahoo` (needs `pip install -e ".[yahoo]"`) |
+| `OPTPLAT_DATA` | `demo` (default with `sim`), `yahoo` (needs `pip install -e ".[yahoo]"`) or `ibkr` (the shared localhost IBKR service) |
+| `OPTPLAT_DATA_FALLBACK` | With `ibkr`: `yahoo` (default) fills in chains and bars only where IBKR has none, labelled `yahoo-fallback`; order quotes always come from IBKR. `none` turns it off |
 | `OPTPLAT_ALLOW_UNVERIFIED_QUOTES` | `1` lets unofficial quotes through the risk gate. Research only. `./run.sh yahoo` sets it |
 | `OPTPLAT_OPEN_BROWSER` | `1` opens the dashboard, already connected, when the server is ready. `./run.sh` sets it |
 | `OPTPLAT_AUTOSTART_LOOP` | `1` starts the cycle loop at launch. Does not change the saved entries setting |

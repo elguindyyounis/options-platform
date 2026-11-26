@@ -67,6 +67,15 @@ class EventView:
 EarningsSource = Callable[[str], Optional[list[date]]]
 
 
+def earnings_source_for(data: str, fallback: str = "yahoo") -> Optional[EarningsSource]:
+    """Where earnings dates come from. IBKR's shared service has none, so with ``OPTPLAT_DATA=ibkr`` they come from
+    Yahoo unless the Yahoo fallback is off (owner decision 2026-11-27: Yahoo only where IBKR has no data). Without a
+    source every single-stock earnings check is unknown, and unknown blocks swing and option-lane entries."""
+    if data == "yahoo" or (data == "ibkr" and fallback == "yahoo"):
+        return yahoo_earnings_dates
+    return None
+
+
 class EventCalendar:
     CACHE_TTL = timedelta(hours=12)
 

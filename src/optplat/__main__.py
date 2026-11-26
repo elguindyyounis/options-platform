@@ -135,6 +135,12 @@ def main() -> None:
     elif data == "ibkr":
         from .ibkr_data import IBKRDataProvider
         provider = IBKRDataProvider()
+        if os.environ.get("OPTPLAT_DATA_FALLBACK", "yahoo") == "yahoo":
+            # Owner decision 2026-11-27: Yahoo only where IBKR has no research data; never for order quotes.
+            from .fallback_data import IBKRWithYahooFallback
+            provider = IBKRWithYahooFallback(provider, YahooDataProvider)
+        elif os.environ.get("OPTPLAT_DATA_FALLBACK") != "none":
+            sys.exit("OPTPLAT_DATA_FALLBACK must be 'yahoo' or 'none'")
     else:
         sys.exit("OPTPLAT_DATA must be 'demo', 'yahoo' or 'ibkr'")
 
@@ -158,7 +164,7 @@ def main() -> None:
             print(f"WARNING (restore): {w}", flush=True)
     # The demo market is fictional and runs at any hour, so market-hours enforcement is off by default there.
     default_cfg = EngineConfig(enforce_market_hours=(data != "demo"))
-    from .events import EventCalendar, yahoo_earnings_dates
+    from .events import EventCalendar, earnings_source_for
 
     which_strategy = os.environ.get("OPTPLAT_STRATEGY", "liquid-trend")
     strategies = {
@@ -170,7 +176,7 @@ def main() -> None:
         sys.exit("OPTPLAT_STRATEGY must be one of: " + ", ".join(strategies))
     strategy = strategies[which_strategy]()
     print(f"Strategy: {strategy.name} (paper research, no demonstrated edge)", flush=True)
-    calendar = EventCalendar(earnings_source=yahoo_earnings_dates if data == "yahoo" else None)
+    calendar = EventCalendar(earnings_source=earnings_source_for(data, os.environ.get("OPTPLAT_DATA_FALLBACK", "yahoo")))
     engine = TradingEngine(manager, provider, strategy, default_config=default_cfg, calendar=calendar)
     scan_every = os.environ.get("OPTPLAT_SCAN_EVERY_S", "")
     if scan_every:

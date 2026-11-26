@@ -36,6 +36,7 @@ def test_clear_difference_passes_the_mechanical_bar_and_uses_the_later_dates():
     rows = er.outcomes(fs, ps, TODAY)
     r = er.compare_hypothesis("E1", rows)
     assert r["plan_bar_mechanical"] and r["mean_diff_pct"] > 50
+    assert r["robustness"]["warning"] is None and r["robustness"]["ci_day_clustered"][0] > 0
     assert r["ci95_pct"][0] > 0 and r["mean_diff_without_top3_pct"] > 0
     assert len(r["later_dates"]) == 6 and set(r["later_dates"]) <= {day(i) for i in range(20)}
     assert r["independent"] == {"treatment": 60, "control": 60}  # one per underlying per day; 3 names x 20 days
