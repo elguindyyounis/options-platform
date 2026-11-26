@@ -17,6 +17,18 @@ if ! mkdir "$LOCK" 2>/dev/null; then echo "another update is running"; exit 0; f
 trap 'rmdir "$LOCK"' EXIT
 
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then echo "checkout has local changes; refusing to update"; exit 1; fi
+
+# The IBKR paper adapter needs the optional ib_async package. Read (never source) the owner's config to see if it is on.
+SPEC="."
+if [ -f "$DATA/config.env" ] && grep -Eq '^[[:space:]]*(export[[:space:]]+)?(OPTPLAT_IBKR_MIRROR=["'"'"']?1|OPTPLAT_BROKER=["'"'"']?ibkr_paper)' "$DATA/config.env"; then
+  SPEC=".[ibkr]"
+  if ! "$APP/.venv/bin/python" -c "import ib_async" 2>/dev/null; then
+    echo "IBKR paper is switched on but ib_async is missing; installing it"
+    if "$APP/.venv/bin/python" -m pip install --quiet -e "$SPEC"; then
+      launchctl kickstart -k "gui/$(id -u)/$LABEL" || true
+    fi
+  fi
+fi
 OLD="$(git rev-parse HEAD)"
 git fetch --quiet origin stable
 NEW="$(git rev-parse origin/stable)"
@@ -35,9 +47,9 @@ fi
 rollback() {
   echo "update failed; going back to $OLD"
   git reset --hard --quiet "$OLD"
-  "$APP/.venv/bin/python" -m pip install --quiet -e . || true
+  "$APP/.venv/bin/python" -m pip install --quiet -e "$SPEC" || true
 }
 git merge --ff-only --quiet "$NEW"
-if ! "$APP/.venv/bin/python" -m pip install --quiet -e . || ! "$APP/.venv/bin/python" -m compileall -q src; then rollback; exit 1; fi
+if ! "$APP/.venv/bin/python" -m pip install --quiet -e "$SPEC" || ! "$APP/.venv/bin/python" -m compileall -q src; then rollback; exit 1; fi
 echo "updated $OLD -> $NEW; restarting"
 launchctl kickstart -k "gui/$(id -u)/$LABEL" || echo "restart failed; launchd will start the new build on next login"
