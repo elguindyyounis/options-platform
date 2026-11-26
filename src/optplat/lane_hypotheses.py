@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Mapping, Optional, Sequence
 
+from . import robustness
 from .market_clock import NY
 
 LATER_FRACTION = 0.3
@@ -140,7 +141,9 @@ def evaluate(h: LaneHypothesis, trades: Sequence[dict[str, Any]],
     mean_later = sum(later) / len(later)
     mean_trim = sum(rets[:-3]) / (len(rets) - 3)
     passed = len(later) >= 4 and mean_later > 0 and lo > 0 and mean_trim > 0
-    return {**out, "verdict": "PASSED_CRITERIA" if passed else "FAILED_CRITERIA",
+    robust = robustness.check([(o["day"], o["ret_pct"]) for o in fixed if o["day"] in later_set],
+                              [(o["day"], o["ret_pct"]) for o in fixed], passed, alpha=alpha)
+    return {**out, "verdict": "PASSED_CRITERIA" if passed else "FAILED_CRITERIA", "robustness": robust,
             "mean_pct": round(sum(rets) / len(rets), 3), "later_days": len(later_set), "later_observations": len(later),
             "mean_later_pct": round(mean_later, 3), "ci_later_pct": [round(lo, 3), round(hi, 3)], "ci_level": 1 - alpha,
             "mean_without_top3_pct": round(mean_trim, 3),

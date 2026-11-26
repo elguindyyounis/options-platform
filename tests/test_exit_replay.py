@@ -86,6 +86,7 @@ def test_compare_uses_later_30_percent_and_drops_top_three():
     out = xr.compare(better, base)
     assert out["later_days"] == days[-3:] and out["later_observations"] == 15
     assert out["mean_diff_pct"] == 10.0 and out["ci95_pct"] == [10.0, 10.0] and out["plan_bar_mechanical"] is True
+    assert out["robustness"]["ci_day_clustered"] == [10.0, 10.0] and out["robustness"]["subperiod_means"] == [10.0] * 3
     assert xr.compare(better, base) == out  # deterministic
     # one big winner carries it: removing the three best observations kills the pass
     carried = _rows([(d, 0.0) for d in days for _ in range(5)])

@@ -136,6 +136,10 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-27: robustness beside every registered pass rule (`robustness.py`, from BijectiveLabs' falsification chain):
+  an interval resampled by whole days and the mean in three consecutive blocks of days, on SW1/ST1, entry hypotheses and
+  exit-rule comparisons. Warns, never changes a verdict. Next: show the warning on the Lab page (display only).
+
 * 2026-11-27: IBKR first, Yahoo only where IBKR has no research data (owner decision): `fallback_data.py`, on by default
   with `OPTPLAT_DATA=ibkr` (`OPTPLAT_DATA_FALLBACK=none` turns it off). Order quotes stay IBKR-only; option lanes refuse
   `yahoo-fallback` chains. Cboe as a second source was dropped: its data file returns a Cloudflare block to programs.
