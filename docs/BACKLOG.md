@@ -132,6 +132,8 @@ Existing items, in order:
 ## Done
 
 * 2026-11-26: IBKR paper orders (owner decision, CLAUDE.md rule 1 amended): `broker/ibkr.py` implemented and passing the conformance suite on a fake IB; `MirroredSimBroker` copies main-account orders to IBKR paper behind `OPTPLAT_IBKR_MIRROR=1` (default off). Not yet run against a real paper account.
+
+* 2026-11-26: registered SW1 (swing lane vs SPY) and ST1 (short-term lane vs zero) with pass criteria in code (`lane_hypotheses.py`), on the owner's instruction with criteria delegated to the agent. Confirmatory trades start 2026-11-27. Next: show their status (COLLECTING n/60, n/100) on the Lab page; display only.
 * 2026-11-26: Desk regime line (UX-9): `GET /api/regime` and a one-line Desk reading of the market-regime guard (blocked puts/calls and the rule, "unknown" and "off" never shown as all-clear, fictional data labelled). Display only. Next candidates: challenge 11 "effective positions" count (display only); challenges 12 and 11's cap need the owner.
 
 * Shared read-only IBKR data consumer (owner priority, 2026-11-26): opt-in
