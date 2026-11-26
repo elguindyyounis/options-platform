@@ -116,8 +116,8 @@ def main() -> None:
             # A bad paper-only setting must never take the platform down: run without the mirror and say why.
             broker = SimBroker()
             broker.mirror_disabled_reason = str(exc)
-            print(f"IBKR paper mirror OFF: {exc}. Check IBKR_PAPER_ACCOUNT (DU + digits) and IBKR_PAPER_PORT "
-                  "(7497 or 4002) in config.env.", flush=True)
+            print(f"IBKR paper mirror OFF: {exc}. Check IBKR_PAPER_ACCOUNT (DU + digits, or remove it to use "
+                  "the one paper account TWS is logged into) and IBKR_PAPER_PORT (7497 or 4002) in config.env.", flush=True)
     elif which == "sim":
         broker = SimBroker()
     elif which == "ibkr_paper":

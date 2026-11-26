@@ -10,8 +10,9 @@ money, risk limits, brokers, or credentials. Agents improve the code around thos
    *Owner decision, 2026-11-26 (the owner said: change the rules so I can make trade orders through IBKR, just on the
    paper account; automatic with limits; mirror the main account):* orders MAY be sent to an **Interactive Brokers
    paper account**, automatically, only through `broker/ibkr.py`, and only when every one of these holds: the host is
-   localhost; the port is a paper port (7497 / 4002); the configured account and EVERY account the session manages
-   begin with `DU`; the order is a DAY limit order inside the adapter's own size ceilings; it passed the risk policy
+   localhost; the port is a paper port (7497 / 4002); EVERY account the session manages begins with `DU`, and the
+   orders go to the configured account or, if none is configured (owner decision 2026-11-27), to the session's only
+   account, never a guess among several; the order is a DAY limit order inside the adapter's own size ceilings; it passed the risk policy
    and the kill switch. Sending to IBKR is off unless the owner switches it on (`OPTPLAT_IBKR_MIRROR=1`). Anything
    that could reach a live account (a live port, a non-`DU` account, a remote host, market orders, a way around these
    checks) is still forbidden; those checks may only be made stricter.

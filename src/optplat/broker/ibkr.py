@@ -54,8 +54,12 @@ _TERMINAL = {"Filled", "Cancelled", "ApiCancelled", "Inactive"}
 ID_PREFIX = "ibkr:"
 
 
-def ibkr_paper_config() -> tuple[str, int, str]:
-    """Validate connection settings. Refuses anything that is not a local paper session."""
+def ibkr_paper_config() -> tuple[str, int, Optional[str]]:
+    """Validate connection settings. Refuses anything that is not a local paper session.
+
+    The account may be left unset (owner decision 2026-11-27): it is then taken from TWS, and only when the session
+    manages exactly one account and that account is a paper (DU) account. A value that is set must be valid.
+    """
     host = os.environ.get("IBKR_HOST", "127.0.0.1")
     port = int(os.environ.get("IBKR_PAPER_PORT", "7497"))
     account = os.environ.get("IBKR_PAPER_ACCOUNT", "")
@@ -63,9 +67,9 @@ def ibkr_paper_config() -> tuple[str, int, str]:
         raise ValueError("IBKR host must be local")
     if port not in ALLOWED_PAPER_PORTS:
         raise ValueError("IBKR paper-only port required (7497/4002)")
-    if not is_paper_account(account):
-        raise ValueError("A paper account id beginning with DU is required")
-    return host, port, account
+    if account and not is_paper_account(account):
+        raise ValueError("IBKR_PAPER_ACCOUNT must be a paper account id: DU followed by digits (or leave it unset)")
+    return host, port, account or None
 
 
 def is_paper_account(account: Any) -> bool:
@@ -98,7 +102,8 @@ class IBKRPaperBroker(BrokerAdapter):
 
     def __init__(self, *, ib: Any = None, api: Any = None, runner: Optional[Callable[..., Any]] = None,
                  client_id: Optional[int] = None, clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> None:
-        self.host, self.port, self.account_id = ibkr_paper_config()
+        self.host, self.port, self._pinned = ibkr_paper_config()
+        self.account_id: Optional[str] = self._pinned
         self.client_id = int(os.environ.get("IBKR_ORDER_CLIENT_ID", DEFAULT_CLIENT_ID)) if client_id is None else client_id
         self._ib, self._api, self._run, self._clock = ib, api, runner, clock
         self._contracts: dict[OptionContract, Any] = {}
@@ -118,12 +123,20 @@ class IBKRPaperBroker(BrokerAdapter):
             if not run(ib.isConnected):
                 self._verified = False
                 run(ib.connectAsync, self.host, self.port, clientId=self.client_id, readonly=False, timeout=10,
-                    account=self.account_id)
+                    account=self.account_id or "")
             if not self._verified:
                 accounts = list(run(ib.managedAccounts) or [])
-                if self.account_id not in accounts or not all(is_paper_account(a) for a in accounts):
+                if not accounts or not all(is_paper_account(a) for a in accounts):
                     run(ib.disconnect)
                     raise RuntimeError("IBKR session is not a paper-only session; refusing to use it")
+                if self._pinned is None:
+                    if len(accounts) != 1:
+                        run(ib.disconnect)
+                        raise RuntimeError("IBKR session manages several paper accounts; set IBKR_PAPER_ACCOUNT")
+                    self.account_id = accounts[0]
+                elif self._pinned not in accounts:
+                    run(ib.disconnect)
+                    raise RuntimeError("IBKR session does not manage the configured paper account")
                 run(ib.reqAllOpenOrdersAsync)   # bind working orders from earlier sessions so idempotency holds
                 self._verified = True
             return ib

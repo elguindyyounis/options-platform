@@ -1105,3 +1105,7 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 ## 2026-11-27 (Claude): a bad IBKR mirror setting no longer stops the platform
 
 * The owner's Mac stopped starting after IBKR settings were added; the likely cause is `IBKRPaperBroker()` refusing the account/port at startup, which crashed `__main__`. Now a `ValueError` from those paper-only checks turns the mirror off (plain simulator), prints why, and `/api/health` shows `broker.ibkr_mirror.state = disabled` with the reason. No check was loosened: IBKR still gets nothing unless the settings are valid. Verified: pytest. Not verified: the Mac's actual log (not readable from here). Merged on the owner's standing instruction.
+
+## 2026-11-27 (Claude, owner request): IBKR paper account read from TWS
+
+* Owner asked not to have to type the paper account id. `IBKR_PAPER_ACCOUNT` is now optional: unset, the adapter uses the session's account only when TWS manages exactly one account and it is `DU`; several accounts, any non-`DU` account or none means no orders and a disconnect. A set value must still be `DU` + digits. CLAUDE.md rule 1 updated with the owner's decision. The test case "empty account is refused" was replaced by this decision with stricter cases (placeholder, spaces) and new refusal tests. Verified: pytest. Merged on the owner's standing instruction.

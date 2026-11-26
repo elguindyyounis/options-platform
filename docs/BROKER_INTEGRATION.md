@@ -9,7 +9,7 @@ conformance suite against a fake IB session. It has **not** yet run against a re
 1. Log into TWS (or IB Gateway) in **paper** mode. In *Global Configuration > API > Settings*: enable socket clients,
    and turn **"Read-Only API" off** (orders are refused while it is on). Paper ports: TWS 7497, Gateway 4002.
 2. `pip install -e ".[ibkr]"`, then in the platform's environment set:
-   `OPTPLAT_BROKER=sim`, `OPTPLAT_IBKR_MIRROR=1`, `IBKR_PAPER_ACCOUNT=DU...`, `IBKR_PAPER_PORT=7497`.
+   `OPTPLAT_BROKER=sim`, `OPTPLAT_IBKR_MIRROR=1`. `IBKR_PAPER_ACCOUNT` is optional: unset, the account is read from TWS, and only when TWS manages exactly one account and it begins with `DU`.
    Optional `IBKR_ORDER_CLIENT_ID` (default 95; 94 is the Alerter's read-only data service). Keep the account id out
    of git.
 3. Restart the platform. It prints "IBKR paper mirror ON". `GET /api/health` shows `broker.ibkr_mirror` with the
