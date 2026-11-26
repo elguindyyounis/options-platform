@@ -106,3 +106,14 @@ def test_open_pnl_says_when_an_open_trade_has_no_mark(parts):
     assert src["swing-options-base"]["open_complete"] is True and src["swing-options-base"]["open_unmarked"] == 0
     # the number itself is unchanged: unmarked trades still add 0
     assert src["flow-options"]["open_pnl"] == 0.0
+
+
+def test_each_lane_says_whether_it_has_a_pre_registered_hypothesis(parts):
+    # Display only: the Lanes page's decision-readiness check 4 reads this instead of guessing.
+    manager, engine = parts
+    seed(engine.store)
+    out = build_all(manager, engine.store, True, T0 + timedelta(days=3), engine.option_lanes)
+    by = {x["source"]: x for x in out["sources"]}
+    assert by[sw_mod.LANE]["hypothesis"]["id"] == "SW1" and by[st_mod.LANE]["hypothesis"]["id"] == "ST1"
+    assert by[sw_mod.LANE]["hypothesis"]["first_day"] == "2026-11-27"
+    assert by["swing-options-base"]["hypothesis"] is None and by["flow-options"]["hypothesis"] is None
