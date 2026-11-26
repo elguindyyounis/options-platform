@@ -1055,3 +1055,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Decision made: the endpoint calls the cached `RegimeSource.read()` (5-minute TTL), so a dashboard refresh does not add a data request per refresh.
 * Verified: `python -m pytest -q` 764 pass (4 new in `tests/test_regime.py`, one of them under node); `node --check app.js`. Not verified: the line in a browser (light theme, phone width), real data, the Mac. Thursday, so no weekend scan.
 * Deploy: the platform is not auto-deployed; the owner's Mac copy is a git clone they update themselves, so arrival there is unconfirmed.
+
+## 2026-11-26 (Claude, owner request): IBKR paper orders
+
+* Owner: "change the rules so I can make trade orders through IBKR just on the paper account"; chose automatic with limits, mirroring the main account. CLAUDE.md hard rule 1 and the human-decision list amended with those words and the paper-only conditions.
+* `broker/ibkr.py`: ib_async on its own loop thread; refuses non-local hosts, non-paper ports (now 7497/4002 only; 7947 removed), non-DU accounts, and any session managing a non-DU account; DAY limit orders only, at most 10 contracts / $5,000 premium; orderRef idempotency searched in working and completed orders; lookups that cannot run raise rather than answer "no such order". `broker/mirror.py`: `MirroredSimBroker`, simulator stays the record, one background worker copies accepted orders and cancels, all outcomes audited.
+* Verified: `python -m pytest -q` 810 pass (28 in `tests/test_ibkr_conformance.py`, 18 in `tests/test_ibkr_mirror.py`; the shared conformance suite runs against both). Not verified: a real TWS paper session, IBKR's price-tick rules for non-penny options (an off-tick limit is rejected by IBKR and audited), the startup wiring in `__main__` (not covered by a test).
+

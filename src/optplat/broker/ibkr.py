@@ -1,20 +1,57 @@
-"""Interactive Brokers PAPER adapter: a skeleton for you to finish.
+"""Interactive Brokers PAPER adapter (owner decision 2026-11-26, CLAUDE.md hard rule 1).
 
-Every trading method raises NotImplementedError on purpose. Implement them with ``ib_async``
-(``pip install -e .[ibkr]``), then run the shared conformance suite against it. See
-docs/BROKER_INTEGRATION.md for the checklist. Live trading is not supported by this project.
+Sends DAY limit orders to an IBKR **paper** account through TWS or IB Gateway with ``ib_async``
+(``pip install -e .[ibkr]``). It refuses, before any order:
+
+* a host that is not localhost, or a port that is not a paper port (7497 TWS, 4002 Gateway);
+* a configured account that does not begin with ``DU``;
+* a session in which ANY managed account does not begin with ``DU`` (a live login would show a ``U`` account);
+* an order over ``MAX_CONTRACTS_PER_ORDER`` contracts or ``MAX_ORDER_PREMIUM_USD`` of premium, or with a bad price;
+* a sell for more than the paper account holds after its other working sells.
+
+Idempotency: our key is IBKR's ``orderRef``, and the broker order id is ``ibkr:<key>``, so a restart finds the same
+order by searching working and completed orders. If that search cannot run (disconnected), it raises: "no such order"
+is only ever said when IBKR answered. IBKR does not timestamp option bid/ask, so ``get_quote`` never marks a quote
+verified; the default risk policy will not trade on its own quotes.
+
+Paper fills are IBKR's simulator, not a real market; keep the ``SimBroker`` numbers as the audit comparison.
 """
 from __future__ import annotations
 
+import asyncio
+import inspect
+import math
 import os
-from typing import Any, Optional
+import threading
+from datetime import date, datetime, timezone
+from typing import Any, Callable, Optional
 
-from ..models import Account, BrokerOrderStatus, Mode, OptionContract, OrderIntent, Position, Quote
-from .base import BrokerAdapter
+from ..models import (
+    STATUS_CANCELLED,
+    STATUS_FILLED,
+    STATUS_PARTIALLY_FILLED,
+    STATUS_REJECTED,
+    STATUS_SUBMITTED,
+    Account,
+    BrokerOrderStatus,
+    Mode,
+    OptionContract,
+    OrderIntent,
+    Position,
+    Quote,
+    Right,
+    Side,
+)
+from .base import BrokerAdapter, BrokerRejected, QuoteUnavailable
 
-ALLOWED_PAPER_PORTS = {7497, 7947, 4002}
-
-_TODO = "Implement with ib_async; see docs/BROKER_INTEGRATION.md"
+ALLOWED_PAPER_PORTS = {7497, 4002}
+MAX_CONTRACTS_PER_ORDER = 10
+MAX_ORDER_PREMIUM_USD = 5_000.0
+DEFAULT_CLIENT_ID = 95          # 94 is the Alerter's read-only data service
+CALL_TIMEOUT_S = 20.0
+SETTLE_S = 3.0
+_TERMINAL = {"Filled", "Cancelled", "ApiCancelled", "Inactive"}
+ID_PREFIX = "ibkr:"
 
 
 def ibkr_paper_config() -> tuple[str, int, str]:
@@ -25,42 +62,231 @@ def ibkr_paper_config() -> tuple[str, int, str]:
     if host not in ("localhost", "127.0.0.1"):
         raise ValueError("IBKR host must be local")
     if port not in ALLOWED_PAPER_PORTS:
-        raise ValueError("IBKR paper-only port required (7497/7947/4002)")
-    if not (account.startswith("DU") and account[2:].isdigit()):
+        raise ValueError("IBKR paper-only port required (7497/4002)")
+    if not is_paper_account(account):
         raise ValueError("A paper account id beginning with DU is required")
     return host, port, account
+
+
+def is_paper_account(account: Any) -> bool:
+    return isinstance(account, str) and account.startswith("DU") and account[2:].isdigit()
+
+
+class LoopThread:
+    """Runs ib_async on its own event loop thread; callers block with a timeout."""
+
+    def __init__(self) -> None:
+        self.loop = asyncio.new_event_loop()
+        threading.Thread(target=self.loop.run_forever, name="ibkr-paper", daemon=True).start()
+
+    def __call__(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        async def go() -> Any:
+            out = fn(*args, **kwargs)
+            return await out if inspect.isawaitable(out) else out
+        return asyncio.run_coroutine_threadsafe(go(), self.loop).result(CALL_TIMEOUT_S)
+
+
+def _round_limit(price: float, side: Side) -> float:
+    """Cents, never past the approved limit: buys round down, sells round up."""
+    cents = price * 100
+    return (math.floor(cents + 1e-9) if side is Side.BUY_TO_OPEN else math.ceil(cents - 1e-9)) / 100
 
 
 class IBKRPaperBroker(BrokerAdapter):
     mode = Mode.PAPER
     name = "ibkr_paper"
 
-    def __init__(self) -> None:
+    def __init__(self, *, ib: Any = None, api: Any = None, runner: Optional[Callable[..., Any]] = None,
+                 client_id: Optional[int] = None, clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> None:
         self.host, self.port, self.account_id = ibkr_paper_config()
+        self.client_id = int(os.environ.get("IBKR_ORDER_CLIENT_ID", DEFAULT_CLIENT_ID)) if client_id is None else client_id
+        self._ib, self._api, self._run, self._clock = ib, api, runner, clock
+        self._contracts: dict[OptionContract, Any] = {}
+        self._lock = threading.RLock()
+        self._verified = False
+
+    # ---- connection ------------------------------------------------------------------------------------------------
+    def _session(self) -> Any:
+        """A connected IB whose every managed account is paper. Raises otherwise; never half-trusts a session."""
+        with self._lock:
+            if self._ib is None:
+                import ib_async  # optional dependency, only needed when the owner enables IBKR
+                self._api = ib_async
+                self._run = self._run or LoopThread()
+                self._ib = self._run(ib_async.IB)
+            ib, run = self._ib, self._run
+            if not run(ib.isConnected):
+                self._verified = False
+                run(ib.connectAsync, self.host, self.port, clientId=self.client_id, readonly=False, timeout=10,
+                    account=self.account_id)
+            if not self._verified:
+                accounts = list(run(ib.managedAccounts) or [])
+                if self.account_id not in accounts or not all(is_paper_account(a) for a in accounts):
+                    run(ib.disconnect)
+                    raise RuntimeError("IBKR session is not a paper-only session; refusing to use it")
+                run(ib.reqAllOpenOrdersAsync)   # bind working orders from earlier sessions so idempotency holds
+                self._verified = True
+            return ib
 
     def healthcheck(self) -> dict[str, Any]:
-        raise NotImplementedError(_TODO)
+        try:
+            self._session()
+        except Exception as exc:  # noqa: BLE001 - report, never raise from a health check
+            return {"connected": False, "paper_only": None, "port": self.port, "reason": type(exc).__name__}
+        return {"connected": True, "paper_only": True, "port": self.port, "client_id": self.client_id}
 
+    # ---- account ---------------------------------------------------------------------------------------------------
     def get_account(self) -> Account:
-        raise NotImplementedError(_TODO)
+        ib = self._session()
+        values = {(v.tag, v.currency): v.value for v in self._run(ib.accountValues, self.account_id)}
+
+        def usd(tag: str) -> float:
+            raw = values.get((tag, "USD"), values.get((tag, "BASE")))
+            num = float(raw) if raw not in (None, "") else math.nan
+            if not math.isfinite(num):
+                raise RuntimeError(f"IBKR account value {tag} unavailable")
+            return num
+        premium = sum(p.quantity * p.avg_cost * p.contract.multiplier for p in self.get_positions())
+        return Account(equity=usd("NetLiquidation"), cash=max(0.0, usd("TotalCashValue")), open_premium=premium)
 
     def get_positions(self) -> list[Position]:
-        raise NotImplementedError(_TODO)
+        ib = self._session()
+        out = []
+        for p in self._run(ib.positions, self.account_id):
+            c = p.contract
+            if getattr(c, "secType", "") != "OPT" or p.position <= 0:
+                continue
+            mult = int(c.multiplier or 100)
+            contract = OptionContract(c.symbol, date.fromisoformat(f"{c.lastTradeDateOrContractMonth[:4]}-"
+                                      f"{c.lastTradeDateOrContractMonth[4:6]}-{c.lastTradeDateOrContractMonth[6:8]}"),
+                                      Right(c.right[:1]), float(c.strike), mult)
+            out.append(Position(contract, int(p.position), float(p.avgCost) / mult))
+        return out
+
+    def _qualified(self, contract: OptionContract) -> Any:
+        if contract in self._contracts:
+            return self._contracts[contract]
+        ib = self._session()
+        want = self._api.Option(contract.underlying, f"{contract.expiry:%Y%m%d}", contract.strike, contract.right.value,
+                                "SMART", multiplier=str(contract.multiplier), currency="USD",
+                                tradingClass=contract.underlying)
+        rows = [r for r in (self._run(ib.qualifyContractsAsync, want) or []) if r]
+        if len(rows) != 1 or rows[0].secType != "OPT" or str(rows[0].multiplier) != str(contract.multiplier):
+            raise BrokerRejected("IBKR has no single standard listing for this contract")
+        self._contracts[contract] = rows[0]
+        return rows[0]
 
     def get_quote(self, contract: OptionContract) -> Quote:
-        raise NotImplementedError(_TODO)
+        ib = self._session()
+        try:
+            ibc = self._qualified(contract)
+        except BrokerRejected as exc:
+            raise QuoteUnavailable(str(exc)) from None
+        tickers = self._run(ib.reqTickersAsync, ibc) or []
+        t = tickers[0] if tickers else None
+        bid, ask = (float(getattr(t, "bid", math.nan)), float(getattr(t, "ask", math.nan))) if t else (math.nan, math.nan)
+        if t is None or getattr(t, "marketDataType", None) != 1 or not (math.isfinite(bid) and math.isfinite(ask)) \
+                or ask <= 0 or bid < 0 or bid > ask:
+            raise QuoteUnavailable("No live two-sided IBKR quote")
+        return Quote(contract, bid, ask, self._clock(), "ibkr-paper", timestamp_verified=False)
+
+    # ---- orders ----------------------------------------------------------------------------------------------------
+    def _mine(self, trade: Any) -> bool:
+        # Completed orders from an earlier session can come back with a blank account. The session is verified
+        # paper-only and orderRef is our own unique key, so blank counts as ours: missing it could resend an order.
+        return getattr(trade.order, "account", "") in (self.account_id, "") and bool(getattr(trade.order, "orderRef", ""))
+
+    def _status(self, trade: Any) -> BrokerOrderStatus:
+        st = trade.orderStatus
+        raw, filled = st.status, int(st.filled or 0)
+        total = int(trade.order.totalQuantity)
+        if raw == "Filled" or (filled and filled >= total):
+            mapped = STATUS_FILLED
+        elif raw in ("Cancelled", "ApiCancelled"):
+            mapped = STATUS_CANCELLED
+        elif raw == "Inactive":
+            mapped = STATUS_REJECTED if not filled else STATUS_CANCELLED
+        else:
+            mapped = STATUS_PARTIALLY_FILLED if filled else STATUS_SUBMITTED
+        avg = float(st.avgFillPrice) if filled and st.avgFillPrice else None
+        return BrokerOrderStatus(ID_PREFIX + trade.order.orderRef, trade.order.orderRef, mapped, filled, avg)
+
+    def _find_trade(self, key: str) -> Optional[Any]:
+        ib = self._session()
+        for t in self._run(ib.trades):
+            if self._mine(t) and t.order.orderRef == key:
+                return t
+        for t in self._run(ib.reqCompletedOrdersAsync, True) or []:
+            if self._mine(t) and t.order.orderRef == key:
+                return t
+        return None
+
+    def _settle(self, trade: Any) -> None:
+        async def wait() -> None:
+            for _ in range(int(SETTLE_S / 0.1)):
+                if trade.orderStatus.status not in ("PendingSubmit", "ApiPending", ""):
+                    return
+                await asyncio.sleep(0.1)
+        self._run(wait)
 
     def submit_limit_order(self, intent: OrderIntent) -> BrokerOrderStatus:
-        raise NotImplementedError(_TODO)
+        qty, limit, mult = int(intent.quantity), float(intent.limit_price), intent.contract.multiplier
+        if not 1 <= qty <= MAX_CONTRACTS_PER_ORDER:
+            raise BrokerRejected(f"IBKR paper orders are limited to 1-{MAX_CONTRACTS_PER_ORDER} contracts")
+        if not (math.isfinite(limit) and limit > 0) or qty * limit * mult > MAX_ORDER_PREMIUM_USD:
+            raise BrokerRejected(f"IBKR paper order premium must be positive and at most ${MAX_ORDER_PREMIUM_USD:,.0f}")
+        if not intent.idempotency_key:
+            raise BrokerRejected("An idempotency key is required")
+        with self._lock:
+            existing = self.find_order_by_client_id(intent.idempotency_key)
+            if existing is not None:
+                return existing
+            ib = self._session()
+            ibc = self._qualified(intent.contract)
+            if intent.side is Side.SELL_TO_CLOSE:
+                held = sum(p.quantity for p in self.get_positions() if p.contract == intent.contract)
+                working = sum(int(t.order.totalQuantity) - int(t.orderStatus.filled or 0) for t in self._run(ib.openTrades)
+                              if self._mine(t) and t.order.action == "SELL" and getattr(t.contract, "conId", None) == ibc.conId)
+                if qty > held - working:
+                    raise BrokerRejected("Cannot sell more than the IBKR paper account holds")
+            order = self._api.LimitOrder("BUY" if intent.side is Side.BUY_TO_OPEN else "SELL", qty,
+                                         _round_limit(limit, intent.side), tif="DAY", account=self.account_id,
+                                         orderRef=intent.idempotency_key, outsideRth=False, transmit=True)
+            trade = self._run(ib.placeOrder, ibc, order)   # an exception here means "unknown": the manager reconciles
+            self._settle(trade)
+            return self._status(trade)
 
     def cancel_order(self, broker_order_id: str) -> BrokerOrderStatus:
-        raise NotImplementedError(_TODO)
+        key = broker_order_id[len(ID_PREFIX):] if broker_order_id.startswith(ID_PREFIX) else broker_order_id
+        with self._lock:
+            trade = self._find_trade(key)
+            if trade is None:
+                raise RuntimeError("IBKR has no order with that reference")
+            if trade.orderStatus.status not in _TERMINAL:
+                self._run(self._session().cancelOrder, trade.order)
+                self._settle_cancel(trade)
+            return self._status(trade)
+
+    def _settle_cancel(self, trade: Any) -> None:
+        async def wait() -> None:
+            for _ in range(int(SETTLE_S / 0.1)):
+                if trade.orderStatus.status in _TERMINAL:
+                    return
+                await asyncio.sleep(0.1)
+        self._run(wait)
 
     def get_order_status(self, broker_order_id: str) -> BrokerOrderStatus:
-        raise NotImplementedError(_TODO)
+        key = broker_order_id[len(ID_PREFIX):] if broker_order_id.startswith(ID_PREFIX) else broker_order_id
+        found = self.find_order_by_client_id(key)
+        if found is None:
+            raise RuntimeError("IBKR has no order with that reference")
+        return found
 
     def find_order_by_client_id(self, client_id: str) -> Optional[BrokerOrderStatus]:
-        raise NotImplementedError(_TODO)
+        trade = self._find_trade(client_id)
+        return self._status(trade) if trade is not None else None
 
     def get_open_orders(self) -> list[BrokerOrderStatus]:
-        raise NotImplementedError(_TODO)
+        ib = self._session()
+        return [self._status(t) for t in self._run(ib.openTrades) if self._mine(t)
+                and t.orderStatus.status not in _TERMINAL]

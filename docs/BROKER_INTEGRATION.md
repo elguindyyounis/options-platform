@@ -1,19 +1,40 @@
-# Broker integration checklist
+# Broker integration: IBKR paper
 
-Target for the first real connection: an **Interactive Brokers paper account** through TWS or
-IB Gateway, using `ib_async`. Nothing here has been run against a real account yet.
+Owner decision 2026-11-26 (CLAUDE.md hard rule 1): the platform may send orders to an **Interactive Brokers paper
+account**, automatically, mirroring the main simulated account. `broker/ibkr.py` is implemented and passes the shared
+conformance suite against a fake IB session. It has **not** yet run against a real paper account.
 
-## Setup
+## Turning it on (owner)
 
-1. Create/enable the paper account in IBKR and log into TWS or IB Gateway in **paper** mode.
-2. In TWS/Gateway: *Global Configuration → API → Settings*: enable socket clients, keep
-   "Read-Only API" **off** only on the paper session, and note the port (paper defaults: TWS 7497,
-   Gateway 4002).
-3. Check market-data permissions for US options on that account. Without them quotes will be empty
-   or delayed.
-4. `pip install -e ".[ibkr]"` and copy `.env.example` to `.env`:
-   `OPTPLAT_BROKER=ibkr_paper`, `IBKR_PAPER_ACCOUNT=DU...`, `IBKR_PAPER_PORT=7497`.
-   `ibkr_paper_config()` already refuses non-local hosts, non-paper ports and non-`DU` accounts.
+1. Log into TWS (or IB Gateway) in **paper** mode. In *Global Configuration > API > Settings*: enable socket clients,
+   and turn **"Read-Only API" off** (orders are refused while it is on). Paper ports: TWS 7497, Gateway 4002.
+2. `pip install -e ".[ibkr]"`, then in the platform's environment set:
+   `OPTPLAT_BROKER=sim`, `OPTPLAT_IBKR_MIRROR=1`, `IBKR_PAPER_ACCOUNT=DU...`, `IBKR_PAPER_PORT=7497`.
+   Optional `IBKR_ORDER_CLIENT_ID` (default 95; 94 is the Alerter's read-only data service). Keep the account id out
+   of git.
+3. Restart the platform. It prints "IBKR paper mirror ON". `GET /api/health` shows `broker.ibkr_mirror` with the
+   last outcome; every mirrored order, rejection, error and cancel is in the audit log as `ibkr_mirror_*`.
+
+## What it refuses (fail-closed, may only be made stricter)
+
+- A host other than localhost; a port other than 7497 / 4002; a configured account not beginning with `DU`.
+- A session where ANY managed account does not begin with `DU` (it disconnects without placing anything).
+- Anything but a DAY limit order; more than 10 contracts or $5,000 premium per order; a sell larger than the paper
+  account holds after its other working sells. Buys round the limit down to the cent, sells round it up.
+- Orders the risk policy or kill switch rejected never reach the simulator, so they never reach IBKR either.
+
+## How the mirror works
+
+`MirroredSimBroker` (in `broker/mirror.py`) is the simulated broker plus a copy. The simulator remains the account of
+record (fills, cash, positions, restart restore). Each order it accepts, and each cancel, is queued to one background
+worker that sends it to IBKR paper with the same idempotency key (`orderRef`), so a resend after a crash finds the
+existing order instead of placing a second. IBKR being closed, slow or rejecting an order is audited and never changes
+the simulated account. A restart restores the simulator from the database and does not resend old orders.
+
+## Still open
+
+- No reconciliation report yet comparing IBKR paper fills with the simulator's (read the `ibkr_mirror_*` audit).
+- Live-session check: run once during market hours with one liquid contract before trusting it.
 
 ## Methods to implement in `src/optplat/broker/ibkr.py`
 
