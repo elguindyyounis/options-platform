@@ -135,6 +135,12 @@ def main() -> None:
     elif data == "ibkr":
         from .ibkr_data import IBKRDataProvider
         provider = IBKRDataProvider()
+        if os.environ.get("OPTPLAT_DATA_FALLBACK", "yahoo") == "yahoo":
+            # Owner decision 2026-11-27: Yahoo only where IBKR has no research data; never for order quotes.
+            from .fallback_data import IBKRWithYahooFallback
+            provider = IBKRWithYahooFallback(provider, YahooDataProvider)
+        elif os.environ.get("OPTPLAT_DATA_FALLBACK") != "none":
+            sys.exit("OPTPLAT_DATA_FALLBACK must be 'yahoo' or 'none'")
     else:
         sys.exit("OPTPLAT_DATA must be 'demo', 'yahoo' or 'ibkr'")
 

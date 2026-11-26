@@ -131,6 +131,10 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-27: IBKR first, Yahoo only where IBKR has no research data (owner decision): `fallback_data.py`, on by default
+  with `OPTPLAT_DATA=ibkr` (`OPTPLAT_DATA_FALLBACK=none` turns it off). Order quotes stay IBKR-only; option lanes refuse
+  `yahoo-fallback` chains. Cboe as a second source was dropped: its data file returns a Cloudflare block to programs.
+
 * 2026-11-26: IBKR paper orders (owner decision, CLAUDE.md rule 1 amended): `broker/ibkr.py` implemented and passing the conformance suite on a fake IB; `MirroredSimBroker` copies main-account orders to IBKR paper behind `OPTPLAT_IBKR_MIRROR=1` (default off). Not yet run against a real paper account.
 
 * 2026-11-26: registered SW1 (swing lane vs SPY) and ST1 (short-term lane vs zero) with pass criteria in code (`lane_hypotheses.py`), on the owner's instruction with criteria delegated to the agent. Confirmatory trades start 2026-11-27. Next: show their status (COLLECTING n/60, n/100) on the Lab page; display only.

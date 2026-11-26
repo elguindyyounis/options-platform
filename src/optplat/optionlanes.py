@@ -131,7 +131,8 @@ def intrinsic(right: str, strike: float, spot: Optional[float]) -> float:
 
 def pick_contract(snap: MarketSnapshot, right: Right, now: datetime, p: Params) -> Optional[ChainRow]:
     """The row nearest the aimed strike inside the expiry window that passes the lane's quote limits, or None."""
-    if snap.source.startswith('ibkr') and not snap.timestamp_verified:
+    # Unverified IBKR chains, and Yahoo chains used as IBKR's fallback, never open a lane trade.
+    if snap.source.startswith(('ibkr', 'yahoo-fallback')) and not snap.timestamp_verified:
         return None
     spot = snap.underlying
     target = spot * (1 + p.otm_pct / 100) if right is Right.CALL else spot * (1 - p.otm_pct / 100)
