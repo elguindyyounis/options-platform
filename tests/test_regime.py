@@ -96,3 +96,64 @@ def test_engine_blocks_and_journals_a_put_into_a_bounce():
         assert not any(x["result"] == "FILLED" and "-P-" in str(x) for x in rep["entries"])
         j = c.get("/api/journal?limit=50", headers=H).json()
         assert any(d.get("disposition") == "SKIPPED_REGIME" for d in j)
+
+
+# ---- Desk line (UX-9): display only, never an all-clear when the reading is missing ----
+import json  # noqa: E402
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import pytest  # noqa: E402
+
+NOW = datetime(2026, 11, 24, 15, tzinfo=timezone.utc)
+
+
+def test_describe_known_blocked_reading_names_the_rule_and_authorizes_nothing():
+    d = regime.describe(regime.RegimeSource(selloff_then_bounce, lambda: NOW), data_source="demo daily bars (SPY)", fictional=True)
+    assert d["state"] == "known" and d["puts_allowed"] is False and d["calls_allowed"] is True
+    assert "New puts blocked" in d["reasons"][0] and d["authorizes_orders"] is False and d["fictional"] is True and "not an edge" in d["note"]
+
+
+def test_describe_unknown_and_off_never_look_like_a_block_or_a_reading(monkeypatch):
+    d = regime.describe(regime.RegimeSource(lambda: [100.0] * 10, lambda: NOW), data_source="x", fictional=False)
+    assert d["state"] == "unknown" and d["puts_allowed"] and d["calls_allowed"] and d["label"] is None
+    monkeypatch.setenv("OPTPLAT_REGIME_GUARD", "0")
+    assert regime.describe(regime.RegimeSource(selloff_then_bounce, lambda: NOW), data_source="x", fictional=False)["state"] == "off"
+
+
+def test_regime_endpoint_is_authenticated_and_labels_fictional_data():
+    clock = lambda: NOW  # noqa: E731
+    m = OrderManager(SimBroker(), Store(":memory:"))
+    e = TradingEngine(m, DemoDataProvider(clock=clock), LiquidTrendStrategy(), default_config=EngineConfig(), clock=clock)
+    e.regime = regime.RegimeSource(selloff_then_bounce, clock)
+    with TestClient(create_app(m, "t" * 24, e, Runner(e))) as c:
+        assert c.get("/api/regime").status_code in (401, 403)
+        j = c.get("/api/regime", headers=H).json()
+        assert j["puts_allowed"] is False and j["fictional"] is True and "demo-synthetic" in j["data_source"]
+
+
+STATIC = Path(__file__).resolve().parents[1] / "src" / "optplat" / "static"
+HARNESS = """
+const stub=()=>new Proxy(function(){},{get:(t,k)=>k==='matches'?false:(k==='style'||k==='classList'||k==='dataset')?stub():stub(),set:()=>true,apply:()=>stub()});
+global.document={getElementById:()=>stub(),createElement:()=>stub(),querySelectorAll:()=>[],addEventListener(){},createTextNode:()=>stub()};
+global.window={matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(){}};global.location={hash:''};global.history={replaceState(){}};
+global.sessionStorage={getItem:()=>'',setItem(){},removeItem(){}};global.fetch=()=>new Promise(()=>{});global.setInterval=()=>0;global.setTimeout=()=>0;
+require(process.argv[1]);const T=window.optplatRegimeText;
+const base={guard_on:true,data_source:'demo daily bars (SPY)',fictional:false,facts:{day_pct:0.4,rsi14:55}};
+console.log(JSON.stringify([T(null),T({...base,state:'off'}),T({...base,state:'unknown',fictional:true}),
+ T({...base,state:'known',label:'uptrend',puts_allowed:true,calls_allowed:true}),
+ T({...base,state:'known',label:'oversold_bounce',puts_allowed:false,calls_allowed:true,reasons:['New puts blocked: market is oversold bounce (RSI 28)']})]));
+"""
+
+
+def test_desk_line_never_reads_unknown_as_all_clear():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    out = json.loads(subprocess.run([node, "-e", HARNESS, str(STATIC / "app.js")], capture_output=True, text=True, check=True).stdout)
+    none, off, unk, ok, blocked = out
+    assert none["text"] == "" and off["cls"] == "warn" and "switched off" in off["text"]
+    assert unk["cls"] == "warn" and "not an all-clear" in unk["text"] and "Fictional demo data" in unk["text"]
+    assert ok["cls"] == "ok" and "uptrend" in ok["text"] and "not an edge" in ok["text"]
+    assert blocked["cls"] == "warn" and "New puts blocked" in blocked["text"] and "exits are untouched" in blocked["text"]

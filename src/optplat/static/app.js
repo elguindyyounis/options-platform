@@ -300,6 +300,29 @@
     return f;
   }
 
+  // One line under the verdict band: is the market-regime guard holding back new puts or calls right now, and why (display only).
+  function regimeText(r) {
+    if (!r) return { cls: "", text: "" };
+    const fict = r.fictional ? " Fictional demo data." : "";
+    if (r.state === "off") return { cls: "warn", text: "Market regime guard is switched off: no new put or call is held back for the market's state." };
+    if (r.state === "unknown") return { cls: "warn", text: "Market regime unknown (" + r.data_source + " not readable): nothing is blocked. An unknown reading never blocks a trade, so this is not an all-clear." + fict };
+    const f = r.facts || {}, bits = [];
+    if (f.day_pct !== undefined) bits.push("SPY " + (f.day_pct >= 0 ? "+" : "") + f.day_pct + "% today");
+    if (f.rsi14 !== null && f.rsi14 !== undefined) bits.push("RSI " + f.rsi14);
+    const label = String(r.label || "").replace(/_/g, " ");
+    if (r.puts_allowed && r.calls_allowed) return { cls: "ok", text: "Market regime: " + label + (bits.length ? " (" + bits.join(", ") + ")" : "") + ". New puts and calls are not held back by it. Thresholds are engineering choices, not an edge." + fict };
+    return { cls: "warn", text: (r.reasons || []).join(" ") + " Existing positions and exits are untouched. Thresholds are engineering choices, not an edge." + fict };
+  }
+  window.optplatRegimeText = regimeText;
+  function renderRegime(r) {
+    const p = $("regime-line");
+    if (!p) return;
+    const v = regimeText(r);
+    p.hidden = !v.text;
+    p.className = "verdict " + v.cls;
+    p.textContent = v.text;
+  }
+
   function renderDesk(portfolio, report, eq, status) {
     const a = portfolio.account, sm = eq.summary;
     // Headline is realized profit and loss, not the account balance: a balance of $100,000 with nothing traded says nothing.
@@ -2186,6 +2209,7 @@
         api("/api/results").catch(() => null), api("/api/risk/policy").catch(() => null),
         api("/api/shadow").catch(() => null),
       ]);
+      api("/api/regime").then(renderRegime).catch(() => renderRegime(null));
       S.connected = true; S.core = { status, report };
       checkForNewBuild(health.build_id);
       if (allTrades) S.trades = allTrades;

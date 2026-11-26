@@ -178,3 +178,20 @@ These are challenges raised by reading the alerter. None is proven.
   sample registered at a fixed time (`REGISTERED_AT`, no retrospective credit) and only on already risk-admitted candidates. The platform's D1 in
   `docs/EVOLUTION_PLAN.md` should copy the pre-registered start time and "cannot originate an order" wording.
 * Not read: `shadow_lane_runner.py` changes, `position_plans.py` IV additions; alerter tests not run.
+
+## Addendum 2026-11-26: `quote_evidence.py` and `strategy_comparison.py` (alerter at `97d6dcb`, 22 commits since `14f7d15`)
+
+* **`quote_evidence.py`**: a local paper fill needs an HMAC-signed proof bound to the exact quote (symbol, strike, bid, ask, sizes, source quote time, receipt time).
+  It expires after 5 seconds, must belong to the current IBKR connection and generation, needs a fresh server heartbeat (35 s), a US equity session,
+  live (not delayed) data and displayed size of at least 1 on both sides. "Receipt time alone cannot pass": the broker's own quote timestamp has to be
+  inside the window. Anything missing or malformed is a rejection. Where the alerter is stricter: the platform's `timestamp_verified` is a single
+  boolean from the provider, with no binding of the price to the time and no connection or heartbeat check. The platform's data is Yahoo (never verified)
+  or the demo, so its default policy already rejects real fills on unverified times; a signed-evidence design only matters once a verified source exists.
+  Nothing to copy now; noted for whoever wires a broker (owner decision).
+* **`strategy_comparison.py`**: a read-only common-capital overlay (100,000 capital, 1,000 per trade, 10,000 total, 2,000 per symbol, fees and extra slippage) over
+  recorded fills, labelled as vendored unchanged in this platform. Excludes synthetic data, unknown provenance, partial exits and trades before the common window;
+  open trades reserve premium and no mark or exit is invented. Promotion needs 60 sessions, 30 closed trades, 20 independent underlying-days, a 30% holdout of
+  at least 10 trades, a date-clustered bootstrap bound and survival without the three best trades. This is the same discipline as the platform's `entry_replay.py`
+  and shadow gate (independent observations, top-three removal); the alerter's rule is to cluster by date, which the platform's per-underlying-day reduction approximates.
+  I did not find a `strategy_comparison` module in this platform, so the "vendored unchanged" line was not verified.
+* Not read: `strategy_leaderboard.py`, `shadow_lane_runner.py`; alerter tests not run.
