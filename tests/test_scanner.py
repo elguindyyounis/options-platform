@@ -381,3 +381,19 @@ def test_a_demo_scan_has_a_heat_map_sentiment_and_low_open_interest_cases():
     assert out["heat_map"]["sectors"] and out["sentiment"]["tone"] in ("BROAD_STRENGTH", "BROAD_WEAKNESS", "MIXED")
     assert any(u["low_oi"] for u in out["unusual"]) and {u["print"] for u in out["unusual"]} & {"AT_ASK", "AT_BID", "MID"}
     assert out["coverage"]["chains_planned"] >= 30 and out["fictional"] is True
+
+
+def test_scan_records_the_regime_reading_on_each_shadow_follow_for_r1():
+    from optplat.regime import read_regime
+
+    reg = read_regime([100 - i * 0.6 for i in range(30)] + [82.5, 85.0])  # a slide, then a bounce day
+    assert reg is not None
+
+    class Src:
+        def read(self):
+            return reg
+
+    sc, store = make(regime=Src())
+    sc.run()
+    follows = store.shadow_all_follows(True)
+    assert follows and all(f.get("regime_label") == reg.label for f in follows)

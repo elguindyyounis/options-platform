@@ -1094,3 +1094,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 ## 2026-11-27 (Claude): updater installs ib_async when IBKR paper is switched on
 
 * `deploy/update.sh` reinstalled with `pip install -e .`, so the Mac's managed install would never have the optional `ib_async`, and the mirror would only log errors. It now reads (never sources) `config.env`: with `OPTPLAT_IBKR_MIRROR=1` or `OPTPLAT_BROKER=ibkr_paper` it installs `.[ibkr]`, including on runs with no new release, and restarts once. Verified: `tests/test_deploy.py` exercises the detection on six config lines; `bash -n`. Not verified: on the Mac.
+
+## 2026-11-27 (scheduled improvement run): regime reading was never recorded on scanner follows
+
+* Helps hypothesis R1 (regime guard). Plan Phase 1 item 1 (shadow book). `Scanner` held `self.regime` but did not pass it to `shadow.observe`, so follows made by the scan (the bulk of the shadow book) carried no `regime_*` fields; only lane picks did. R1 could therefore never compare blocked and unblocked entries. Fixed with one argument. Follows made before this change have no regime reading and stay unknown (not back-filled).
+* Merged `origin/main` (21 commits, no conflicts) into `agent/integration` first.
+* Data repo `options-platform-data` is not attached (access denied, no `add_repo` here), so the Phase 1 gate and any real result are unknown. No hypothesis registered or resolved. No risk, sizing, order, auth or schema change.
+* Verified: `python -m pytest -q` 864 pass; the new scanner test fails without the fix. Not verified: on real data or the Mac. Merged to main: see PR note below if added.

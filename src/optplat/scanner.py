@@ -429,7 +429,7 @@ class Scanner:
             except Exception as exc:  # noqa: BLE001 - the tracker is research; it must never break a scan
                 out["errors"].append(f"{sym}: tracker ({describe_exc(exc)})")
             try:
-                sb = shadow.observe(self.store, checked.snapshot, day, now, fict, self.strategies, self.calendar)
+                sb = shadow.observe(self.store, checked.snapshot, day, now, fict, self.strategies, self.calendar, self.regime)
                 shadow_followed += sb["followed"]
                 shadow_points += sb["points"]
             except Exception as exc:  # noqa: BLE001 - research only; it must never break a scan
