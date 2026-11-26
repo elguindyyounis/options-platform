@@ -29,7 +29,7 @@ from .liquidity import size_vs_liquidity
 from .flow import CAVEATS as FLOW_CAVEATS, related_themes, scan_flow
 from .gex import ASSUMPTIONS as GEX_ASSUMPTIONS, net_gex
 from .marketdata import MarketDataProvider, MarketSnapshot, snapshot_to_dict
-from .models import Account, OrderIntent, OrderState, Position, Side, utcnow
+from .models import Account, OptionContract, OrderIntent, OrderState, Position, Side, utcnow
 from .orders import OrderManager
 from .pricing import sell_limit_for
 from .risk import RiskPolicy
@@ -277,6 +277,8 @@ class TradingEngine:
             trading_allowed = is_open or not self._hours_enforced(cfg)
             self._cycle_cfg, self._cycle_now = cfg, now
             self._cycle_market_open = is_open
+            self._verifications_left = self.MAX_QUOTE_VERIFICATIONS_PER_CYCLE
+            self._verification_log: list[dict[str, Any]] = []
             report: dict[str, Any] = {
                 "started_at": now.isoformat(),
                 "market_open": is_open,
@@ -298,6 +300,7 @@ class TradingEngine:
                 "flow_themes": [],
                 "flow_caveats": list(FLOW_CAVEATS),
                 "errors": [],
+                "quote_verifications": self._verification_log,
             }
             self._guard(report, "snapshot prune", lambda: self._maybe_prune_snapshots(cfg, now))
             self._maybe_learn(cfg, now)
@@ -643,7 +646,7 @@ class TradingEngine:
         missing = [p.contract for p in positions if p.contract not in covered]
         if missing:
             try:
-                held = self.provider.quotes_for(missing)
+                held = getattr(self.provider, "decision_quotes_for", self.provider.quotes_for)(missing)
                 self._record_market_quotes(held, report)
                 for quote in held:
                     sim.set_quote(quote)
@@ -704,11 +707,40 @@ class TradingEngine:
             out.append(item)
         return out
 
+    MAX_QUOTE_VERIFICATIONS_PER_CYCLE = 3  # each spends two units of the shared IBKR historical budget
+
+    def _verified_quote(self, contract: OptionContract) -> Optional[Any]:
+        """For a provider that can cross-check one exact quote (IBKR), fetch it right before an order and hand it to the
+        simulator. Without it the order still goes to the risk policy, which refuses an unverified IBKR quote."""
+        verify = getattr(self.provider, "execution_quote", None)
+        sim = self.manager.broker
+        if verify is None or not isinstance(sim, SimBroker):
+            return None
+        entry: dict[str, Any] = {"contract": contract.occ_symbol.strip()}
+        if getattr(self, "_verifications_left", 0) <= 0:
+            entry["result"] = "BUDGET_SPENT_THIS_CYCLE"
+            quote = None
+        else:
+            self._verifications_left -= 1
+            try:
+                quote = verify(contract)
+            except Exception:  # noqa: BLE001 - no verification means the risk policy refuses the order
+                quote = None
+            entry["result"] = "VERIFIED" if quote is not None else "NOT_VERIFIED"
+            if quote is not None:
+                sim.set_quote(quote)
+                entry.update(bid=quote.bid, ask=quote.ask, as_of=quote.as_of.isoformat())
+        log = getattr(self, "_verification_log", None)
+        if log is not None:
+            log.append(entry)
+        return quote
+
     def _submit_exit(self, cfg: EngineConfig, pos: Position, quote: Any, now: datetime) -> dict[str, Any]:
         pending = self.manager._pending_close_qty(pos.contract)
         quantity = pos.quantity - pending
         if quantity <= 0:
             return {"result": "ALREADY_CLOSING"}
+        quote = self._verified_quote(pos.contract) or quote
         bucket = int(now.timestamp() // cfg.order_ttl_s)
         intent = OrderIntent(
             idempotency_key=f"x-{pos.contract.occ_symbol.strip()}-{bucket}",
@@ -879,6 +911,7 @@ class TradingEngine:
                 )
             except Exception:  # noqa: BLE001
                 pass
+            self._verified_quote(proposal.contract)
             try:
                 order = self.manager.submit(intent)
             except ValueError as exc:

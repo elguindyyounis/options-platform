@@ -16,10 +16,18 @@ delayed, frozen, closed-market, disconnected and missing rows. Only live-mode
 but **unverified** observations reach research. Option last prices are metadata,
 not fills. The source name explicitly says `ibkr-shared-research-only`.
 
-All simulated option fills remain blocked: verified-time risk checks are forced
-on for this provider, legacy permissive policy settings cannot bypass IBKR's
-unverified-time veto, held executable quotes are withheld, and the separate
-experimental option selector refuses unverified IBKR snapshots. No position,
+Verified-time risk checks stay forced on for this provider, and legacy permissive
+policy settings cannot bypass IBKR's unverified-time veto. **Main account
+(2026-11-27):** right before an entry or exit order the engine asks the service's
+`/v1/execution-quote` for that one contract. That endpoint matches the live bid/ask
+with IBKR's own timestamped BID_ASK record within 5 seconds. Only a matching,
+`PAPER_VERIFIED`, type-1 answer becomes a verified quote (dated at the IBKR
+event), so only then can the risk policy pass the order. At most 3 cross-checks
+per cycle are allowed, because each spends two units of the shared historical
+budget. Held contracts outside the snapshot get live but unverified quotes, so
+exits can be noticed; they can never fill one. The experimental option lanes
+still get no IBKR quotes and their selector still refuses unverified IBKR
+snapshots. No position,
 database, risk ceiling, strategy promotion or entry/exit threshold is changed.
 History supports daily and five-minute stock bars; it is not option-price
 history. Open interest is not depth or opening-buy evidence. The service's

@@ -9,7 +9,8 @@ from collections import deque
 from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
+import math
 from urllib.parse import urlencode
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
 
@@ -20,6 +21,8 @@ from .models import OptionContract, Quote, Right
 DAILY_BUDGET = 15          # new daily-bar fetches per window: leaves most of the shared budget to the Alerter
 DAILY_WINDOW_S = 600
 DAILY_TTL_S = 6 * 3600
+VERIFIED_MAX_AGE_S = 5.0   # the service's own limit for its cross-checked bid/ask
+VERIFIED_SOURCE = 'ibkr-paper-verified'
 TOKEN_PATH = Path.home() / 'Library/Application Support/OptionsMarketData/token'
 
 
@@ -29,7 +32,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def request(resource: str, params=None, *, timeout=80):
-    if resource not in ('health', 'snapshot', 'history', 'quotes'):
+    if resource not in ('health', 'snapshot', 'history', 'quotes', 'execution-quote'):
         raise ValueError('Unknown read-only resource')
     token = TOKEN_PATH.read_text().strip()
     if len(token) < 32 or TOKEN_PATH.stat().st_mode & 0o077:
@@ -85,6 +88,61 @@ class IBKRDataProvider(MarketDataProvider):
         as_of = min(times) if times else datetime.fromisoformat(raw['as_of'])
         return MarketSnapshot(symbol, raw['underlying'], tuple(b['close'] for b in raw['bars']),
                               tuple(rows), as_of, self.name, False)
+
+    @staticmethod
+    def _contract_json(c: OptionContract) -> dict:
+        return {'symbol': c.underlying, 'expiry': c.expiry.isoformat(), 'right': c.right.value,
+                'strike': c.strike, 'multiplier': c.multiplier}
+
+    @staticmethod
+    def _same(row: dict, c: OptionContract) -> bool:
+        return (row.get('symbol') == c.underlying and row.get('expiry') == c.expiry.isoformat()
+                and row.get('right') == c.right.value and row.get('strike') == c.strike
+                and row.get('multiplier', 100) == c.multiplier)
+
+    def execution_quote(self, contract: OptionContract) -> Optional[Quote]:
+        """The service's cross-check of ONE contract: its live bid/ask must match IBKR's own timestamped BID_ASK record
+        within 5 seconds. Returns a verified quote dated at that IBKR event time, or None for any doubt.
+
+        This is the only path by which IBKR data can satisfy the risk policy's verified-time rule. It spends the shared
+        historical budget, so the engine calls it only for an order it is about to send.
+        """
+        try:
+            row = self._request('execution-quote', {'contract': json.dumps(self._contract_json(contract))}, timeout=30)
+            now = self._clock()
+            at = datetime.fromisoformat(row['source_quote_at'])
+            seen = datetime.fromisoformat(row['received_at'])
+            bid, ask = float(row['bid']), float(row['ask'])
+        except Exception:  # noqa: BLE001 - unavailable, malformed or refused: not verified
+            return None
+        if (row.get('status') != 'PAPER_VERIFIED' or row.get('execution_eligible') is not True
+                or row.get('market_data_type') != 1 or not self._same(row, contract)
+                or at.tzinfo is None or seen.tzinfo is None
+                or any(not -1.0 <= (now - t).total_seconds() <= VERIFIED_MAX_AGE_S for t in (at, seen))
+                or not (math.isfinite(bid) and math.isfinite(ask)) or bid < 0 or ask <= 0 or bid > ask):
+            return None
+        return Quote(contract, bid, ask, at, VERIFIED_SOURCE, timestamp_verified=True)
+
+    def decision_quotes_for(self, contracts: Sequence[OptionContract]) -> list[Quote]:
+        """Live but UNVERIFIED IBKR quotes for the main account's held contracts, so exits can be noticed.
+
+        The risk policy refuses any order on an unverified IBKR quote, so these can trigger an exit decision but never
+        fill one: the engine fetches a verified quote before it sends the exit. Experimental lanes do not use this.
+        """
+        out: list[Quote] = []
+        for i in range(0, len(contracts), 24):
+            batch = list(contracts[i:i + 24])
+            raw = self._request('quotes', {'contracts': json.dumps([self._contract_json(c) for c in batch])})
+            for c in batch:
+                row = next((r for r in raw.get('rows', []) if self._same(r, c)), None)
+                if (not row or row.get('status') != 'LIVE_UNVERIFIED' or row.get('market_data_type') != 1
+                        or not row.get('received_at') or row.get('bid') is None or row.get('ask') is None):
+                    continue
+                bid, ask = float(row['bid']), float(row['ask'])
+                if math.isfinite(bid) and math.isfinite(ask) and 0 <= bid <= ask and ask > 0:
+                    out.append(Quote(c, bid, ask, datetime.fromisoformat(row['received_at']), 'ibkr',
+                                     timestamp_verified=False))
+        return out
 
     def quotes_for(self, contracts: Sequence[OptionContract]) -> list[Quote]:
         # Executable marks are deliberately withheld until venue BBO time is verified.
