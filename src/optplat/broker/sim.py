@@ -96,8 +96,13 @@ class SimBroker(BrokerAdapter):
                     self._try_fill(rec, quote)
 
     # ---- BrokerAdapter -----------------------------------------------
+    mirror_disabled_reason: Optional[str] = None  # set when IBKR mirroring was asked for but its settings are invalid
+
     def healthcheck(self) -> dict[str, Any]:
-        return {"connected": True, "broker": self.name, "mode": self.mode.value}
+        out = {"connected": True, "broker": self.name, "mode": self.mode.value}
+        if self.mirror_disabled_reason:
+            out["ibkr_mirror"] = {"state": "disabled", "reason": self.mirror_disabled_reason}
+        return out
 
     def get_quote(self, contract: OptionContract) -> Quote:
         with self._lock:

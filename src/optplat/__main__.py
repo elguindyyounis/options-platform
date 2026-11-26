@@ -109,8 +109,15 @@ def main() -> None:
         from .broker.ibkr import IBKRPaperBroker
         from .broker.mirror import MirroredSimBroker
 
-        broker = MirroredSimBroker(IBKRPaperBroker())
-        print("IBKR paper mirror ON: main-account orders are also sent to the IBKR paper account.", flush=True)
+        try:
+            broker = MirroredSimBroker(IBKRPaperBroker())
+            print("IBKR paper mirror ON: main-account orders are also sent to the IBKR paper account.", flush=True)
+        except ValueError as exc:
+            # A bad paper-only setting must never take the platform down: run without the mirror and say why.
+            broker = SimBroker()
+            broker.mirror_disabled_reason = str(exc)
+            print(f"IBKR paper mirror OFF: {exc}. Check IBKR_PAPER_ACCOUNT (DU + digits) and IBKR_PAPER_PORT "
+                  "(7497 or 4002) in config.env.", flush=True)
     elif which == "sim":
         broker = SimBroker()
     elif which == "ibkr_paper":
