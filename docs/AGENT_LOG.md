@@ -1055,3 +1055,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Decision made: the endpoint calls the cached `RegimeSource.read()` (5-minute TTL), so a dashboard refresh does not add a data request per refresh.
 * Verified: `python -m pytest -q` 764 pass (4 new in `tests/test_regime.py`, one of them under node); `node --check app.js`. Not verified: the line in a browser (light theme, phone width), real data, the Mac. Thursday, so no weekend scan.
 * Deploy: the platform is not auto-deployed; the owner's Mac copy is a git clone they update themselves, so arrival there is unconfirmed.
+
+## 2026-11-26 (Claude, owner request): register SW1 and ST1
+
+* The owner asked for the swing and short-term share lanes to be registered as experiments with pass criteria and delegated the criteria ("determine these on your own"). This is that owner decision; it is not a change to any risk default, sizing cap or exit threshold.
+* New `src/optplat/lane_hypotheses.py` (read-only evaluator, CLI `python -m optplat.lane_hypotheses --db <path>`) and rows SW1/ST1 in `docs/EVOLUTION_PLAN.md`. Only trades opened from 2026-11-27 count; fixed first-N sample (60 / 100 independent observations), one final verdict; extra stressed cost; SW1 against SPY over the same dates; the plan's bar, Bonferroni-corrected for the pair.
+* Verified: `python -m pytest -q` passes (13 new tests in `tests/test_lane_hypotheses.py`, synthetic fixtures only). Not verified: a run against the Mac's database (not reachable from here), or SPY bars from Yahoo/IBKR. No lane rule, ledger, risk, order, auth or schema change.
+

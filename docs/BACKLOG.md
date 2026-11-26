@@ -131,6 +131,7 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-26: registered SW1 (swing lane vs SPY) and ST1 (short-term lane vs zero) with pass criteria in code (`lane_hypotheses.py`), on the owner's instruction with criteria delegated to the agent. Confirmatory trades start 2026-11-27. Next: show their status (COLLECTING n/60, n/100) on the Lab page; display only.
 * 2026-11-26: Desk regime line (UX-9): `GET /api/regime` and a one-line Desk reading of the market-regime guard (blocked puts/calls and the rule, "unknown" and "off" never shown as all-clear, fictional data labelled). Display only. Next candidates: challenge 11 "effective positions" count (display only); challenges 12 and 11's cap need the owner.
 * 2026-11-25: paper balance says when positions are carried at cost (no bid): `Account.carried_at_cost`, Desk "(estimate)" label (challenge 10 / UX-10). Next candidates: UX-9 current-regime line on the Desk; challenge 12 needs the owner.
 
