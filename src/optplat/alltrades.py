@@ -95,8 +95,11 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
     sources: dict[str, dict[str, Any]] = {}
     for r in rows:
         sources.setdefault(r["source"], {"source": r["source"], "label": r["source_label"], "instrument": r["instrument"]})
+    from .lane_hypotheses import REGISTERED  # display only: which lane has a pre-registered test, and since when
+    registered = {h.lane: {"id": h.hid, "first_day": h.first_day.isoformat(), "sample": h.sample} for h in REGISTERED}
     for s in sources.values():
         s.update(summarise([r for r in rows if r["source"] == s["source"]]))
+        s["hypothesis"] = registered.get(s["source"])
     return {
         "fictional": fictional, "as_of": now.isoformat(), "trades": rows,
         "summary": {"all": summarise(rows), "options": summarise([r for r in rows if r["instrument"] == "options"]),

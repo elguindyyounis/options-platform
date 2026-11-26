@@ -371,6 +371,18 @@
   .feed-item.disagree { border-left:3px solid var(--warn); padding-left:10px; background:var(--warn-bg); }
   .lc-ev { font-size:12.5px; }
   .lane-card .lc-big { font-size:19px; }
+  table.readiness { min-width:1000px; font-size:12.5px; table-layout:fixed; }
+  table.readiness th { font-size:11px; letter-spacing:.03em; text-transform:uppercase; white-space:normal; vertical-align:bottom; padding:10px 8px; }
+  table.readiness td { vertical-align:top; padding:12px 8px; }
+  table.readiness th:first-child, table.readiness td:first-child { width:150px; padding-left:16px; }
+  table.readiness th:nth-child(2) { width:120px; } table.readiness th:last-child { width:110px; padding-right:16px; }
+  table.readiness td:last-child { padding-right:16px; }
+  table.readiness tr.sel td { background:var(--info-bg); }
+  table.readiness tr.ready td:first-child { box-shadow:inset 3px 0 0 var(--gain); }
+  .lanepick { background:none; border:0; padding:0; text-align:left; color:inherit; }
+  .ck.pass { color:var(--gain); } .ck.fail { color:var(--loss); } .ck.wait, .ck.na { color:var(--mut); }
+  .small { font-size:12px; }
+  #ln-board .legend { padding:10px 14px 12px; font-size:12.5px; }
 </style>
 </head>
 <body>

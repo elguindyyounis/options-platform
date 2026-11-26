@@ -2164,6 +2164,47 @@
     rows.sort((a, b) => (evidenceLevel(b.closed) - evidenceLevel(a.closed)) || (b.realized_pnl - a.realized_pnl));
     return { rows, base };
   }
+  // Decision readiness (owner's reading guide, 2026-11-27): the six checks a lane must pass before a rule, risk or promotion
+  // decision. Each is read from stored data; none is a judgement. "na" means the check does not apply to this row. A lane
+  // is ready only when every check that applies passes. Pure function, exposed for tests. Never promotes anything.
+  const MIN_HALF = 20; // mirrors learning.MIN_HALF
+  function laneReadiness(x, ctx) {
+    const role = laneRole(x), base = ctx.base, shares = x.instrument === "shares";
+    const done = (ctx.trades || []).filter((t) => t.source === x.source && t.status === "CLOSED" && t.pnl !== null && t.pnl !== undefined);
+    const days = new Set(done.map((t) => String(t.opened_at || "").slice(0, 10)).filter(Boolean)).size;
+    const c = [];
+    const add = (id, label, state, text) => c.push({ id, label, state, text });
+    const src = String(ctx.dataName || "").toLowerCase();
+    if (ctx.fictional) add("data", "Real data", "fail", "Fictional");
+    else if (/ibkr/.test(src)) add("data", "Real data", "pass", "IBKR");
+    else if (/yahoo/.test(src)) add("data", "Real data", "fail", "Delayed (Yahoo)");
+    else add("data", "Real data", "wait", "Source unknown");
+    add("sample", "30+ closed on 30+ days", x.closed >= MIN_TRADES && days >= MIN_TRADES ? "pass" : "fail", x.closed + " closed, " + days + " day" + (days === 1 ? "" : "s"));
+    if (role === "Benchmark") add("beats", "Beats baseline after costs", "na", "Is the baseline");
+    else if (x.source === "main") add("beats", "Beats baseline after costs", "na", "Runs the baseline rule");
+    else if (shares) add("beats", "Beats baseline after costs", x.hypothesis ? "wait" : "fail", x.hypothesis ? x.hypothesis.id + " verdict (weekly evaluator)" : "No baseline set");
+    else if (x.closed < 10 || !base || !(base.closed >= 10)) add("beats", "Beats baseline after costs", "wait", "Needs 10+ closed on both");
+    else {
+      const mine = x.realized_pnl / x.closed, theirs = base.realized_pnl / base.closed;
+      add("beats", "Beats baseline after costs", x.closed >= MIN_TRADES && base.closed >= MIN_TRADES && mine > theirs ? "pass" : x.closed >= MIN_TRADES && base.closed >= MIN_TRADES ? "fail" : "wait",
+        sgn(mine) + " vs " + sgn(theirs) + " per trade");
+    }
+    if (role === "Benchmark" || x.source === "main") add("registered", "Pre-registered", "na", role === "Benchmark" ? "Is the baseline" : "Runs the baseline rule");
+    else if (x.hypothesis) add("registered", "Pre-registered", "pass", x.hypothesis.id + " from " + x.hypothesis.first_day);
+    else add("registered", "Pre-registered", "fail", "No registered test");
+    if (done.length < 2 * MIN_HALF) add("halves", "Halves agree", "wait", "Needs " + 2 * MIN_HALF + "+ closed");
+    else {
+      const sorted = done.slice().sort((a, b) => String(a.closed_at || "").localeCompare(String(b.closed_at || "")));
+      const mid = Math.floor(sorted.length / 2), sum = (xs) => xs.reduce((a, t) => a + t.pnl, 0);
+      const older = sum(sorted.slice(0, mid)), newer = sum(sorted.slice(mid));
+      add("halves", "Halves agree", (older > 0) === (newer > 0) ? "pass" : "fail", "older " + sgn(older) + ", newer " + sgn(newer));
+    }
+    if (shares) add("fills", "IBKR fills match", "na", "Shares, not mirrored");
+    else add("fills", "IBKR fills match", "wait", "No IBKR fill check yet");
+    const applies = c.filter((k) => k.state !== "na");
+    return { checks: c, ready: applies.length > 0 && applies.every((k) => k.state === "pass"), gap: evidenceGap(x.closed) };
+  }
+  const CHECK_MARK = { pass: "\u2713 ", fail: "\u2715 ", wait: "\u2026 ", na: "\u2014 " };
   function renderLanes(data) {
     if (!data) { empty($("ln-board"), "Could not load the lanes", "They appear once the page can reach /api/alltrades."); return; }
     const { rows, base } = laneRows(data), all = data.trades || [], ex = exposure(all);
@@ -2171,26 +2212,40 @@
     const verdicts = rows.map((x) => laneVerdict(x, base, all));
     const watch = verdicts.filter((v) => v.tone === "warn" && /^Watch/.test(v.text)).length;
     const enough = rows.filter((x) => evidenceLevel(x.closed) >= 2).length;
-    $("ln-headline").textContent = watch ? "Watch: " + watch + " lane" + (watch === 1 ? " holds" : "s hold") + " a one-sided book." : enough ? enough + " of " + rows.length + " lanes have enough trades to compare." : "No lane has enough closed trades to rank on result yet.";
-    $("ln-lede").textContent = "Sorted by evidence first, then result. A lane is only called ahead or behind the frozen baseline once it has at least 10 closed trades; 30 is the minimum before any figure counts." + (data.fictional ? " Fictional demo data." : "");
+    const dataName = S.core && S.core.status && S.core.status.data_source ? S.core.status.data_source.name : "";
+    const ready = rows.map((x) => laneReadiness(x, { base, trades: all, fictional: data.fictional, dataName }));
+    const nReady = ready.filter((r) => r.ready).length;
+    const waiting = rows.map((x, n) => ({ x, g: ready[n].gap })).filter((o) => laneRole(o.x) !== "Benchmark" && o.g.level < 3).sort((a, b) => a.g.more - b.g.more)[0];
+    $("ln-headline").textContent = watch ? "Watch: " + watch + " lane" + (watch === 1 ? " holds" : "s hold") + " a one-sided book."
+      : nReady ? nReady + " lane" + (nReady === 1 ? " is" : "s are") + " ready for your decision."
+      : "No lane is ready for a decision." + (waiting ? " Closest: " + waiting.x.label + ", " + waiting.g.more + " more closed trade" + (waiting.g.more === 1 ? "" : "s") + "." : "");
+    $("ln-lede").textContent = "A lane is decision-ready only when every check that applies passes. Until then the answer is \"keep collecting\", not \"change the rule\". The platform never promotes or switches off a lane itself." + (enough ? "" : " No lane has 10 closed trades yet, so none is called ahead or behind.") + (data.fictional ? " Fictional demo data." : "");
     const host = $("ln-board");
     host.replaceChildren();
-    const head = el("div", null, "lb-row lb-head");
-    ["Lane", "Realized", "Open now", "Evidence", "Verdict"].forEach((t, n) => head.appendChild(el("span", t, n === 1 || n === 2 ? "r" : "")));
-    host.appendChild(head);
+    const tbl = el("table", null, "readiness"), thead = el("thead"), hr = el("tr");
+    ["Lane", "Evidence"].concat(ready[0] ? ready[0].checks.map((k, i) => (i + 1) + " · " + k.label) : []).concat(["Result"]).forEach((t, i, a) => hr.appendChild(el("th", t, i === a.length - 1 ? "r" : "")));
+    thead.appendChild(hr); tbl.appendChild(thead);
+    const tb = el("tbody");
     rows.forEach((x, n) => {
-      const b = el("button", null, "lb-row" + (x.source === S.laneSel ? " sel" : ""));
+      const r = ready[n], tr = el("tr", null, (x.source === S.laneSel ? "sel" : "") + (r.ready ? " ready" : ""));
+      const nameTd = el("td"), b = el("button", null, "lanepick");
       b.type = "button";
-      const name = el("span");
-      name.appendChild(el("b", x.label)); name.appendChild(el("span", "  " + laneRole(x), "muted"));
-      const real = span(arrow(x.realized_pnl) + sgn(x.realized_pnl), tone(x.realized_pnl) + " num r"), open = openNow(x, ""); open.className = (open.className || "") + " r";
-      const lvl = evidenceLevel(x.closed), ev = el("span", null, "evrow"), m = el("div", null, "meter");
-      renderMeter(m, lvl); ev.appendChild(m); ev.appendChild(el("span", x.closed + " closed", "muted"));
-      const v = verdicts[n];
-      kids(b, [name, real, open, ev, el("span", v.text, "tag " + v.tone)]);
+      kids(b, [el("b", x.label), el("div", laneRole(x) + (r.ready ? " · ready for your decision" : ""), "muted")]);
       b.addEventListener("click", () => { S.laneSel = x.source; renderLanes(S.trades); });
-      host.appendChild(b);
+      nameTd.appendChild(b); tr.appendChild(nameTd);
+      const evTd = el("td"), m = el("div", null, "meter");
+      renderMeter(m, r.gap.level);
+      kids(evTd, [el("div", x.closed + " / " + MIN_TRADES, "num"), m, el("div", r.gap.level < 3 ? r.gap.more + " more to " + (r.gap.level === 1 ? "directional" : "counts") : EVIDENCE_WORDS[3], "muted small")]);
+      tr.appendChild(evTd);
+      r.checks.forEach((k) => tr.appendChild(el("td", CHECK_MARK[k.state] + k.text, "ck " + k.state)));
+      const resTd = el("td", null, "r");
+      kids(resTd, [span(arrow(x.realized_pnl) + sgn(x.realized_pnl), "num " + (r.gap.level === 1 ? "muted" : tone(x.realized_pnl))), el("div", r.gap.level === 1 ? "not judgeable" : verdicts[n].text, "muted small")]);
+      tr.appendChild(resTd);
+      tb.appendChild(tr);
     });
+    tbl.appendChild(tb); host.appendChild(tbl);
+    host.appendChild(el("p", "\u2713 pass · \u2715 fail · \u2026 waiting for data · \u2014 does not apply. Every check is read from stored data; none is a judgement call.", "muted legend"));
+    S.readyLanes = rows.filter((x, n) => ready[n].ready).map((x) => x.label);
     // exposure
     const xb = $("ln-exposure");
     xb.replaceChildren();
@@ -2302,6 +2357,7 @@
       renderOrders(orders);
       syncControls(status, status.config);
       const glanceItems = buildGlance(health, status, portfolio, results, policy);
+      (S.readyLanes || []).forEach((l) => glanceItems.push({ level: "warn", text: "Lane " + l + " passed every decision check: review it on the Lanes page. Promoting or switching it off is your decision." }));
       const now = renderNow(glanceItems, { health, status, portfolio, report, trades: allTrades, decisions, shadow: shadowRep, since: S.since });
       renderGlance(glanceItems, now.needs.length);
       renderResearchProgress(buildResearchProgress(shadowRep));
@@ -2395,7 +2451,7 @@
   window.optplatDecisionFilter = filterDecisions;
   window.optplatTally = decisionTally;
   window.optplatSystem = systemReadiness; window.optplatLabGate = labGate; window.optplatLaneVerdict = laneVerdict; window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
-  window.optplatEvidenceGap = evidenceGap; window.optplatNeedAction = needAction; window.optplatDisagreement = disagreement; window.optplatWhy = whyOf;
+  window.optplatEvidenceGap = evidenceGap; window.optplatNeedAction = needAction; window.optplatDisagreement = disagreement; window.optplatWhy = whyOf; window.optplatReadiness = laneReadiness;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   S.since = lastSeen(); // the previous look, kept for this whole visit so the digest does not reset itself every refresh
   window.addEventListener("pagehide", markSeen);

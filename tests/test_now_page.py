@@ -64,6 +64,23 @@ console.log(JSON.stringify({
     W.optplatDisagreement({kind:'ENTRY',disposition:'RISK_REJECTED',payload:{committee:{decision:'WOULD_REJECT',mode:'shadow'}}}),
     W.optplatDisagreement({kind:'ENTRY',disposition:'FILLED',payload:{}}),
   ],
+  ready:(()=>{
+    const mk=(src,n,pnl,day0)=>Array.from({length:n},(_,i)=>({source:src,status:'CLOSED',pnl:pnl,opened_at:new Date(Date.UTC(2026,0,1+(day0||0)+i)).toISOString(),closed_at:new Date(Date.UTC(2026,0,2+(day0||0)+i)).toISOString()}));
+    const base={source:'frozen-baseline-options',label:'Baseline',instrument:'options',closed:40,realized_pnl:400};
+    const lane={source:'lane-a',label:'Lane A',instrument:'options',closed:40,realized_pnl:2000,hypothesis:{id:'L1',first_day:'2026-01-01'}};
+    const trades=mk('lane-a',40,50).concat(mk('frozen-baseline-options',40,10));
+    const ctx={base,trades,fictional:false,dataName:'ibkr-shared-research-only'};
+    return {
+      good:W.optplatReadiness(lane,ctx),
+      fict:W.optplatReadiness(lane,{...ctx,fictional:true}),
+      yahoo:W.optplatReadiness(lane,{...ctx,dataName:'yahoo-unofficial'}),
+      oneday:W.optplatReadiness(lane,{...ctx,trades:mk('lane-a',40,50).map((t)=>({...t,opened_at:'2026-01-01T15:00:00Z'}))}),
+      unreg:W.optplatReadiness({...lane,hypothesis:null},ctx),
+      split:W.optplatReadiness(lane,{...ctx,trades:mk('lane-a',20,-30).concat(mk('lane-a',20,130,20))}),
+      shares:W.optplatReadiness({source:'swing-pullback',label:'Swing',instrument:'shares',closed:3,realized_pnl:5,hypothesis:{id:'SW1',first_day:'2026-11-27'}},ctx),
+      main:W.optplatReadiness({source:'main',label:'Options account',instrument:'options',closed:2,realized_pnl:-617},ctx),
+    };
+  })(),
   why:[W.optplatWhy({payload:{rank:1,of:6,score:96.15}}),W.optplatWhy({payload:{score:88.6}}),W.optplatWhy({payload:{rank:1,of:1,risk_failures:['too wide']}}),W.optplatWhy({payload:{rank:3,of:9,score:50}})],
 }));
 """
@@ -188,3 +205,27 @@ def test_activity_shows_rank_not_a_bare_score(out):
     assert ranked.startswith("ranked #1 of 6 eligible candidates") and "ranking only" in ranked
     assert "no pass mark" in legacy  # older journal lines without a rank
     assert failed == "too wide"  # a risk refusal is still the reason shown
+
+
+def _ck(r):
+    return {c["id"]: c["state"] for c in r["checks"]}
+
+
+def test_readiness_never_says_ready_while_a_check_is_waiting_or_failing(out):
+    r = out["ready"]
+    good = _ck(r["good"])
+    assert [c["id"] for c in r["good"]["checks"]] == ["data", "sample", "beats", "registered", "halves", "fills"]
+    assert good == {"data": "pass", "sample": "pass", "beats": "pass", "registered": "pass", "halves": "pass", "fills": "wait"}
+    assert r["good"]["ready"] is False  # the IBKR fill check is not on the dashboard yet, so nothing is ready
+    assert _ck(r["fict"])["data"] == "fail" and _ck(r["yahoo"])["data"] == "fail"
+    assert _ck(r["oneday"])["sample"] == "fail"  # 40 trades on one day are one observation, not 40
+    assert _ck(r["unreg"])["registered"] == "fail"
+    assert _ck(r["split"])["halves"] == "fail"  # older half lost, newer half won: not consistent
+
+
+def test_readiness_marks_what_does_not_apply(out):
+    r = out["ready"]
+    sh, main = _ck(r["shares"]), _ck(r["main"])
+    assert sh["fills"] == "na" and sh["beats"] == "wait" and sh["registered"] == "pass"
+    assert main["beats"] == "na" and main["registered"] == "na" and main["sample"] == "fail"
+    assert r["main"]["gap"]["more"] == 8 and r["main"]["ready"] is False
