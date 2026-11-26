@@ -924,9 +924,14 @@ class TradingEngine:
             if order.risk_failures:
                 item["risk_failures"] = order.risk_failures
             report["entries"].append(item)
+            entry_payload: dict[str, Any] = {"rationale": proposal.rationale, "score": proposal.score, "quantity": quantity,
+                                             "risk_failures": order.risk_failures,
+                                             # display only: where it ranked among this cycle's eligible candidates
+                                             "rank": proposals.index(proposal) + 1, "of": len(proposals)}
+            if "committee" in item:  # display only: lets the Desk flag a trade the committee would have refused
+                entry_payload["committee"] = item["committee"]
             self._journal("ENTRY", symbol, order.state.value, proposal.contract, proposal.limit_price,
-                          {"rationale": proposal.rationale, "score": proposal.score, "quantity": quantity,
-                           "risk_failures": order.risk_failures}, snap, order.id)
+                          entry_payload, snap, order.id)
             if order.state in (OrderState.SUBMITTED, OrderState.PARTIALLY_FILLED, OrderState.FILLED):
                 submitted += 1
         report["candidates"].sort(key=lambda c: (-c["score"], c["contract"]))

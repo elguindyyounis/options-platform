@@ -136,6 +136,7 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-27: Decision-first Desk (owner request, UX proposal 1 of 3): evidence before money (hero shows closed trades against 30 with the Too early / Directional / Counts bar; P&L sits under it with its sample), "Can I decide yet?" replaces "Result vs baseline" in the band, fix buttons on "Needs you" (Start loop, Turn on market-hours check; nothing that loosens), one attention count, Activity shows rank instead of a bare score and flags trades the committee would have refused (engine journals `rank`, `of`, `committee` on the entry line, display only), lane cards lead with evidence, GEX / flow / candidates moved to Market, nav grouped Daily / Research / Market. Next: Lanes decision-readiness row (2 of 3), System controls and IBKR fill columns (3 of 3).
 * 2026-11-27: robustness beside every registered pass rule (`robustness.py`, from BijectiveLabs' falsification chain):
   an interval resampled by whole days and the mean in three consecutive blocks of days, on SW1/ST1, entry hypotheses and
   exit-rule comparisons. Warns, never changes a verdict. Next: show the warning on the Lab page (display only).
