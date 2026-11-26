@@ -7,6 +7,14 @@ money, risk limits, brokers, or credentials. Agents improve the code around thos
 
 1. **No live trading.** Do not add, enable, or hint at a live order path. `OrderManager` must keep
    refusing any adapter whose `mode` is not `PAPER`. Do not add a live endpoint.
+   *Owner decision, 2026-11-26 (the owner said: change the rules so I can make trade orders through IBKR, just on the
+   paper account; automatic with limits; mirror the main account):* orders MAY be sent to an **Interactive Brokers
+   paper account**, automatically, only through `broker/ibkr.py`, and only when every one of these holds: the host is
+   localhost; the port is a paper port (7497 / 4002); the configured account and EVERY account the session manages
+   begin with `DU`; the order is a DAY limit order inside the adapter's own size ceilings; it passed the risk policy
+   and the kill switch. Sending to IBKR is off unless the owner switches it on (`OPTPLAT_IBKR_MIRROR=1`). Anything
+   that could reach a live account (a live port, a non-`DU` account, a remote host, market orders, a way around these
+   checks) is still forbidden; those checks may only be made stricter.
 2. **Never loosen a safety control.** Do not raise a risk limit, remove a risk check, lower a
    default's strictness, bypass the kill switch, make `auto_entries` default on, allow entries
    without exits, or turn off `require_verified_quote_time` by default. Tightening is fine.
@@ -32,7 +40,9 @@ goes to a private repository only; this repository is public.
 
 ## Things that need a human decision (do not decide these yourself)
 
-* Connecting or implementing a real broker (`broker/ibkr.py`): the owner is doing this themselves.
+* Anything about a real-money broker connection. (The IBKR **paper** adapter in `broker/ibkr.py` is allowed by the
+  owner's 2026-11-26 decision under hard rule 1; widening it beyond paper, raising its ceilings or making it default
+  on needs the owner.)
 * Any change to risk policy defaults, position sizing caps, or exit thresholds.
 * Promoting a strategy to be used for anything beyond paper experiments.
 * Paying for or signing up to data providers. Adding a dependency that needs an account or key.

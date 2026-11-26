@@ -106,7 +106,7 @@ Existing items, in order:
 
 * **Daily loss halt.** Stop new entries once equity is down X% from the day's start; exits keep
   working. Needs the owner to choose X (a risk-limit default) before anyone builds it.
-* **Real broker adapter (IBKR paper).** Owner is implementing `broker/ibkr.py`. Do not start it.
+* ~~Real broker adapter (IBKR paper).~~ Built 2026-11-26 on the owner's instruction (see Done). Next: a report comparing IBKR paper fills with the simulator's from the `ibkr_mirror_*` audit; a first live paper run during market hours.
 * **Licensed, timestamped options data.** Needs an account and budget decision.
 * **Earnings and event blackout.** Needs a trustworthy event-calendar source.
 * **FOMC table beyond 2027.** `events.py` fails closed for later dates. Add a year only from federalreserve.gov.
@@ -131,6 +131,7 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-26: IBKR paper orders (owner decision, CLAUDE.md rule 1 amended): `broker/ibkr.py` implemented and passing the conformance suite on a fake IB; `MirroredSimBroker` copies main-account orders to IBKR paper behind `OPTPLAT_IBKR_MIRROR=1` (default off). Not yet run against a real paper account.
 * 2026-11-26: Desk regime line (UX-9): `GET /api/regime` and a one-line Desk reading of the market-regime guard (blocked puts/calls and the rule, "unknown" and "off" never shown as all-clear, fictional data labelled). Display only. Next candidates: challenge 11 "effective positions" count (display only); challenges 12 and 11's cap need the owner.
 
 * Shared read-only IBKR data consumer (owner priority, 2026-11-26): opt-in

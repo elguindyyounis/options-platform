@@ -1067,3 +1067,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 * Stacked on #68. `IBKRDataProvider.daily_bars` caches each name's bars (6 h, never past the New York day), starts at most 15 new fetches per 10 minutes so the Alerter keeps most of the shared service's 55, skips a failing name instead of failing the batch, and leaves `^VIX` out unasked (the service serves stocks only). Callers already treat a missing name as no data, no entry.
 * Verified: `python -m pytest -q` passes (3 new tests in `tests/test_ibkr_data.py`). Not verified: against the live service.
+
+## 2026-11-26 (Claude, owner request): IBKR paper orders
+
+* Owner: "change the rules so I can make trade orders through IBKR just on the paper account"; chose automatic with limits, mirroring the main account. CLAUDE.md hard rule 1 and the human-decision list amended with those words and the paper-only conditions.
+* `broker/ibkr.py`: ib_async on its own loop thread; refuses non-local hosts, non-paper ports (now 7497/4002 only; 7947 removed), non-DU accounts, and any session managing a non-DU account; DAY limit orders only, at most 10 contracts / $5,000 premium; orderRef idempotency searched in working and completed orders; lookups that cannot run raise rather than answer "no such order". `broker/mirror.py`: `MirroredSimBroker`, simulator stays the record, one background worker copies accepted orders and cancels, all outcomes audited.
+* Verified: `python -m pytest -q` 810 pass (28 in `tests/test_ibkr_conformance.py`, 18 in `tests/test_ibkr_mirror.py`; the shared conformance suite runs against both). Not verified: a real TWS paper session, IBKR's price-tick rules for non-penny options (an off-tick limit is rejected by IBKR and audited), the startup wiring in `__main__` (not covered by a test).
+

@@ -104,7 +104,14 @@ def main() -> None:
         sys.exit("OPTPLAT_API_TOKEN must be at least 16 characters (or leave it unset to get a generated one).")
 
     which = os.environ.get("OPTPLAT_BROKER", "sim")
-    if which == "sim":
+    if which == "sim" and os.environ.get("OPTPLAT_IBKR_MIRROR") == "1":
+        # Owner decision 2026-11-26: the simulated account stays the record; its orders are copied to IBKR paper.
+        from .broker.ibkr import IBKRPaperBroker
+        from .broker.mirror import MirroredSimBroker
+
+        broker = MirroredSimBroker(IBKRPaperBroker())
+        print("IBKR paper mirror ON: main-account orders are also sent to the IBKR paper account.", flush=True)
+    elif which == "sim":
         broker = SimBroker()
     elif which == "ibkr_paper":
         from .broker.ibkr import IBKRPaperBroker
@@ -131,6 +138,8 @@ def main() -> None:
 
     store = Store(os.environ.get("OPTPLAT_DB", "optplat.db"))
     manager = OrderManager(broker, store, policy)
+    if hasattr(broker, "attach_audit"):
+        broker.attach_audit(store.audit)
     if isinstance(broker, SimBroker):
         # The simulated broker lives in memory. Replay the saved fills so a restart does not forget open positions
         # or reset cash (which would hide real simulated losses).
