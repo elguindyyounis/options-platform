@@ -74,3 +74,54 @@ def test_health_exposes_no_exception_text():
 def test_redirect_forbidden_to_keep_token_local():
     with pytest.raises(RuntimeError):
         NoRedirect().redirect_request(None, None, 302, '', {}, 'https://example.com')
+
+
+class Clock:
+    def __init__(self, at):
+        self.at = at
+
+    def __call__(self):
+        return self.at
+
+
+def bars_for(calls, fail=()):
+    def transport(resource, params=None, **_kw):
+        assert resource == 'history'
+        calls.append(params['symbol'])
+        if params['symbol'] in fail:
+            raise RuntimeError('503')
+        return {'bars': [{'timestamp': '2026-11-24', 'close': 10., 'volume': 1.}]}
+    return transport
+
+
+def test_daily_bars_respect_the_shared_budget_and_fill_from_cache_over_time():
+    from optplat import ibkr_data
+    calls, clock = [], Clock(NOW)
+    p = IBKRDataProvider(bars_for(calls), clock=clock)
+    names = [f'N{i:03d}' for i in range(40)]
+    first = p.daily_bars(names)
+    assert len(first) == ibkr_data.DAILY_BUDGET and len(calls) == ibkr_data.DAILY_BUDGET
+    again = p.daily_bars(names)                      # same window: cached names only, no new requests
+    assert set(again) == set(first) and len(calls) == ibkr_data.DAILY_BUDGET
+    clock.at = NOW + timedelta(seconds=ibkr_data.DAILY_WINDOW_S + 1)
+    later = p.daily_bars(names)                      # next window: the next names, cached ones still served
+    assert len(later) == 2 * ibkr_data.DAILY_BUDGET and len(calls) == 2 * ibkr_data.DAILY_BUDGET
+
+
+def test_daily_cache_never_outlives_the_new_york_day_or_its_ttl():
+    from optplat import ibkr_data
+    calls, clock = [], Clock(NOW)
+    p = IBKRDataProvider(bars_for(calls), clock=clock)
+    p.daily_bars(['SPY'])
+    clock.at = NOW + timedelta(seconds=ibkr_data.DAILY_TTL_S + 1)
+    p.daily_bars(['SPY'])
+    clock.at = NOW + timedelta(days=1)
+    p.daily_bars(['SPY'])
+    assert calls == ['SPY', 'SPY', 'SPY']
+
+
+def test_one_failing_name_and_index_symbols_do_not_sink_the_batch():
+    calls = []
+    p = IBKRDataProvider(bars_for(calls, fail={'BAD'}), clock=Clock(NOW))
+    out = p.daily_bars(['SPY', 'BAD', '^VIX', 'QQQ'])
+    assert set(out) == {'SPY', 'QQQ'} and '^VIX' not in calls
