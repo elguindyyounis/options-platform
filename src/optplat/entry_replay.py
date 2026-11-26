@@ -1,7 +1,7 @@
 """Entry replay: compare followed candidates that pass an entry rule with those that do not, under the frozen 40/30 exit.
 
 Evolution plan Phase 1 (ground truth) feeding Phase 2. It gives hypotheses E1 (spread 5% vs 10%), E2 (low vs high IV for the
-name), E3 (45-90 vs 30-120 days to expiry), E4 (skip entries within 7 days of earnings), S1 (top-ranked vs the rest of the
+name), E3 (45-90 vs 30-120 days to expiry), E4 (skip entries within 7 days of earnings), E6 (calls after vs before earnings), S1 (top-ranked vs the rest of the
 ranked list) and R1 (regime guard) their outcome table. Measurement only: nothing here places an order or changes a rule.
 
 Fixed before any result exists:
@@ -55,6 +55,15 @@ def e4(f: dict[str, Any]) -> Optional[bool]:  # treatment = not within 7 days of
     return None if d is None or d < 0 else d > 7
 
 
+def e6(f: dict[str, Any]) -> Optional[bool]:  # calls only: treatment = 1-3 days AFTER a report; control = 0-7 days BEFORE the next one
+    if str(f.get("right")) != "C":
+        return None
+    after, before = _num(f, "days_since_earnings"), _num(f, "days_to_earnings")
+    if after is not None and 1 <= after <= 3:
+        return True
+    return False if before is not None and 0 <= before <= 7 else None
+
+
 def r1(f: dict[str, Any]) -> Optional[bool]:  # treatment = the guard would NOT have blocked this side; control = it would have
     key = {"P": "regime_blocks_puts", "C": "regime_blocks_calls"}.get(str(f.get("right")))
     v = f.get(key) if key else None
@@ -71,6 +80,7 @@ HYPOTHESES: dict[str, tuple[str, Pick]] = {
     "E2": ("IV percentile 30 or below beats higher", e2),
     "E3": ("45-90 days to expiry beats the rest of 30-120", e3),
     "E4": ("no earnings within 7 days beats earnings within 7 days", e4),
+    "E6": ("calls bought 1-3 days after earnings beat calls bought within 7 days before (not split by the 10% run-up/fall: pre-report return not recorded)", e6),
     "S1": ("rank 1 of a strategy list beats ranks 2 and lower", s1),
     "R1": ("entries the regime guard would allow beat the ones it would block", r1),
 }

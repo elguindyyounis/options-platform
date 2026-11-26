@@ -56,7 +56,7 @@ positive after removing the three best observations; every extra hypothesis trie
 fail, and that is a result. If nothing passes, the next step is a different structure (for example defined-risk spreads), never
 looser criteria.
 
-R1, E6, C1, D1 and X4 use the same pass criteria as every row above (independent observations, ask in and bid out plus a stressed exit, later 30% of dates, bootstrap interval excludes zero, still positive without the three best). They need `days_to_earnings` and the 5-day pre-event return, which the shadow book does not record yet; until then they cannot be run. News is never a model input as text: only measurable facts (price moves, dates, volume) are, and a claim from a secondary source is graded below a company filing or a wire report before it is used.
+R1, E6, C1, D1 and X4 use the same pass criteria as every row above (independent observations, ask in and bid out plus a stressed exit, later 30% of dates, bootstrap interval excludes zero, still positive without the three best). E6 now has a mechanical entry-replay group (`entry_replay.e6`, 2026-11-26: calls 1-3 days after a report vs 0-7 days before; the 10% run-up/fall split is not run because the exact pre-report return is not recorded). X4 needs recorded intraday bars, which the shadow book does not hold; until then it cannot be run. News is never a model input as text: only measurable facts (price moves, dates, volume) are, and a claim from a secondary source is graded below a company filing or a wire report before it is used.
 
 ## Phase 3: where AI goes
 

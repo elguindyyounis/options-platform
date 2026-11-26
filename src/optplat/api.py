@@ -244,6 +244,12 @@ def create_app(
 
     if engine is not None:
 
+        @app.get("/api/regime", dependencies=[Depends(auth)])
+        def market_regime() -> dict[str, Any]:
+            from .regime import describe
+
+            return describe(engine.regime, data_source=getattr(engine.provider, "name", "provider") + " daily bars (SPY)", fictional=engine.provider.fictional)
+
         @app.get("/api/engine/status", dependencies=[Depends(auth)])
         def engine_status() -> dict[str, Any]:
             return {**engine.status(), "runner": runner.status() if runner else {"running": False}}

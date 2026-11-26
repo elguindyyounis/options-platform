@@ -1042,6 +1042,19 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Fix: `_vet` now compares with `max(cycle start, clock now)`. `MAX_FUTURE_SKEW_S` stays 5, so a snapshot that really is ahead of the real clock is still rejected; the stale check uses the same fresher reading, so it is slightly stricter, not looser. The `clock_ahead_s` diagnostic uses it too, so the dashboard's "your clock is behind" warning stops firing for this. No risk policy, limit, order or auth change; `require_verified_quote_time` untouched.
 * Verified: one new test (30 s fetch passes; a snapshot 15 s ahead of the real clock is still rejected), which fails without the fix; `python -m pytest -q` 759 pass. Not verified: on the owner's Mac with live Yahoo data.
 
+## 2026-11-26 (scheduled improvement run): E6 entry-replay group
+
+* Evolution plan Phase 1 feeding Phase 2. Helps hypothesis E6 (calls after earnings vs before): `entry_replay.e6` gives it an outcome table in `/api/shadow/entries` (treatment = calls with 1-3 days since a report, control = calls 0-7 days before one; unknown features left out). Measurement only; no entry, sizing, exit, risk, auth or schema change. Counts as one more hypothesis tried. The 10% run-up/fall split is not run: the pre-report return is not recorded (decision: do not substitute the trailing return, which includes the report move).
+* Merged `origin/main` (7 commits, no conflicts). Private data repo `options-platform-data` is not attached to this session (access denied), so the gate and real results are unknown. No hypothesis registered or resolved.
+* Verified: `python -m pytest -q` 760 pass (1 new). Not verified: any real data, the Mac.
+
+## 2026-11-26 (scheduled challenger run): Desk regime line
+
+* Alerter moved from `14f7d15` to `97d6dcb` (22 commits). Read `quote_evidence.py` and `strategy_comparison.py` (addendum in `docs/COMPARISON_ALERTER.md`). The alerter signs short-lived quote evidence for every local paper fill; the platform only trusts a provider boolean. Nothing copied (needs a verified source and an owner decision).
+* UX challenge UX-9: the Desk never said whether new puts or calls were being held back. New `regime.describe` and `GET /api/regime` (authenticated), and a one-line Desk reading under the verdict band built with `textContent`. Three states: known (label, rule text), unknown and off (both shown as warnings, never an all-clear, since an unknown reading blocks nothing). Always says the thresholds are engineering choices, not an edge, and labels fictional demo data. Display only: no change to what the guard blocks, no risk, order, sizing, auth, broker or schema change; `Regime.to_dict` and journal payloads unchanged. UX-11 logged.
+* Decision made: the endpoint calls the cached `RegimeSource.read()` (5-minute TTL), so a dashboard refresh does not add a data request per refresh.
+* Verified: `python -m pytest -q` 764 pass (4 new in `tests/test_regime.py`, one of them under node); `node --check app.js`. Not verified: the line in a browser (light theme, phone width), real data, the Mac. Thursday, so no weekend scan.
+* Deploy: the platform is not auto-deployed; the owner's Mac copy is a git clone they update themselves, so arrival there is unconfirmed.
 
 ## 2026-11-26 (owner: shared read-only IBKR data)
 

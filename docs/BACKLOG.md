@@ -131,6 +131,8 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-26: Desk regime line (UX-9): `GET /api/regime` and a one-line Desk reading of the market-regime guard (blocked puts/calls and the rule, "unknown" and "off" never shown as all-clear, fictional data labelled). Display only. Next candidates: challenge 11 "effective positions" count (display only); challenges 12 and 11's cap need the owner.
+
 * Shared read-only IBKR data consumer (owner priority, 2026-11-26): opt-in
   `OPTPLAT_DATA=ibkr` reads the authenticated localhost service maintained in
   Options Alerter. Preserves unverified BBO times and vetoes fills in both risk

@@ -176,3 +176,20 @@ def spy_source(provider: Any, clock: Callable[[], datetime] = utcnow) -> RegimeS
         return float(bars[-1].close) if bars else None
 
     return RegimeSource(load, clock, load_vix=vix)
+
+
+def describe(source: RegimeSource, *, data_source: str, fictional: bool) -> dict[str, Any]:
+    """What the Desk shows: is the guard on, what does it read right now, and what does that block.
+
+    Display only. ``state`` is "off", "unknown" or "known"; unknown and off block nothing (see ``RegimeSource.allows``), and the
+    reading says so instead of looking like an all-clear. The thresholds are engineering choices, not an edge.
+    """
+    base: dict[str, Any] = {"guard_on": guard_enabled(), "data_source": data_source, "fictional": bool(fictional), "authorizes_orders": False,
+                            "note": "Engineering thresholds chosen before any result, not an edge. This line authorizes nothing; it only explains why a new put or call may be held back."}
+    if not base["guard_on"]:
+        return {**base, "state": "off", "puts_allowed": True, "calls_allowed": True, "label": None, "reasons": [], "facts": {}}
+    reg = source.read()
+    if reg is None:
+        return {**base, "state": "unknown", "puts_allowed": True, "calls_allowed": True, "label": None, "reasons": [], "facts": {}}
+    return {**base, "state": "known", "puts_allowed": not reg.block_puts, "calls_allowed": not reg.block_calls, "label": reg.label,
+            "reasons": [reg.check("P")[1]] * reg.block_puts + [reg.check("C")[1]] * reg.block_calls, "facts": reg.facts}
