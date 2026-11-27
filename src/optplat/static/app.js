@@ -378,6 +378,58 @@
     p.textContent = v.text;
   }
 
+  // ---- next session: what the swing lanes would do at the next open (a preview; nothing is ordered from it)
+  function nsContract(x) {
+    if (x.right === "SHARES") return x.symbol + " shares";
+    const exp = x.expiry ? new Date(x.expiry + "T12:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+    return x.symbol + " " + exp + " $" + x.strike + " " + (x.right === "P" ? "put" : "call");
+  }
+  function nsSellWhy(x) {
+    const words = { stop: "premium stop", target: "profit target", expiry_near: "within 2 days of expiry", trend_break: "trend broke", time: "holding time reached" };
+    return words[x.reason] || x.reason || "";
+  }
+  function renderNextSession(plan) {
+    const rows = $("ns-rows"), more = $("ns-more");
+    rows.replaceChildren(); more.replaceChildren();
+    $("ns-note").textContent = "";
+    if (!plan || !plan.next_session) {
+      $("ns-when").textContent = ""; $("ns-summary").textContent = "No next session in the calendar table yet."; return;
+    }
+    const s = plan.next_session, opens = new Date(s.opens_at);
+    const day = new Date(s.date + "T12:00:00Z").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+    $("ns-title").textContent = "Next session: " + day;
+    $("ns-when").textContent = "Opens 9:30 New York (" + opens.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) + " your time)" +
+      (s.early_close ? ", closes early at 1:00 pm" : "") + (s.closed_days_before && s.closed_days_before.length ? ". Closed before it: " + s.closed_days_before.join(", ") : "");
+    if (plan.status === "NOT_BUILT") {
+      $("ns-summary").textContent = "Not worked out yet: it is built about 20 minutes after each close, or press Recalculate."; return;
+    }
+    const lanes = plan.lanes || [], c = plan.counts || { buys: 0, sells: 0, blocked: 0 };
+    $("ns-summary").textContent = (c.buys || c.sells)
+      ? "Would buy " + c.buys + ", would sell " + c.sells + (c.blocked ? " · " + c.blocked + " signal" + (c.blocked === 1 ? "" : "s") + " blocked" : "")
+      : "No swing buys or sells planned" + (c.blocked ? " (" + c.blocked + " signal" + (c.blocked === 1 ? "" : "s") + " blocked)" : "") + ". Short-term lanes still decide during the session.";
+    lanes.forEach((l) => {
+      (l.sells || []).forEach((x) => rows.appendChild(kids(el("div", null, "decision"), [
+        span("SELL", "tag loss"), span(" " + l.label + ": " + nsContract(x) + " × " + x.quantity + " · " + nsSellWhy(x) +
+          (x.last_bid != null ? " (last bid " + x.last_bid + ", paid " + x.entry + ")" : "") + (x.note ? " · " + x.note : ""))])));
+      (l.buys || []).forEach((x) => rows.appendChild(kids(el("div", null, "decision"), [
+        span("BUY", "tag gain"), span(" " + l.label + ": " + nsContract(x) + " × " + x.quantity +
+          (x.premium_usd != null ? " · about $" + Math.round(x.premium_usd).toLocaleString() + " at the last ask " + x.ask + " (spread " + x.spread_pct + "%)" : "") +
+          (x.notional_usd != null ? " · about $" + Math.round(x.notional_usd).toLocaleString() : "") +
+          " · signal from the " + x.signal_bar + " close" +
+          (x.size_vs_volume_pct != null && x.size_vs_volume_pct > 10 ? " · size is " + x.size_vs_volume_pct + "% of the day's volume" : ""))])));
+      (l.errors || []).forEach((e) => rows.appendChild(kids(el("div", null, "decision"), [span("NO DATA", "tag warn"), span(" " + l.label + ": " + e)])));
+    });
+    lanes.forEach((l) => {
+      (l.blocked || []).forEach((x) => more.appendChild(el("p", "Blocked · " + l.label + ": " + x.symbol + " " + (x.right === "P" ? "put" : x.right === "C" ? "call" : "shares") + ", " + x.reason)));
+      (l.holds || []).forEach((x) => more.appendChild(el("p", "Holding · " + l.label + ": " + nsContract(x) +
+        (x.stop_bid != null ? ", sells if the bid reaches " + x.stop_bid + " (stop) or " + x.target_bid + " (target)" : "") +
+        (x.bar_limit != null ? ", day " + x.bars_held + " of " + x.bar_limit : ""))));
+    });
+    (plan.decided_in_session || []).forEach((x) => more.appendChild(el("p", "Decided during the session · " + x.label + ": " + x.when)));
+    $("ns-note").textContent = "Worked out " + new Date(plan.built_at).toLocaleString() + ". " + (plan.note || "") +
+      (plan.fictional ? " Demo data: fictional." : "") + " Nothing is ordered from this preview.";
+  }
+
   function renderDesk(portfolio, report, eq, status) {
     const a = portfolio.account, sm = eq.summary;
     // Headline is the evidence, not the money: a result on a handful of trades is noise, so the count comes first and the
@@ -2465,6 +2517,7 @@
       const mirror = await api("/api/mirror").catch(() => null);
       S.mirror = mirror;
       api("/api/regime").then(renderRegime).catch(() => renderRegime(null));
+      api("/api/next-session").then(renderNextSession).catch(() => renderNextSession(null));
       api("/api/exposure").then(renderExposure).catch(() => renderExposure(null));
       S.connected = true; S.core = { status, report };
       checkForNewBuild(health.build_id);
@@ -2546,6 +2599,10 @@
   $("btn-ch-restart").addEventListener("click", () => act(async () => { await api("/api/challenge/restart", { method: "POST" }); }));
   $("btn-op-step").addEventListener("click", () => act(async () => { await api("/api/optlanes/step", { method: "POST" }); }));
   $("btn-sw-step").addEventListener("click", () => act(async () => { await api("/api/swing/step", { method: "POST" }); }));
+  $("btn-ns-refresh").addEventListener("click", async () => {
+    $("ns-summary").textContent = "Working it out from the latest daily bars and quotes";
+    try { renderNextSession(await api("/api/next-session/refresh", { method: "POST" })); } catch (e) { $("ns-summary").textContent = "Could not work it out: " + e.message; }
+  });
   $("btn-st-step").addEventListener("click", () => act(async () => { await api("/api/shortterm/step", { method: "POST" }); }));
   $("btn-scan").addEventListener("click", () => act(async () => {
     await api("/api/scan/run", { method: "POST" });

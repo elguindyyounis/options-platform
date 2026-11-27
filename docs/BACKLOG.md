@@ -136,6 +136,8 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-27: next-session plan (Desk card, API): what the swing lanes would buy and sell at the next open, built after each close (`nextsession.py`).
+
 * 2026-11-27 (challenger): UX-11 in part. `/api/regime.held_back` and a Desk sentence count regime-held entries over 24 h as "at least" N. New item: UX-12, a "not taken" strip on the Trades page (regime holds, `NOTHING_AFFORDABLE_WITHIN_SIZE_CAP` on the $1,000 account). PR below.
 * 2026-11-27: Paper account sized like the planned live account (owner decision: "Yes please" to a $1,000 paper account with sizing that can buy a contract). `account.py`: `OPTPLAT_PAPER_START_CASH` starts a new paper account (epoch) at that size; the account, reports and equity curve count only orders since the start, earlier orders stay in the database and the export, and old open positions are counted and not carried over. `OPTPLAT_MAX_POSITION_PCT` / `OPTPLAT_MAX_TOTAL_PREMIUM_PCT` are owner-set limits read from config.env; code defaults unchanged. Finding on demo data: at $1,000 with 35% per order the baseline strategy can afford nothing (its SPY picks cost $1,700-2,800 a contract).
 * 2026-11-27: Top bar navigation (owner: "nav bar is kinda off", chose the agent's recommendation): one sticky bar replaces the side rail and the separate status strip. The four daily pages are tabs with live status (Desk needs-you count, Trades open count, Lanes ready count, System dot when the loop is stopped or stalled with automation on, or the kill switch is on); Research and Market are menus whose entries say what each page is for; the safety line "Paper only. No live orders exist in this app." stays under the name. On phones the four tabs become a bottom bar. Pages get the rail's width back.

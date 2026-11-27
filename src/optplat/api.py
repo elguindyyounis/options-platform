@@ -430,6 +430,17 @@ def create_app(
                 raise HTTPException(status_code=409, detail="The swing lane is switched off. Turn it on in Controls first.")
             return engine.maybe_swing(force=True) or {"note": "Nothing evaluated"}
 
+        @app.get("/api/next-session", dependencies=[Depends(auth)])
+        def next_session_plan() -> dict[str, Any]:
+            from . import nextsession
+            return nextsession.saved(engine.store) or {"status": "NOT_BUILT", "places_orders": False,
+                                                       "next_session": nextsession.next_session(engine.clock())}
+
+        @app.post("/api/next-session/refresh", dependencies=[Depends(auth)])
+        def next_session_refresh() -> dict[str, Any]:
+            from . import nextsession
+            return nextsession.refresh(engine)
+
         @app.get("/api/optlanes", dependencies=[Depends(auth)])
         def optlanes_report() -> dict[str, Any]:
             return {**engine.option_lanes.reports(engine.clock()), "enabled": engine.config().option_lanes_enabled}
