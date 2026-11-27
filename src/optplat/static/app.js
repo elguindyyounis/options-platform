@@ -289,7 +289,25 @@
     $("runner").title = rn.last_error ? "Last error: " + rn.last_error : "";
     $("updated").textContent = "Updated " + new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }) +
       (health.build_id && health.build_id !== "unknown" ? " - build " + health.build_id : "");
+    followNewBuild(health.build_id);
   }
+
+  // The hourly updater can install a new build while this page stays open; the page then kept running the old code
+  // forever while its label showed the new build (seen on the owner's Mac, 2026-11-28). Reload once the server's build
+  // differs from the one this page loaded with, unless that would lose something: unsaved settings or an open trade file.
+  // Then say so and wait. Pure decision exposed for tests.
+  function buildAction(loaded, current, busy) {
+    if (!loaded || !current || current === "unknown" || loaded === "unknown" || loaded === current) return "none";
+    return busy ? "ask" : "reload";
+  }
+  function followNewBuild(current) {
+    if (!S.loadedBuild) { S.loadedBuild = current; return; }
+    const busy = !!S.cfgDirty || !$("drawer").hidden;
+    const what = buildAction(S.loadedBuild, current, busy);
+    if (what === "reload") window.location.reload();
+    else if (what === "ask") $("updated").textContent = "A new version is installed (build " + current + "). Reload the page when you are done here.";
+  }
+  window.optplatBuildAction = buildAction;
 
   function renderTrust(status) {
     const reasons = [], cautions = [];
@@ -357,7 +375,7 @@
     entries.forEach((e) => { if (e.symbol && !by[e.symbol]) by[e.symbol] = e; });
     return (watchlist || []).map((sym) => {
       const e = by[sym];
-      if (!e) return { symbol: sym, tone: "mute", text: note ? "not checked: " + note.toLowerCase() : !cycle ? "no cycle yet" : "not reached: " + max + " new trade" + (max === 1 ? "" : "s") + " per cycle already used" };
+      if (!e) return { symbol: sym, tone: "mute", text: note ? "not checked" : !cycle ? "no cycle yet" : "not reached: " + max + " new trade" + (max === 1 ? "" : "s") + " per cycle already used" };
       const r = e.result, c = occParts(e.contract || "");
       const what = c ? (c.right === "C" ? "call " : "put ") + c.strike : "";
       if (FILLED_LIKE.indexOf(r) >= 0) return { symbol: sym, tone: "gain", text: "bought " + what + (e.quantity ? " × " + e.quantity : "") };
@@ -412,7 +430,8 @@
       kids(chip, [el("b", x.symbol), span(" " + x.text)]);
       box.appendChild(chip);
     });
-    $("plan-when").textContent = cycle && cycle.finished_at ? "From the cycle at " + fmtTime(cycle.finished_at) + "." : cycle && cycle.started_at ? "From the cycle at " + fmtTime(cycle.started_at) + "." : "";
+    const at = cycle && (cycle.finished_at || cycle.started_at);
+    $("plan-when").textContent = (cycle && cycle.entries_note ? "Names not checked because: " + cycle.entries_note.toLowerCase() + ". " : "") + (at ? "From the cycle at " + fmtTime(at) + "." : "");
   }
   function renderRules(pol, status, pf) {
     const box = $("rules-rows");
@@ -1249,7 +1268,7 @@
     const out = [], mult = t.multiplier || 100, n = (t.exit_orders || []).length;
     let seq = 0;
     const add = (ts, title, text, tone) => out.push({ ts, title, text: text || "", tone: tone || "", seq: seq++ });
-    if (t.entry_rank && t.entry_rank.rank) add(t.entry_time, "Picked", "ranked #" + t.entry_rank.rank + " of " + t.entry_rank.of + " eligible candidates", "");
+    if (t.entry_rank && t.entry_rank.rank) add(t.entry_time, "Picked", t.entry_rank.of === 1 ? "the only eligible candidate" : "ranked #" + t.entry_rank.rank + " of " + t.entry_rank.of + " eligible candidates", "");
     add(t.entry_time, "Bought " + t.quantity + " at " + Number(t.entry_price).toFixed(2), "simulated fill at the ask", "info");
     (t.exit_orders || []).forEach((x, i) => {
       const last = i === n - 1 && t.status === "CLOSED", part = (x.price - t.entry_price) * x.quantity * mult;
