@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
@@ -22,7 +23,8 @@ from .base import BrokerAdapter, BrokerRejected
 from .ibkr import ID_PREFIX
 from .sim import SimBroker
 
-MAX_BACKLOG = 200   # beyond this, new mirror work is dropped and audited, never blocking the simulator
+MAX_BACKLOG = 200
+RETRY_DELAYS_S = (10.0, 30.0)   # an unknown outcome is retried by the same key; IBKR finds an order already placed   # beyond this, new mirror work is dropped and audited, never blocking the simulator
 POLL_S = 60.0       # idle worker reads back still-working IBKR orders this often
 MAX_TRACKED = 200   # still-working IBKR orders followed at once; the oldest is dropped beyond this
 MAX_MISSES = 30     # read-backs in a row that fail before an order stops being followed (about 30 idle minutes)
@@ -42,6 +44,7 @@ class MirroredSimBroker(SimBroker):
         self._working: dict[str, tuple[str, int]] = {}   # key -> last IBKR (status, filled); touched by the worker only
         self._misses: dict[str, int] = {}
         self._background = background
+        self.retry_delays_s: tuple[float, ...] = RETRY_DELAYS_S if background else ()
         self._work: "queue.Queue[tuple[Callable[..., None], tuple[Any, ...]]]" = queue.Queue(MAX_BACKLOG)
         self.last_mirror: dict[str, Any] = {"state": "idle", "at": None}
         if background:
@@ -122,16 +125,25 @@ class MirroredSimBroker(SimBroker):
     def _mirror_submit(self, intent: OrderIntent) -> None:
         base = {"idempotency_key": intent.idempotency_key, "side": intent.side.value, "quantity": intent.quantity,
                 "limit_price": intent.limit_price, "contract": intent.contract.to_dict()}
-        try:
-            s = self.mirror.submit_limit_order(intent)
-        except BrokerRejected as exc:
-            self._record("ibkr_mirror_rejected", {**base, "reason": str(exc)[:160]}, "rejected")
-        except Exception as exc:  # noqa: BLE001 - unknown outcome: the next submit/lookup by key resolves it
-            self._record("ibkr_mirror_error", {**base, "error": type(exc).__name__}, "error")
+        for attempt, delay in enumerate((0.0, *self.retry_delays_s)):
+            if delay:
+                time.sleep(delay)
+            try:
+                s = self.mirror.submit_limit_order(intent)   # idempotent: a retry finds an order already placed
+            except BrokerRejected as exc:
+                self._record("ibkr_mirror_rejected", {**base, "reason": str(exc)[:160]}, "rejected")
+                return
+            except Exception as exc:  # noqa: BLE001 - unknown outcome: retry by the same key, then give up loudly
+                last = type(exc).__name__
+                stage = getattr(self.mirror, "stage", None)
+                self._record("ibkr_mirror_error", {**base, "error": last, "attempt": attempt + 1, "stage": stage}, "error")
+                continue
+            break
         else:
-            self._record("ibkr_mirror_submitted", {**base, "status": s.status, "filled_qty": s.filled_qty,
-                                                   "avg_fill_price": s.avg_fill_price}, s.status)
-            self._track(intent.idempotency_key, s.status, s.filled_qty)
+            return   # every attempt failed; each is in the audit log
+        self._record("ibkr_mirror_submitted", {**base, "status": s.status, "filled_qty": s.filled_qty,
+                                               "avg_fill_price": s.avg_fill_price}, s.status)
+        self._track(intent.idempotency_key, s.status, s.filled_qty)
 
     def _mirror_cancel(self, key: str) -> None:
         try:
