@@ -32,6 +32,7 @@ SLACK = 2
 MISSING_FEATURES = ["iv_percentile", "days_to_earnings"]  # each is dropped from a row once it is measured (iv_percentile needs MIN_IV_HISTORY prior days)
 MIN_IV_HISTORY = 20       # prior days of a name's own IV level needed before a percentile means anything
 ATM_BAND_PCT = 5.0        # contracts within this moneyness band define the name's IV level
+POINT_CLOSES = 21        # daily closes of the underlying stored with each bid-path point (hypothesis X6 needs them to replay the exit agent)
 GATE = {"trading_days": 20, "followed": 2000, "underlyings": 50, "complete_pct": 80.0, "export_days_in_a_row": 5}
 
 
@@ -243,7 +244,8 @@ def observe(store: Any, snap: MarketSnapshot, day: date, now: datetime, fictiona
         if point_due(age, seen.get((f["contract"], f["followed_day"]), set()), day):
             if store.record_shadow_point(f["contract"], f["followed_day"], fictional, now.isoformat(), day.isoformat(),
                                          {"age": age, "bid": row.bid, "ask": row.ask, "underlying": snap.underlying,
-                                          "volume": row.volume, "open_interest": row.open_interest, "iv": row.iv}):
+                                          "volume": row.volume, "open_interest": row.open_interest, "iv": row.iv,
+                                          **({"closes": [round(c, 4) for c in snap.closes[-POINT_CLOSES:]]} if snap.closes else {})}):
                 points += 1
     return {"followed": followed, "points": points}
 
