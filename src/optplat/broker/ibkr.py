@@ -49,6 +49,8 @@ MAX_CONTRACTS_PER_ORDER = 10
 MAX_ORDER_PREMIUM_USD = 5_000.0
 DEFAULT_CLIENT_ID = 95          # 94 is the Alerter's read-only data service
 CALL_TIMEOUT_S = 20.0
+CONNECT_TIMEOUT_S = 15.0        # per ib_async startup request; it runs several, then executions
+CONNECT_CALL_TIMEOUT_S = 75.0   # must exceed ib_async's whole startup sync, or we give up as it succeeds
 SETTLE_S = 3.0
 _TERMINAL = {"Filled", "Cancelled", "ApiCancelled", "Inactive"}
 ID_PREFIX = "ibkr:"
@@ -83,11 +85,17 @@ class LoopThread:
         self.loop = asyncio.new_event_loop()
         threading.Thread(target=self.loop.run_forever, name="ibkr-paper", daemon=True).start()
 
-    def __call__(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, fn: Callable[..., Any], *args: Any, _timeout: float = CALL_TIMEOUT_S, **kwargs: Any) -> Any:
         async def go() -> Any:
             out = fn(*args, **kwargs)
             return await out if inspect.isawaitable(out) else out
-        return asyncio.run_coroutine_threadsafe(go(), self.loop).result(CALL_TIMEOUT_S)
+        return asyncio.run_coroutine_threadsafe(go(), self.loop).result(_timeout)
+
+
+def _safe(text: str) -> str:
+    """An error message without account ids, for health output and logs."""
+    import re
+    return re.sub(r"\b[DU][A-Z]?\d{5,}\b", "<account>", text)[:200]
 
 
 def _round_limit(price: float, side: Side) -> float:
@@ -109,6 +117,7 @@ class IBKRPaperBroker(BrokerAdapter):
         self._contracts: dict[OptionContract, Any] = {}
         self._lock = threading.RLock()
         self._verified = False
+        self.stage = "not connected"
 
     # ---- connection ------------------------------------------------------------------------------------------------
     def _session(self) -> Any:
@@ -122,9 +131,11 @@ class IBKRPaperBroker(BrokerAdapter):
             ib, run = self._ib, self._run
             if not run(ib.isConnected):
                 self._verified = False
-                run(ib.connectAsync, self.host, self.port, clientId=self.client_id, readonly=False, timeout=10,
-                    account=self.account_id or "")
+                self.stage = "connect"
+                run(ib.connectAsync, self.host, self.port, clientId=self.client_id, readonly=False,
+                    timeout=CONNECT_TIMEOUT_S, account=self.account_id or "", _timeout=CONNECT_CALL_TIMEOUT_S)
             if not self._verified:
+                self.stage = "paper-only check"
                 accounts = list(run(ib.managedAccounts) or [])
                 if not accounts or not all(is_paper_account(a) for a in accounts):
                     run(ib.disconnect)
@@ -137,15 +148,18 @@ class IBKRPaperBroker(BrokerAdapter):
                 elif self._pinned not in accounts:
                     run(ib.disconnect)
                     raise RuntimeError("IBKR session does not manage the configured paper account")
+                self.stage = "open orders"
                 run(ib.reqAllOpenOrdersAsync)   # bind working orders from earlier sessions so idempotency holds
                 self._verified = True
+            self.stage = "ready"
             return ib
 
     def healthcheck(self) -> dict[str, Any]:
         try:
             self._session()
         except Exception as exc:  # noqa: BLE001 - report, never raise from a health check
-            return {"connected": False, "paper_only": None, "port": self.port, "reason": type(exc).__name__}
+            return {"connected": False, "paper_only": None, "port": self.port, "client_id": self.client_id,
+                    "failed_at": self.stage, "reason": type(exc).__name__, "detail": _safe(str(exc))}
         return {"connected": True, "paper_only": True, "port": self.port, "client_id": self.client_id}
 
     # ---- account ---------------------------------------------------------------------------------------------------
