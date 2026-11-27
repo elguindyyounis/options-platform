@@ -1287,3 +1287,7 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 ## 2026-11-27 (Claude): count fills of orders from an earlier IBKR session
 
 * Live exit test: the IBKR buy filled (1 SPY Jan-27 760 C at 6.03), then the mirrored sell was refused by our own guard. ib_async reports an earlier session's orders as completed with `orderStatus.filled = 0`; the count is in `order.filledQuantity`. `_filled()` now reads both (ignoring the unset sentinel) for statuses and the platform's net holding, and the refusal message states both numbers. Verified: pytest 1004. Merged on the owner's standing instruction.
+## 2026-11-27 (Claude, owner request): measure the platform's share of the IBKR bar budget
+
+* The Mac showed chains falling back to Yahoo with `HTTP 503 Historical pacing budget exhausted`: the Alerter's service allows 30 bar requests per 10 minutes for all consumers (execution quotes may use up to 54). Before cutting anything, measure: `IBKRDataProvider` now records every request it sends (kind: chain, bars_daily, bars_5min, verify, quotes; the calling platform module; refusal reason) and `/api/health` `market_data.platform_usage` shows the last 10 minutes. errorhelp names the budget error (`IBKR_BUDGET`).
+* Verified: `python -m pytest -q` (new usage test; errorhelp test). Display only. Merged by the agent under rule 6 (owner conversation).

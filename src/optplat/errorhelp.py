@@ -25,6 +25,10 @@ _CODE_AT = re.compile(r"\[(?P<file>[\w.]+\.py):(?P<line>\d+) in (?P<fn>\w+)\]")
 
 # (kind, pattern, owner, cause, fix). First match wins. {sym} and {detail} are filled from the match.
 _RULES: tuple[tuple[str, re.Pattern[str], str, str, str], ...] = (
+    ("IBKR_BUDGET", re.compile(r"pacing budget exhausted"), WAIT,
+     "The shared IBKR service's bar budget (30 requests per 10 minutes, Alerter and platform together) ran out, so "
+     "data came from Yahoo or not at all.",
+     "Nothing if it clears. If it repeats, see platform_usage in /api/health for which part of the platform asks most."),
     ("FUTURE_TIMESTAMP", re.compile(r"rejected \(FUTURE_TIMESTAMP"), OWNER,
      "This computer's clock is behind the market data, so {sym}'s quotes look like they come from the future.",
      "Turn on System Settings > General > Date & Time > Set time and date automatically (or run: sudo sntp -sS time.apple.com)."),
