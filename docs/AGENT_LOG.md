@@ -1240,3 +1240,8 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 * The probe still stopped at connect: the Options Alerter's TWS paper worker uses client id 95, the platform's default, so TWS refused the second connection. Default is now 71; the Alerter's ids (91, 94, 95, 96, 98) are refused. The paper account is shared, so platform orders carry `orderRef` `optplat:<key>`, only those count as ours, and a sell may not exceed what platform orders bought net of its sells (and what the account holds). Verified: pytest 962. Merged on the owner's standing instruction.
 
+
+## 2026-11-27 (owner conversation): one-command export setup
+
+* The owner asked why scheduled runs never see real data (they run in the cloud; the database is on the Mac) and for a permanent fix. The nightly export already existed but `OPTPLAT_EXPORT_REPO` was never set (every EVOLUTION_LOG row says "data repo not attached"). Agent GitHub access cannot create repositories, so `deploy/setup_export.sh` does it on the Mac in one command: creates the private repo, writes the setting idempotently, refuses a non-private repo, runs one export.
+* Verified: 3 new tests in `tests/test_deploy.py` with a fake `gh`. Not verified: on macOS with a real `gh`. Still open: the alerter has no export of its own (UX-3), and the scheduled task needs access to the new repo. The owner must run the script once.
