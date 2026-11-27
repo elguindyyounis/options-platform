@@ -43,6 +43,8 @@ class ExitRule:
     trail_after_pct: Optional[float] = None       # arm the trail once the return has reached this
     trail_pct: Optional[float] = None             # then exit when the return falls this many points below its peak
     min_dte_to_hold: int = 5                      # leave before expiry gets dangerous (same as the live policy)
+    trim_at_pct: Optional[float] = None           # X5: sell ``trim_fraction`` once the return has reached this, then stop to entry
+    trim_fraction: float = 0.5                    # share sold at the trim; the rest keeps the take-profit and a stop at entry (0%)
 
 
 _P = ExitPolicy()
@@ -59,6 +61,8 @@ def grid_rules() -> list[ExitRule]:
     for d in (5, 10):
         rules.append(ExitRule(f"40/30 + time stop {d}d", take_profit_pct=40, stop_loss_pct=30, time_stop_days=d))
     rules.append(ExitRule("trail 30/15, stop 30", stop_loss_pct=30, trail_after_pct=30, trail_pct=15))
+    for t in (20, 40):  # X5: trim half, move the stop to entry, let the rest run to 80
+        rules.append(ExitRule(f"X5 trim 1/2 at +{t}, stop to entry, tp 80", take_profit_pct=80, stop_loss_pct=30, trim_at_pct=t))
     return rules
 
 
@@ -90,6 +94,13 @@ def replay_path(rule: ExitRule, follow: dict[str, Any], path: list[dict[str, Any
     expiry = date.fromisoformat(follow["expiry"])
     peak = 0.0
     last: Optional[dict[str, Any]] = None
+    trim: Optional[tuple[float, float]] = None  # (ret, stressed ret) of the trimmed share, once sold
+
+    def blend(ret: float, stressed: float) -> tuple[float, float]:
+        if trim is None:
+            return ret, stressed
+        f = rule.trim_fraction
+        return f * trim[0] + (1 - f) * ret, f * trim[1] + (1 - f) * stressed
     for p in path:
         if p.get("bid") is None or p["bid"] < 0:
             continue
@@ -98,8 +109,14 @@ def replay_path(rule: ExitRule, follow: dict[str, Any], path: list[dict[str, Any
         peak = max(peak, ret)
         observed = date.fromisoformat(p["observed_day"]) if p.get("observed_day") else None
         reason = None
-        if rule.stop_loss_pct is not None and ret <= -rule.stop_loss_pct / 100:
+        if trim is not None and ret <= 0:
+            reason = "stop_to_entry"  # sold at this bid, which can be below entry on a gap
+        elif trim is None and rule.stop_loss_pct is not None and ret <= -rule.stop_loss_pct / 100:
             reason = "stop"
+        elif trim is None and rule.trim_at_pct is not None and ret >= rule.trim_at_pct / 100 \
+                and not (rule.take_profit_pct is not None and ret >= rule.take_profit_pct / 100):
+            trim = (ret, _stressed(p, entry))
+            continue
         elif rule.take_profit_pct is not None and ret >= rule.take_profit_pct / 100:
             reason = "take_profit"
         elif rule.trail_after_pct is not None and rule.trail_pct is not None and peak >= rule.trail_after_pct / 100 \
@@ -110,10 +127,11 @@ def replay_path(rule: ExitRule, follow: dict[str, Any], path: list[dict[str, Any
         elif observed is not None and (expiry - observed).days <= rule.min_dte_to_hold:
             reason = "expiry_margin"
         if reason:
-            return {**base, "resolved": True, "reason": reason, "ret": ret, "ret_stressed": _stressed(p, entry), "age": p["age"]}
+            r, rs = blend(ret, _stressed(p, entry))
+            return {**base, "resolved": True, "reason": reason, "ret": r, "ret_stressed": rs, "age": p["age"]}
     if last is not None and (last["age"] >= MAX_AGE or expiry < today):
-        ret = last["bid"] / entry - 1
-        return {**base, "resolved": True, "reason": "horizon", "ret": ret, "ret_stressed": _stressed(last, entry), "age": last["age"]}
+        r, rs = blend(last["bid"] / entry - 1, _stressed(last, entry))
+        return {**base, "resolved": True, "reason": "horizon", "ret": r, "ret_stressed": rs, "age": last["age"]}
     return {**base, "resolved": False, "reason": "unresolved"}
 
 
