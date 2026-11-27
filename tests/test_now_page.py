@@ -98,6 +98,13 @@ console.log(JSON.stringify({
         .map((sm)=>W.optplatReadiness(lane,ctx(sm)).checks.find((c)=>c.id==='fills')),
     };
   })(),
+  nav:[
+    W.optplatNavStatus({runner:{running:true},config:{auto_entries:true}},{kill_switch:false},{summary:{all:{open:4}}},[]),
+    W.optplatNavStatus({runner:{running:false},config:{auto_entries:true}},{kill_switch:false},null,['Lane A']),
+    W.optplatNavStatus({runner:{running:true,stalled:true},config:{}},{kill_switch:false},null,null),
+    W.optplatNavStatus({runner:{running:true},config:{}},{kill_switch:true},null,null),
+    W.optplatNavStatus({runner:{running:false},config:{auto_entries:false,auto_exits:false}},{kill_switch:false},null,null),
+  ],
   why:[W.optplatWhy({payload:{rank:1,of:6,score:96.15}}),W.optplatWhy({payload:{score:88.6}}),W.optplatWhy({payload:{rank:1,of:1,risk_failures:['too wide']}}),W.optplatWhy({payload:{rank:3,of:9,score:50}})],
 }));
 """
@@ -267,3 +274,11 @@ def test_system_guardrail_says_whether_orders_are_mirrored_to_ibkr_paper(out):
     mirrored, sim, unknown = out["broker"]
     assert "IBKR paper mirror" in mirrored and "DU" in mirrored
     assert sim == "Simulator only" and unknown == "Unknown"
+
+
+def test_top_bar_tabs_show_live_status(out):
+    ok, stopped, stalled, killed, idle = out["nav"]
+    assert ok == {"trades": "4 open", "lanes": "0 ready", "system": ""}
+    assert stopped["system"] == "loop stopped" and stopped["lanes"] == "1 ready" and stopped["trades"] == ""
+    assert stalled["system"] == "loop stalled" and killed["system"] == "kill switch on"
+    assert idle["system"] == ""  # stopped on purpose with nothing automatic switched on is not an alert
