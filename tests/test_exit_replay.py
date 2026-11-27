@@ -103,7 +103,8 @@ def test_compare_with_too_few_pairs_says_so():
 
 def test_grid_matches_the_plan():
     names = [r.name for r in xr.grid_rules()]
-    assert names[0] == BASELINE.name and len(names) == 1 + 8 + 2 + 1 and len(set(names)) == len(names)
+    # +2 at the end: X5 registered 2026-11-27 (a deliberate owner-directed addition, not a weakened check)
+    assert names[0] == BASELINE.name and len(names) == 1 + 8 + 2 + 1 + 2 and len(set(names)) == len(names)
 
 
 def test_report_and_api():
@@ -123,3 +124,29 @@ def test_report_and_api():
     with TestClient(create_app(manager, "t" * 24, engine, None)) as c:
         assert c.get("/api/shadow/exits").status_code == 401
         assert c.get("/api/shadow/exits", headers={"X-API-Token": "t" * 24}).json()["fictional"] is True
+
+
+X5 = ExitRule("x5", take_profit_pct=80, stop_loss_pct=30, trim_at_pct=20)
+
+
+def test_x5_trims_half_then_stops_to_entry_and_blends_both_halves():
+    r = run(X5, [pt(1, 2.5), pt(2, 1.9)])  # +25% trims half; then the bid is below entry: stop to entry on the rest
+    assert r["reason"] == "stop_to_entry" and round(r["ret"], 4) == round(0.5 * 0.25 + 0.5 * -0.05, 4)
+    assert r["ret_stressed"] < r["ret"]
+
+
+def test_x5_rest_can_run_to_the_take_profit_and_without_a_trim_it_is_the_plain_stop():
+    r = run(X5, [pt(1, 2.5), pt(2, 3.8)])
+    assert r["reason"] == "take_profit" and round(r["ret"], 4) == round(0.5 * 0.25 + 0.5 * 0.9, 4)
+    assert run(X5, [pt(1, 1.3)])["reason"] == "stop" and round(run(X5, [pt(1, 1.3)])["ret"], 4) == -0.35
+
+
+def test_x5_gap_straight_past_take_profit_sells_everything_once():
+    r = run(X5, [pt(1, 4.0)])
+    assert r["reason"] == "take_profit" and round(r["ret"], 4) == 1.0
+
+
+def test_x5_rules_are_in_the_grid_and_the_baseline_is_unchanged():
+    names = [x.name for x in xr.grid_rules()]
+    assert sum(n.startswith("X5") for n in names) == 2
+    assert all(x.trim_at_pct is None for x in xr.grid_rules() if not x.name.startswith("X5"))

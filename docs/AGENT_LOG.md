@@ -1263,3 +1263,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * The scheduled error check (a Claude scheduled task) reads `/api/errors` on the Mac and opens PRs only for code bugs; it never changes settings, risk limits or the Alerter.
 * Verified: `python -m pytest -q` (11 new tests in `tests/test_errorhelp.py`, node check of the Act card lines). Not verified: the real IBKR service's refusal bodies on the Mac until the server picks up this build.
 * Merged by the agent under rule 6 (owner conversation).
+
+## 2026-11-27 (Claude, owner request: "see how you can improve our platform" with the TWI 2.0 write-up): X5 scale-out exit rule
+
+* Most of that write-up (streaming, chat, onboarding, paid-community features) does not touch what the platform chooses to buy or sell, so under the evolution plan it was not taken. One idea does: its trade lifecycle (Entered, Trimmed 1/2, Stop to entry, Exit). That is an exit rule nobody had tested here. Registered as hypothesis X5 with pass criteria written first (`docs/EVOLUTION_PLAN.md`); `exit_replay.py` now replays "trim half at +20/+40, stop to entry on the rest, take-profit 80". Not built: live partial exits (the exit manager sells whole positions; that and any threshold change are the owner's decision).
+* Other ideas noted, not built: Eko-style tool-calling assistant, per-user layouts, alert push filters.
+* Verified: `python -m pytest -q` 992 pass (4 new X5 tests; `test_grid_matches_the_plan` count raised by 2 for the two new rules, a deliberate addition). Not verified: real data (none recorded for replay here). No result exists, no edge claimed.
