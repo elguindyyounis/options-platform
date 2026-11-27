@@ -1,0 +1,311 @@
+"""What the research lanes would do at the next session, worked out while the market is closed. PREVIEW ONLY.
+
+The swing lanes decide on the newest completed daily bar, so once a session has closed their next entries and exits
+are already fixed by data that exists. This module replays those decisions WITHOUT side effects: it never opens or
+closes a trade, never writes a lane's "bar already judged" key, and never places an order. The lanes themselves
+re-check everything at the open with fresh quotes, so prices and sizes here are last quotes, not promises.
+
+Lanes that decide during the session (EMA9/VWAP short-term lanes, the challenge account, the flow lane and the main
+account) cannot be previewed honestly; they are listed with when and how they decide instead.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date, datetime, time, timedelta, timezone
+from typing import Any, Optional
+
+from . import optionlanes as ol
+from . import shortterm as st_mod
+from . import swing as sw_mod
+from .dataquality import check_snapshot
+from .market_clock import CLOSE, EARLY_CLOSE, EARLY_CLOSES, HOLIDAYS, NY, OPEN, session_status
+from .models import Right
+from .scanner import SECTOR_OF
+
+STATE_KEY = "next_session_plan"
+BUILD_AFTER_CLOSE = timedelta(minutes=20)       # let the provider publish the final daily bar first
+PREVIEW_MAX_QUOTE_AGE_S = 4 * 24 * 3600         # quotes after a long weekend are old; they are labelled, not trusted
+VERSION = "next-session-v1"
+
+
+def next_session(now: datetime) -> Optional[dict[str, Any]]:
+    """The next regular session that has not started yet, from the hand-kept calendar. None when the table runs out."""
+    local = now.astimezone(NY)
+    closed: list[str] = []
+    for k in range(0, 15):
+        d = local.date() + timedelta(days=k)
+        if d.year not in HOLIDAYS:
+            return None
+        if d.weekday() >= 5 or d in HOLIDAYS[d.year]:
+            if k:
+                closed.append(d.isoformat())
+            continue
+        if k == 0 and local.time() >= OPEN:
+            continue                                    # today's session has started or finished
+        early = d in EARLY_CLOSES.get(d.year, frozenset())
+        opens = datetime.combine(d, OPEN, NY)
+        closes = datetime.combine(d, EARLY_CLOSE if early else CLOSE, NY)
+        return {"date": d.isoformat(), "opens_at": opens.astimezone(timezone.utc).isoformat(),
+                "closes_at": closes.astimezone(timezone.utc).isoformat(), "early_close": early, "closed_days_before": closed}
+    return None
+
+
+def last_close(now: datetime) -> Optional[datetime]:
+    """When the most recent session closed, or None while a session is open or the calendar runs out."""
+    if session_status(now)[0]:
+        return None
+    local = now.astimezone(NY)
+    for k in range(0, 15):
+        d = local.date() - timedelta(days=k)
+        if d.year not in HOLIDAYS:
+            return None
+        if d.weekday() >= 5 or d in HOLIDAYS[d.year]:
+            continue
+        closes = datetime.combine(d, EARLY_CLOSE if d in EARLY_CLOSES.get(d.year, frozenset()) else CLOSE, NY)
+        if closes <= local:
+            return closes.astimezone(timezone.utc)
+    return None
+
+
+def _saved_mark(store: Any, trade_id: int) -> Optional[tuple[float, float, str]]:
+    try:
+        m = json.loads(store.get_state(f"lane_mark:{trade_id}", "") or "{}")
+        return (float(m["bid"]), float(m["ask"]), str(m.get("at", ""))) if m else None
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def _held_exit(lane: ol.OptionLane, t: dict[str, Any], r: Optional[dict[str, Any]], session: date) -> dict[str, Any]:
+    """The same exit rules as OptionLane._long_exit, judged on saved marks and the newest completed bar."""
+    o, p = t["open_payload"], lane.p
+    mark = _saved_mark(lane.store, t["id"])
+    entry = t["entry_price"]
+    stop_bid, target_bid = round(entry * (1 - o["stop_pct"] / 100), 4), round(entry * (1 + o["target_pct"] / 100), 4)
+    row = {"symbol": t["symbol"], "contract": o["contract"], "right": o["right"], "quantity": t["quantity"], "entry": entry,
+           "last_bid": mark[0] if mark else None, "mark_at": mark[2] if mark else None,
+           "stop_bid": stop_bid, "target_bid": target_bid, "expiry": o["expiry"]}
+    reason = None
+    if mark and mark[0] <= stop_bid:
+        reason = "stop"
+    elif mark and mark[0] >= target_bid:
+        reason = "target"
+    elif (date.fromisoformat(o["expiry"]) - session).days <= 2:
+        reason = "expiry_near"
+    elif r is not None and ((o["right"] == "C" and r["close"] < r["sma_slow"]) or (o["right"] == "P" and r["close"] > r["sma_slow"])):
+        reason = "trend_break"
+    elif r is not None:
+        opened_day = o.get("bar_day") or datetime.fromisoformat(t["opened_at"]).date().isoformat()
+        held_bars = sum(1 for d in r["days"] if d.isoformat() > opened_day)
+        limit = o.get("max_hold_bars", p.max_hold_bars)
+        row["bars_held"], row["bar_limit"] = held_bars, limit
+        if held_bars >= limit:
+            reason = "time"
+    row["action"] = "WOULD_SELL" if reason else "HOLD"
+    row["reason"] = reason or ("no daily bar to judge the trend or holding time" if r is None else None)
+    if reason and mark is None:
+        row["note"] = "no saved quote: the lane sells only once it has a usable bid"
+    return row
+
+
+def _swing_option_lane(lane: ol.OptionLane, now: datetime, session: dict[str, Any]) -> dict[str, Any]:
+    p = lane.p
+    sess_day = date.fromisoformat(session["date"])
+    sess_open = datetime.fromisoformat(session["opens_at"])
+    out: dict[str, Any] = {"lane": p.lane, "label": p.label, "kind": p.kind, "previewable": True,
+                           "buys": [], "sells": [], "holds": [], "blocked": [], "errors": []}
+    held = lane._held()
+    try:
+        raw = lane.feed.daily(p.symbols, sw_mod.BARS_MONTHS)
+    except Exception as exc:  # noqa: BLE001 - no data means no preview, and it is shown
+        out["errors"].append(f"daily bars unavailable: {type(exc).__name__}: {str(exc)[:100]}")
+        return out
+    reads = {s: sw_mod.read(raw.get(s, []), now) for s in p.symbols}
+    out["bar_day"] = max((r["day"] for r in reads.values() if r), default=None)
+    out["bar_day"] = out["bar_day"].isoformat() if out["bar_day"] else None
+    for t in held:
+        row = _held_exit(lane, t, reads.get(t["symbol"]), sess_day)
+        (out["sells"] if row["action"] == "WOULD_SELL" else out["holds"]).append(row)
+    remaining = [t for t in held if not any(s["contract"] == t["open_payload"]["contract"] for s in out["sells"])]
+    marks = {t["open_payload"]["contract"]: (m[0], m[1]) for t in remaining if (m := _saved_mark(lane.store, t["id"]))}
+    signals = []
+    for sym in p.symbols:
+        r = reads.get(sym)
+        if r is None or lane.store.get_state(f"optlane_bar:{p.lane}:{sym}", "") == r["day"].isoformat():
+            continue                                    # no bar, or this bar was already judged in a session
+        right = ol.swing_signal(r, p)
+        if right:
+            signals.append((r["rsi_dip"] if right == "C" else -r["rsi_peak"], sym, right, r))
+    signals.sort(key=lambda x: (x[0], x[1]))
+    entries = reads_done = 0
+    for _, sym, right, r in signals:
+        base = {"symbol": sym, "right": right, "signal_bar": r["day"].isoformat(), "close": round(r["close"], 4),
+                "rsi": round(r["rsi"], 1), "sma_slow": round(r["sma_slow"], 4)}
+
+        def block(why: str) -> None:
+            out["blocked"].append({**base, "reason": why})
+
+        if entries >= ol.MAX_ENTRIES_PER_STEP or reads_done >= ol.MAX_CHAIN_READS_PER_STEP:
+            block(f"over the lane's {ol.MAX_ENTRIES_PER_STEP} entries per check")
+            continue
+        if not lane._may_open(sym, remaining, marks):
+            block("book full: open positions, sector share or stacking limit")
+            continue
+        state = lane._earnings_state(sym, sess_day)
+        if p.earnings_gate and state not in ("FUND", "CLEAR"):
+            block(f"earnings {state.lower()}: this lane needs a clear calendar")
+            continue
+        try:
+            ok, why, _ = lane.feed.regime.allows(right)
+        except Exception:  # noqa: BLE001 - the lane itself treats an unknown regime as allowed; say so
+            ok, why = True, ""
+        if not ok:
+            block(why or "market-regime guard")
+            continue
+        reads_done += 1
+        try:
+            chk = check_snapshot(lane.feed.window(sym, p.dte_min, p.dte_max, 3), now, max_age_s=PREVIEW_MAX_QUOTE_AGE_S)
+        except Exception as exc:  # noqa: BLE001
+            block(f"chain unavailable ({type(exc).__name__})")
+            continue
+        if chk.snapshot is None:
+            block("chain rejected by the data-quality gate")
+            continue
+        row = ol.pick_contract(chk.snapshot, Right(right), sess_open, p)
+        if row is None:
+            block("no contract met the expiry, spread and open-interest limits on the last quotes")
+            continue
+        qty = int(p.budget_usd // (row.ask * ol.MULTIPLIER))
+        if qty < 1:
+            block(f"one contract costs more than the ${p.budget_usd:,.0f} budget")
+            continue
+        entries += 1
+        pick = {**base, "contract": row.contract.occ_symbol.strip(), "expiry": row.contract.expiry.isoformat(),
+                "strike": row.contract.strike, "bid": row.bid, "ask": row.ask,
+                "spread_pct": round((row.ask - row.bid) / row.ask * 100, 1), "quantity": qty,
+                "premium_usd": round(qty * row.ask * ol.MULTIPLIER, 2), "earnings_state": state,
+                "size_vs_volume_pct": round(qty / row.volume * 100, 1) if row.volume else None,
+                "size_vs_oi_pct": round(qty / row.open_interest * 100, 1) if row.open_interest else None,
+                "quote_as_of": chk.snapshot.as_of.isoformat()}
+        out["buys"].append(pick)
+        remaining.append({"symbol": sym, "open_payload": {"contract": pick["contract"]}, "entry_price": row.ask})
+    return out
+
+
+def _swing_share_lane(store: Any, provider: Any, calendar: Any, now: datetime, session: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {"lane": sw_mod.LANE, "label": "Swing pullback (shares)", "kind": "swing", "previewable": True,
+                           "buys": [], "sells": [], "holds": [], "blocked": [], "errors": []}
+    try:
+        raw = provider.daily_bars(sw_mod.SYMBOLS, months=sw_mod.BARS_MONTHS)
+    except Exception as exc:  # noqa: BLE001
+        out["errors"].append(f"daily bars unavailable: {type(exc).__name__}: {str(exc)[:100]}")
+        return out
+    reads = {s: sw_mod.read(raw.get(s, []), now) for s in sw_mod.SYMBOLS}
+    open_by = {t["symbol"]: t for t in store.lane_trades(sw_mod.LANE, provider.fictional, 2000) if t["closed_at"] is None}
+    for sym, t in list(open_by.items()):
+        r = reads.get(sym)
+        why = sw_mod.exit_reason(t, r) if r else None
+        row = {"symbol": sym, "quantity": t["quantity"], "entry": t["entry_price"], "last_close": round(r["close"], 4) if r else None,
+               "stop": t["open_payload"].get("stop"), "target": t["open_payload"].get("target"), "reason": why}
+        if why:
+            out["sells"].append({**row, "action": "WOULD_SELL"})
+            open_by.pop(sym)
+        else:
+            out["holds"].append({**row, "action": "HOLD"})
+    lane = sw_mod.SwingLane(provider, store, clock=lambda: now, calendar=calendar)
+    for sym in sw_mod.SYMBOLS:
+        r = reads.get(sym)
+        if r is None or sym in open_by or store.get_state(f"swing_last_bar:{sym}", "") == r["day"].isoformat():
+            continue
+        if not sw_mod.entry_signal(r):
+            continue
+        base = {"symbol": sym, "right": "SHARES", "signal_bar": r["day"].isoformat(), "close": round(r["close"], 4)}
+        sector = SECTOR_OF.get(sym, sym)
+        if len(open_by) >= sw_mod.MAX_OPEN or sum(1 for s in open_by if SECTOR_OF.get(s, s) == sector) >= sw_mod.MAX_PER_SECTOR:
+            out["blocked"].append({**base, "reason": "book full: open positions or sector share"})
+            continue
+        if not lane._earnings_ok(sym, date.fromisoformat(session["date"])):
+            out["blocked"].append({**base, "reason": "earnings soon or unknown"})
+            continue
+        px = round(r["close"] * (1 + sw_mod.SLIPPAGE_PCT / 100), 4)
+        qty = int(sw_mod.NOTIONAL_USD // px)
+        if qty < 1:
+            continue
+        out["buys"].append({**base, "quantity": qty, "price": px, "notional_usd": round(qty * px, 2)})
+        open_by[sym] = {"symbol": sym}
+    return out
+
+
+def build_plan(engine: Any, now: Optional[datetime] = None) -> dict[str, Any]:
+    """The whole preview. Reads data; writes nothing except the plan itself (see ``refresh``)."""
+    now = now or engine.clock()
+    session = next_session(now)
+    plan: dict[str, Any] = {"version": VERSION, "built_at": now.isoformat(), "fictional": engine.provider.fictional,
+                            "next_session": session, "lanes": [], "decided_in_session": [],
+                            "places_orders": False,
+                            "note": ("Worked out from the newest completed daily bar and the last saved quotes. The lanes "
+                                     "re-check everything at the open, so prices and sizes can change and an entry can "
+                                     "still be refused.")}
+    if session is None:
+        plan["status"] = "NO_CALENDAR"
+        return plan
+    cfg = engine.config()
+    if cfg.option_lanes_enabled:
+        for lane in engine.option_lanes.lanes:
+            if lane.p.kind == "swing":
+                try:
+                    plan["lanes"].append(_swing_option_lane(lane, now, session))
+                except Exception as exc:  # noqa: BLE001 - one lane's failure must not hide the others
+                    plan["lanes"].append({"lane": lane.p.lane, "label": lane.p.label, "errors": [f"{type(exc).__name__}: {str(exc)[:120]}"]})
+            elif lane.p.kind == "short":
+                plan["decided_in_session"].append({"lane": lane.p.lane, "label": lane.p.label,
+                    "when": f"{st_mod.ENTRY_FROM:%H:%M}-{st_mod.ENTRY_UNTIL:%H:%M} New York time, on 5-minute EMA9/VWAP crosses; flat by {st_mod.FLAT_BY:%H:%M}"})
+            elif lane.p.kind == "flow":
+                plan["decided_in_session"].append({"lane": lane.p.lane, "label": lane.p.label,
+                    "when": "after the session's first scan, when yesterday's unusual contracts show open interest rose"})
+        plan["decided_in_session"].append({"lane": "challenge-10x", "label": "10x challenge",
+                                           "when": "during the session, on the short-term signal and its critic"})
+    if cfg.swing_enabled:
+        try:
+            plan["lanes"].append(_swing_share_lane(engine.store, engine.provider, engine.calendar, now, session))
+        except Exception as exc:  # noqa: BLE001
+            plan["lanes"].append({"lane": sw_mod.LANE, "label": "Swing pullback (shares)", "errors": [f"{type(exc).__name__}: {str(exc)[:120]}"]})
+    if cfg.auto_entries:
+        plan["decided_in_session"].append({"lane": "main", "label": "Main options account",
+                                           "when": "each engine cycle while the market is open, from live chains"})
+    plan["status"] = "READY"
+    plan["counts"] = {k: sum(len(l.get(k, [])) for l in plan["lanes"]) for k in ("buys", "sells", "blocked")}
+    return plan
+
+
+def due(engine: Any, now: datetime) -> bool:
+    """Build once per closed period: after a close (plus a margin for the final bar) and before the next open."""
+    if session_status(now)[0]:
+        return False
+    closed = last_close(now)
+    if closed is not None and now - closed < BUILD_AFTER_CLOSE:
+        return False
+    session = next_session(now)
+    if session is None:
+        return False
+    try:
+        old = json.loads(engine.store.get_state(STATE_KEY, "") or "{}")
+    except ValueError:
+        old = {}
+    built = old.get("built_at")
+    if (old.get("next_session") or {}).get("date") != session["date"] or not built:
+        return True
+    return closed is not None and datetime.fromisoformat(built) < closed
+
+
+def refresh(engine: Any, now: Optional[datetime] = None) -> dict[str, Any]:
+    plan = build_plan(engine, now)
+    engine.store.set_state(STATE_KEY, json.dumps(plan, default=str))
+    return plan
+
+
+def saved(store: Any) -> Optional[dict[str, Any]]:
+    try:
+        raw = store.get_state(STATE_KEY, "")
+        return json.loads(raw) if raw else None
+    except ValueError:
+        return None

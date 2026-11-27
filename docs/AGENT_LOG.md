@@ -3,6 +3,20 @@
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
 
+## 2026-11-27: next-session plan on the Desk (with the owner)
+
+* The owner asked how to know what the platform will trade after a weekend, a holiday or overnight. New `nextsession.py`:
+  while the market is closed (20 minutes after a close, once per closed period) the engine replays the swing lanes' own
+  rules on the newest completed daily bar and the last saved quotes: which contracts each swing option lane and the share
+  swing lane would buy at the next open, which held trades are due to sell and why, and which signals are blocked and why.
+  Lanes that decide during the session (short-term, challenge, flow, main account) are listed with when they decide.
+* No side effects: it never opens or closes a lane trade, never writes a lane's "bar judged" key, places no order and
+  touches no limit, default, broker path or auth. `GET /api/next-session` and `POST /api/next-session/refresh` (token checked).
+  Desk card "Next session", text-only DOM.
+* Verified: 936 tests pass (12 new). A test shows the preview names the same contract the lane then buys at the open.
+* Not verified: real data on the Mac at the time of writing; a weekend gap or news can change what the lane does at the open.
+* Merged by the agent with the owner in the conversation (rule 6 owner decision 2026-11-27).
+
 ## 2026-11-13: tracker splits flagged contracts by size of open interest (daily challenger)
 
 * Alerter unchanged since `9210fd8`. Read its `storage.py` and `data_sources.py` (notes in `docs/COMPARISON_ALERTER.md`).

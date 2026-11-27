@@ -38,6 +38,7 @@ from .universe import SECTORS
 from .shortterm import ShortTermLane
 from .swing import SwingLane
 from .optionlanes import OptionLanes
+from . import nextsession
 from .strategy import FlowFollowStrategy, LiquidTrendStrategy, Strategy
 
 SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
@@ -551,6 +552,20 @@ class TradingEngine:
         except Exception:  # noqa: BLE001
             return None
 
+    def maybe_next_session_plan(self) -> Optional[dict[str, Any]]:
+        """While the market is closed, work out once what the swing lanes would do at the next session (a preview:
+        nothing is opened, closed or ordered). Never raises into the trading loop."""
+        try:
+            cfg = self.config()
+            if not (cfg.option_lanes_enabled or cfg.swing_enabled):
+                return None
+            now = self.clock()
+            if not nextsession.due(self, now):
+                return None
+            return nextsession.refresh(self, now)
+        except Exception:  # noqa: BLE001
+            return None
+
     def maybe_scan(self) -> None:
         """Start the background scan when it is due. Never blocks or raises into the trading loop."""
         try:
@@ -1015,6 +1030,7 @@ class Runner:
                 self.engine.maybe_shortterm()
                 self.engine.maybe_swing()
                 self.engine.maybe_option_lanes()
+                self.engine.maybe_next_session_plan()
             except Exception as exc:  # noqa: BLE001 - keep the loop alive; the error is surfaced in status
                 self.consecutive_failures += 1
                 self.last_failure_at = self.engine.clock()
