@@ -16,6 +16,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Verified: 936 tests pass (12 new). A test shows the preview names the same contract the lane then buys at the open.
 * Not verified: real data on the Mac at the time of writing; a weekend gap or news can change what the lane does at the open.
 * Merged by the agent with the owner in the conversation (rule 6 owner decision 2026-11-27).
+* Follow-up the same day (#95 below): on the Mac before the open every chain read failed the data-quality gate, so the plan showed
+  62 blocked signals. Off-hours chain problems now QUEUE a signal for the open (in the lane's own order, counting toward its
+  8 chain reads) instead of blocking it, and the read cap is named correctly (it was labelled as the 3-entry cap).
 
 ## 2026-11-13: tracker splits flagged contracts by size of open interest (daily challenger)
 

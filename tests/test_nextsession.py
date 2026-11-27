@@ -152,3 +152,29 @@ def test_the_desk_shows_the_plan_without_assigning_html(client):
     html, js = c.get("/").text, c.get("/static/app.js").text
     assert 'id="next-session"' in html and 'data-question="What will the lanes buy and sell at the next open?"' in html
     assert '"/api/next-session"' in js and "Nothing is ordered from this preview." in js and "innerHTML" not in js
+
+
+def test_off_hours_chain_problems_queue_the_signal_for_the_open_instead_of_blocking_it():
+    lane, prov, store, box, now, session = lane_and_session()
+
+    def no_chain(*a, **k):
+        raise TimeoutError("chain closed")
+    prov.snapshot_window = no_chain
+    plan = ns._swing_option_lane(lane, now, session)
+    assert plan["buys"] == [] and plan["blocked"] == []
+    assert plan["queued"][0]["symbol"] == "AAPL" and plan["queued"][0]["why_no_contract_yet"] == "TimeoutError"
+
+
+def test_the_chain_read_cap_is_named_as_such():
+    from datetime import date as _d
+    lane, prov, store, box, now, session = lane_and_session()
+    many = tuple(f"S{i}" for i in range(12))
+    data = {s: prov.daily["AAPL"] for s in many}
+    lane2, prov2, store2, _ = make(replace(ol.SWING_AGGR, symbols=many, budget_usd=20000.0), daily=data, now=now)
+
+    def no_chain(*a, **k):
+        raise TimeoutError("chain closed")
+    prov2.snapshot_window = no_chain
+    plan = ns._swing_option_lane(lane2, now, session)
+    assert len(plan["queued"]) == ol.MAX_CHAIN_READS_PER_STEP
+    assert all("option-chain reads" in b["reason"] for b in plan["blocked"]) and len(plan["blocked"]) == 12 - ol.MAX_CHAIN_READS_PER_STEP
