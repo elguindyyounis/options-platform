@@ -141,6 +141,12 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-27: platform share of IBKR 5-minute bars: measured on the Mac (#109) as most of the platform's bar
+  requests (19 of 27 in the first minutes; about 75 per 10 minutes against a 30-per-10-minute budget for all consumers).
+  Each name is now fetched once per completed bar, inside 12 new fetches per 10 minutes; the short-term lane's six
+  names come first, others use the research fallback when the share is full. Next: re-measure; chains (`snapshot`)
+  still each cost a daily-bar request on a service cache miss.
+
 * 2026-11-27: error explainer (owner request): `errorhelp.py` gives each cycle and lane error a cause, a fix, who acts
   (wait / you / agent / Alerter / decision) and cycles in a row; the Desk Act card shows it, `GET /api/errors` returns
   cycle, lane and IBKR-mirror errors explained for the scheduled error check. IBKR service refusals now keep their
