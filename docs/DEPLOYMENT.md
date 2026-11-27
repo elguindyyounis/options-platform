@@ -29,3 +29,19 @@ then restarts the server through launchd. It takes no branch, commit or command 
 updater were written without a Mac, so they are untested on macOS: run `install_mac.sh` and check `update.log`
 after the first refresh. Restart means a few seconds of downtime, and the in-memory simulated broker is rebuilt from
 saved fills (see `SimBroker.restore`).
+
+## Keeping the server up (watchdog, 2026-11-27)
+
+On 2026-11-27 the server stayed down: its LaunchAgent had been unloaded (most likely by an install that stopped after
+unloading it) and nothing loaded it again. Three changes stop that from happening again:
+
+* `deploy/watchdog.sh` runs every 5 minutes as `com.optionsplatform.watchdog`. If the server's LaunchAgent is not loaded,
+  it loads it again; if it is loaded but `/api/health` has not answered for about 30 seconds, it restarts it. It logs to
+  `watchdog.log` in the data folder and does nothing while an update runs.
+* `install_mac.sh` starts the server again on the way out if it stops partway after unloading it.
+* `start-platform.command` no longer starts a second, window-bound copy when the background service is installed; it
+  makes sure the service runs and opens the dashboard.
+
+To stop the server on purpose and keep it stopped: `touch ~/Library/Application\ Support/OptionsPlatform/server-paused`,
+then `launchctl kill TERM gui/$(id -u)/com.optionsplatform.server`. Delete the file (or run the installer or
+`start-platform.command`) to resume. The kill switch on the System page is still the way to stop new trades.
