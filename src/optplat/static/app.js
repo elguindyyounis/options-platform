@@ -122,6 +122,11 @@
     document.querySelectorAll("a.nav").forEach((a) => {
       if (a.getAttribute("data-page") === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
+    // A menu whose page is open is marked, and every menu closes once a page is chosen.
+    document.querySelectorAll("details.navmenu").forEach((m) => {
+      m.classList.toggle("has-current", !!m.querySelector('a.nav[data-page="' + page + '"]'));
+      m.open = false;
+    });
     document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", lanes: "Lanes", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Lab", system: "System" })[page] + " - " : "") + "options-platform";
   }
 
@@ -249,6 +254,25 @@
   };
 
   // ---------------------------------------------------------------- Desk
+  // Live status beside the four daily tabs, so the owner knows where to look before clicking. Pure, exposed for tests.
+  function navStatus(status, portfolio, allTrades, readyLanes) {
+    const rn = (status && status.runner) || {}, c = (status && status.config) || {};
+    const open = allTrades && allTrades.summary && allTrades.summary.all ? allTrades.summary.all.open : null;
+    const sysAlert = !!(portfolio && portfolio.kill_switch) || !!rn.stalled || (!rn.running && !!(c.auto_entries || c.auto_exits));
+    return {
+      trades: open === null ? "" : open + " open",
+      lanes: Array.isArray(readyLanes) ? readyLanes.length + " ready" : "",
+      system: sysAlert ? (portfolio && portfolio.kill_switch ? "kill switch on" : rn.stalled ? "loop stalled" : "loop stopped") : "",
+    };
+  }
+  function renderNavStatus(ns) {
+    $("nav-trades").textContent = ns.trades;
+    $("nav-lanes").textContent = ns.lanes;
+    const dot = $("nav-system");
+    dot.hidden = !ns.system;
+    dot.title = ns.system; dot.setAttribute("aria-label", ns.system || "system fine");
+  }
+
   function renderStrip(health, status, portfolio) {
     pill("mode", health.mode + " (" + (health.broker.broker || "broker") + ")", health.mode === "PAPER" ? "ok" : "bad");
     const md = health.market_data;
@@ -2400,6 +2424,7 @@
       (S.readyLanes || []).forEach((l) => glanceItems.push({ level: "warn", text: "Lane " + l + " passed every decision check: review it on the Lanes page. Promoting or switching it off is your decision." }));
       const now = renderNow(glanceItems, { health, status, portfolio, report, trades: allTrades, decisions, shadow: shadowRep, since: S.since });
       renderGlance(glanceItems, now.needs.length);
+      renderNavStatus(navStatus(status, portfolio, allTrades, S.readyLanes));
       renderResearchProgress(buildResearchProgress(shadowRep));
       renderSystemBand(status, (report.closed_trades !== undefined ? report.closed_trades : (allTrades && allTrades.trades ? allTrades.trades.filter((t) => t.status === "CLOSED").length : 0)), shadowRep, health);
       if (results) renderResults(results);
@@ -2477,7 +2502,13 @@
   $("trade-search").addEventListener("input", (ev) => { S.query = ev.target.value; renderTrades(); });
   $("btn-drawer-close").addEventListener("click", closeTrade);
   $("scrim").addEventListener("click", closeTrade);
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeTrade(); trapFocus(ev); });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { closeTrade(); document.querySelectorAll("details.navmenu[open]").forEach((m) => { m.open = false; }); } trapFocus(ev); });
+  document.addEventListener("click", (ev) => {
+    document.querySelectorAll("details.navmenu[open]").forEach((m) => { if (!m.contains(ev.target)) m.open = false; });
+  });
+  document.querySelectorAll("details.navmenu").forEach((m) => m.addEventListener("toggle", () => {
+    if (m.open) document.querySelectorAll("details.navmenu[open]").forEach((o) => { if (o !== m) o.open = false; }); // one menu at a time
+  }));
   const onBreak = () => { if (S.trades && route() === "trades") renderTrades(); if (route() === "shortterm") loadShortterm().catch(() => {}); if (route() === "swing") loadSwing().catch(() => {}); if (route() === "options" && S.opt) renderOptions(); };
   if (phone.addEventListener) phone.addEventListener("change", onBreak); else if (phone.addListener) phone.addListener(onBreak);
   window.addEventListener("hashchange", () => { if (takeTokenFromUrl()) { refresh(); return; } showPage(); if (S.connected && route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); if (S.connected) loadPage().catch((e) => { $("updated").textContent = "Error: " + e.message; }); });
@@ -2493,7 +2524,7 @@
   window.optplatDecisionFilter = filterDecisions;
   window.optplatTally = decisionTally;
   window.optplatSystem = systemReadiness; window.optplatLabGate = labGate; window.optplatLaneVerdict = laneVerdict; window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
-  window.optplatEvidenceGap = evidenceGap; window.optplatNeedAction = needAction; window.optplatDisagreement = disagreement; window.optplatWhy = whyOf; window.optplatReadiness = laneReadiness; window.optplatMirrorCells = mirrorCells; window.optplatMirrorLine = mirrorLine;
+  window.optplatEvidenceGap = evidenceGap; window.optplatNeedAction = needAction; window.optplatDisagreement = disagreement; window.optplatWhy = whyOf; window.optplatReadiness = laneReadiness; window.optplatNavStatus = navStatus; window.optplatMirrorCells = mirrorCells; window.optplatMirrorLine = mirrorLine;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   S.since = lastSeen(); // the previous look, kept for this whole visit so the digest does not reset itself every refresh
   window.addEventListener("pagehide", markSeen);

@@ -391,41 +391,86 @@
   .cfg-group legend { padding:0 6px; font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mut); }
   .cfg-group.risky { border-color:var(--warn); } .cfg-group.risky legend { color:var(--warn); }
   #ln-board .legend { padding:10px 14px 12px; font-size:12.5px; }
+  /* ---- top bar navigation (owner, 2026-11-27): one bar for pages and status, four daily tabs, two menus ---- */
+  .shell { display:block; min-height:100vh; }
+  .rail, .rail-foot { display:none; }
+  .topbar { position:sticky; top:0; z-index:20; display:flex; flex-wrap:wrap; align-items:center; gap:4px 18px; padding:0 20px; min-height:58px; background:var(--surface); border-bottom:1px solid var(--line); }
+  .topbar .brand { display:flex; flex-direction:column; line-height:1.2; padding:8px 0; color:var(--fg); text-decoration:none; }
+  .topbar .brand b { font:700 15px var(--sans); letter-spacing:-.01em; } .topbar .brand small { color:var(--mut); font-size:11.5px; }
+  .tabs { display:flex; gap:2px; align-self:stretch; }
+  .tabs a.nav { display:flex; align-items:center; gap:8px; padding:0 14px; color:var(--mut); text-decoration:none; font-weight:600; border-bottom:3px solid transparent; border-top:3px solid transparent; }
+  .tabs a.nav:hover { color:var(--fg); background:var(--raised); }
+  .tabs a.nav[aria-current="page"] { color:var(--fg); border-bottom-color:var(--series-1); }
+  .navstat { font-size:12px; font-weight:500; color:var(--mut); }
+  .navdot { width:8px; height:8px; border-radius:50%; background:var(--loss); display:inline-block; }
+  .menus { display:flex; gap:6px; flex:1 1 auto; }
+  .navmenu { position:relative; }
+  .navmenu > summary { list-style:none; cursor:pointer; padding:7px 12px; border:1px solid var(--line); border-radius:8px; color:var(--mut); font-weight:600; font-size:13.5px; }
+  .navmenu > summary::-webkit-details-marker { display:none; }
+  .navmenu > summary::after { content:" \25BE"; }
+  .navmenu[open] > summary, .navmenu.has-current > summary { color:var(--fg); border-color:var(--series-1); }
+  .navmenu .menu { position:absolute; top:calc(100% + 6px); left:0; z-index:30; width:300px; padding:6px; border:1px solid var(--line); border-radius:12px; background:var(--surface); box-shadow:0 14px 30px rgba(0,0,0,.35); display:grid; gap:2px; }
+  .menu-head { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mut); padding:6px 10px 4px; }
+  .menu a.nav { display:grid; padding:8px 10px; border-radius:8px; color:var(--fg); text-decoration:none; font-weight:600; }
+  .menu a.nav small { color:var(--mut); font-weight:400; font-size:12px; }
+  .menu a.nav:hover { background:var(--raised); } .menu a.nav[aria-current="page"] { background:var(--info-bg); }
+  .topbar .status { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:8px 0; font-size:12px; }
+  .topbar .status .pill { font-size:12px; padding:2px 9px; }
+  .strip { display:none; }
+  @media (max-width:860px) {
+    .shell { display:block; }
+    .topbar { padding:0 12px; gap:2px 10px; }
+    .tabs { position:fixed; left:0; right:0; bottom:0; z-index:25; background:var(--surface); border-top:1px solid var(--line); padding:0 4px env(safe-area-inset-bottom); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
+    .tabs a.nav { flex-direction:column; justify-content:center; gap:0; padding:9px 2px; font-size:12.5px; border-bottom:0; border-top:3px solid transparent; }
+    .tabs a.nav[aria-current="page"] { border-top-color:var(--series-1); }
+    .navmenu .menu { position:fixed; left:12px; right:12px; top:auto; width:auto; }
+    .topbar .status #updated, .topbar .status #market { display:none; }
+  }
 </style>
 </head>
 <body>
 <div class="shell">
-  <nav class="rail" aria-label="Sections">
-    <div class="brand"><b>options-platform</b><small>Paper trading desk</small></div>
-    <div class="navgroup" aria-hidden="true">Daily</div>
-    <a class="nav" href="#/desk" data-page="desk">Desk<span id="nav-needs" class="badge" hidden></span></a>
-    <a class="nav" href="#/trades" data-page="trades">Trades</a>
-    <a class="nav" href="#/lanes" data-page="lanes">Lanes</a>
-    <a class="nav" href="#/system" data-page="system">System</a>
-    <div class="navgroup" aria-hidden="true">Research</div>
-    <a class="nav" href="#/research" data-page="research">Lab</a>
-    <a class="nav" href="#/agents" data-page="agents">Agents</a>
-    <a class="nav" href="#/options" data-page="options">Options</a>
-    <a class="nav" href="#/swing" data-page="swing">Swing</a>
-    <a class="nav" href="#/shortterm" data-page="shortterm">Short-term</a>
-    <a class="nav" href="#/tracker" data-page="tracker">Tracker</a>
-    <div class="navgroup" aria-hidden="true">Market</div>
-    <a class="nav" href="#/market" data-page="market">Market</a>
-    <a class="nav" href="#/context" data-page="context">Context</a>
-    <div class="rail-foot">Paper trading only. No live orders exist in this app.</div>
-  </nav>
-
-  <div class="main">
-    <header class="strip">
+  <header class="topbar">
+    <a class="brand" href="#/desk"><b>options-platform</b><small>Paper only. No live orders exist in this app.</small></a>
+    <nav class="tabs" aria-label="Daily pages">
+      <a class="nav" href="#/desk" data-page="desk">Desk<span id="nav-needs" class="badge" hidden></span></a>
+      <a class="nav" href="#/trades" data-page="trades">Trades<span id="nav-trades" class="navstat"></span></a>
+      <a class="nav" href="#/lanes" data-page="lanes">Lanes<span id="nav-lanes" class="navstat"></span></a>
+      <a class="nav" href="#/system" data-page="system">System<span id="nav-system" class="navdot" hidden></span></a>
+    </nav>
+    <div class="menus">
+      <details class="navmenu" id="menu-research">
+        <summary>Research</summary>
+        <div class="menu" aria-label="Research pages">
+          <div class="menu-head">Weekly reading: is any rule worth changing?</div>
+          <a class="nav" href="#/research" data-page="research">Lab<small>Gate progress and registered tests</small></a>
+          <a class="nav" href="#/agents" data-page="agents">Agents<small>Which agent is right, from matured votes</small></a>
+          <a class="nav" href="#/options" data-page="options">Options<small>Option lanes and the 10x challenge</small></a>
+          <a class="nav" href="#/swing" data-page="swing">Swing<small>Swing share lane (SW1)</small></a>
+          <a class="nav" href="#/shortterm" data-page="shortterm">Short-term<small>Intraday share lane (ST1)</small></a>
+          <a class="nav" href="#/tracker" data-page="tracker">Tracker<small>Does unusual flow lead anywhere?</small></a>
+        </div>
+      </details>
+      <details class="navmenu" id="menu-market">
+        <summary>Market</summary>
+        <div class="menu" aria-label="Market pages">
+          <div class="menu-head">Background for the watchlist and timing</div>
+          <a class="nav" href="#/market" data-page="market">Market<small>Sector heat, unusual flow, candidates</small></a>
+          <a class="nav" href="#/context" data-page="context">Context<small>Index options, gamma, events</small></a>
+        </div>
+      </details>
+    </div>
+    <div class="status">
       <span id="mode" class="pill">connecting</span>
       <span id="data" class="pill"></span>
       <span id="market" class="pill"></span>
       <span id="kill" class="pill"></span>
       <span id="runner" class="pill"></span>
-      <span class="grow"></span>
       <span id="updated" class="muted"></span>
-    </header>
+    </div>
+  </header>
 
+  <div class="main">
     <main class="content">
       <section id="view-connect" data-plumbing="Connection to the local server" hidden>
         <h1>Connect</h1>
