@@ -195,3 +195,23 @@ def test_setup_export_refuses_a_repo_that_is_not_private(tmp_path):
 def test_setup_export_is_idempotent_and_keeps_an_existing_setting(tmp_path):
     r, cfg, calls = _setup_export(tmp_path, existing=True, preset="OPTPLAT_EXPORT_REPO=https://github.com/alice/other.git\n")
     assert r.returncode == 0 and "repo create" not in calls and cfg.count("OPTPLAT_EXPORT_REPO") == 1 and "other.git" in cfg
+
+
+def test_server_wrapper_passes_plain_and_exported_config_lines_to_the_server(tmp_path):
+    """Run the real wrapper with a stub python: a plain KEY=value line in config.env must reach the server's environment."""
+    import os, subprocess
+    home = tmp_path / "home"
+    data = home / "Library" / "Application Support" / "OptionsPlatform"
+    app = home / "Applications" / "OptionsPlatform" / ".venv" / "bin"
+    data.mkdir(parents=True)
+    app.mkdir(parents=True)
+    (data / "config.env").write_text("OPTPLAT_API_TOKEN=plain-token-1234567890\nOPTPLAT_MAX_POSITION_PCT=35\nexport OPTPLAT_IBKR_MIRROR=1\n")
+    out = tmp_path / "env.txt"
+    (app / "python").write_text(f'#!/bin/bash\nenv | grep ^OPTPLAT_ > "{out}"\n')
+    (app / "python").chmod(0o755)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
+    r = subprocess.run(["bash", os.path.join(root, "deploy", "server-wrapper.sh")], env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    got = out.read_text()
+    assert "OPTPLAT_MAX_POSITION_PCT=35" in got and "OPTPLAT_API_TOKEN=plain-token-1234567890" in got and "OPTPLAT_IBKR_MIRROR=1" in got
