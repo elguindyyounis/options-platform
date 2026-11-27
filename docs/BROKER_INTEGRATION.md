@@ -10,10 +10,15 @@ conformance suite against a fake IB session. It has **not** yet run against a re
    and turn **"Read-Only API" off** (orders are refused while it is on). Paper ports: TWS 7497, Gateway 4002.
 2. `pip install -e ".[ibkr]"`, then in the platform's environment set:
    `OPTPLAT_BROKER=sim`, `OPTPLAT_IBKR_MIRROR=1`. `IBKR_PAPER_ACCOUNT` is optional: unset, the account is read from TWS, and only when TWS manages exactly one account and it begins with `DU`.
-   Optional `IBKR_ORDER_CLIENT_ID` (default 95; 94 is the Alerter's read-only data service). Keep the account id out
+   Optional `IBKR_ORDER_CLIENT_ID` (default 71). The Options Alerter shares this TWS and paper account and uses ids 91, 94, 95, 96 and 98, which are refused. Keep the account id out
    of git.
 3. Restart the platform. It prints "IBKR paper mirror ON". `GET /api/health` shows `broker.ibkr_mirror` with the
    last outcome; every mirrored order, rejection, error and cancel is in the audit log as `ibkr_mirror_*`.
+
+## Sharing the paper account with the Options Alerter
+
+Both apps send orders to the same IBKR paper account. Every platform order's `orderRef` starts with `optplat:`; the
+platform ignores every order without it, and sells only what its own orders bought (never the Alerter's positions).
 
 ## What it refuses (fail-closed, may only be made stricter)
 

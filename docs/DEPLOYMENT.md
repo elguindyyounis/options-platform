@@ -58,3 +58,7 @@ OPTPLAT_MAX_TOTAL_PREMIUM_PCT=70
 
 A new size starts a new paper account from that moment (see `src/optplat/account.py`); earlier trades stay in the database
 and the export. Removing the lines and restarting starts another new account at $100,000.
+
+## Turning on the private data export (one time)
+
+Scheduled research runs run in the cloud and cannot see the Mac's database. The nightly export (installed by `install_mac.sh`, 21:15) sends a secret-free copy to a PRIVATE repo, but only once `OPTPLAT_EXPORT_REPO` is set. On the Mac, after `gh auth login`, run `bash ~/options-platform/deploy/setup_export.sh` (or `bash deploy/setup_export.sh owner/name` for another repo name). It creates the private repo, writes the setting and runs one export. Then give the scheduled task access to that repo. The script refuses a repo that is not private.

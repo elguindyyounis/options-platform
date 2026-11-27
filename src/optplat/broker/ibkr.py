@@ -9,7 +9,7 @@ Sends DAY limit orders to an IBKR **paper** account through TWS or IB Gateway wi
 * an order over ``MAX_CONTRACTS_PER_ORDER`` contracts or ``MAX_ORDER_PREMIUM_USD`` of premium, or with a bad price;
 * a sell for more than the paper account holds after its other working sells.
 
-Idempotency: our key is IBKR's ``orderRef``, and the broker order id is ``ibkr:<key>``, so a restart finds the same
+Idempotency: ``optplat:<key>`` is IBKR's ``orderRef``, and the broker order id is ``ibkr:<key>``, so a restart finds the same
 order by searching working and completed orders. If that search cannot run (disconnected), it raises: "no such order"
 is only ever said when IBKR answered. IBKR does not timestamp option bid/ask, so ``get_quote`` never marks a quote
 verified; the default risk policy will not trade on its own quotes.
@@ -22,6 +22,7 @@ import asyncio
 import inspect
 import math
 import os
+import re
 import threading
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Optional
@@ -47,7 +48,11 @@ from .base import BrokerAdapter, BrokerRejected, QuoteUnavailable
 ALLOWED_PAPER_PORTS = {7497, 4002}
 MAX_CONTRACTS_PER_ORDER = 10
 MAX_ORDER_PREMIUM_USD = 5_000.0
-DEFAULT_CLIENT_ID = 95          # 94 is the Alerter's read-only data service
+DEFAULT_CLIENT_ID = 71
+# Client ids the Options Alerter (a separate app sharing this TWS and paper account) uses: 91 health, 94 data,
+# 95 paper orders, 96 and 98 tools. Two clients with one id knock each other off TWS, so these are refused.
+ALERTER_CLIENT_IDS = {91, 94, 95, 96, 98}
+REF_PREFIX = "optplat:"   # every order this platform sends carries it; nothing without it is ours
 CALL_TIMEOUT_S = 20.0
 CONNECT_TIMEOUT_S = 15.0        # per ib_async startup request; it runs several, then executions
 CONNECT_CALL_TIMEOUT_S = 75.0   # must exceed ib_async's whole startup sync, or we give up as it succeeds
@@ -70,12 +75,14 @@ def ibkr_paper_config() -> tuple[str, int, Optional[str]]:
     if port not in ALLOWED_PAPER_PORTS:
         raise ValueError("IBKR paper-only port required (7497/4002)")
     if account and not is_paper_account(account):
-        raise ValueError("IBKR_PAPER_ACCOUNT must be a paper account id: DU followed by digits (or leave it unset)")
+        raise ValueError("IBKR_PAPER_ACCOUNT must be a paper account id beginning with DU (or leave it unset)")
     return host, port, account or None
 
 
 def is_paper_account(account: Any) -> bool:
-    return isinstance(account, str) and account.startswith("DU") and account[2:].isdigit()
+    """IBKR paper accounts begin with DU. Real paper ids can have letters after the prefix (seen on the owner's
+    account), so DU + 5-12 capital letters or digits; live accounts begin with U and never match."""
+    return isinstance(account, str) and re.fullmatch(r"DU[A-Z0-9]{5,12}", account) is not None
 
 
 class LoopThread:
@@ -113,6 +120,8 @@ class IBKRPaperBroker(BrokerAdapter):
         self.host, self.port, self._pinned = ibkr_paper_config()
         self.account_id: Optional[str] = self._pinned
         self.client_id = int(os.environ.get("IBKR_ORDER_CLIENT_ID", DEFAULT_CLIENT_ID)) if client_id is None else client_id
+        if self.client_id in ALERTER_CLIENT_IDS:
+            raise ValueError(f"IBKR client id {self.client_id} belongs to the Options Alerter; use another")
         self._ib, self._api, self._run, self._clock = ib, api, runner, clock
         self._contracts: dict[OptionContract, Any] = {}
         self._lock = threading.RLock()
@@ -221,7 +230,9 @@ class IBKRPaperBroker(BrokerAdapter):
     def _mine(self, trade: Any) -> bool:
         # Completed orders from an earlier session can come back with a blank account. The session is verified
         # paper-only and orderRef is our own unique key, so blank counts as ours: missing it could resend an order.
-        return getattr(trade.order, "account", "") in (self.account_id, "") and bool(getattr(trade.order, "orderRef", ""))
+        # The paper account is shared with the Options Alerter: only orders tagged with our prefix are ours.
+        return (getattr(trade.order, "account", "") in (self.account_id, "")
+                and str(getattr(trade.order, "orderRef", "")).startswith(REF_PREFIX))
 
     def _status(self, trade: Any) -> BrokerOrderStatus:
         st = trade.orderStatus
@@ -236,17 +247,35 @@ class IBKRPaperBroker(BrokerAdapter):
         else:
             mapped = STATUS_PARTIALLY_FILLED if filled else STATUS_SUBMITTED
         avg = float(st.avgFillPrice) if filled and st.avgFillPrice else None
-        return BrokerOrderStatus(ID_PREFIX + trade.order.orderRef, trade.order.orderRef, mapped, filled, avg)
+        key = trade.order.orderRef[len(REF_PREFIX):]
+        return BrokerOrderStatus(ID_PREFIX + key, key, mapped, filled, avg)
 
     def _find_trade(self, key: str) -> Optional[Any]:
         ib = self._session()
         for t in self._run(ib.trades):
-            if self._mine(t) and t.order.orderRef == key:
+            if self._mine(t) and t.order.orderRef == REF_PREFIX + key:
                 return t
         for t in self._run(ib.reqCompletedOrdersAsync, True) or []:
-            if self._mine(t) and t.order.orderRef == key:
+            if self._mine(t) and t.order.orderRef == REF_PREFIX + key:
                 return t
         return None
+
+    def _our_net(self, con_id: Any) -> int:
+        """Contracts this platform bought minus those it sold or is selling, for one listing (its own orders only)."""
+        ib = self._session()
+        seen, net = set(), 0
+        for t in list(self._run(ib.trades)) + list(self._run(ib.reqCompletedOrdersAsync, True) or []):
+            if not self._mine(t) or getattr(t.contract, "conId", None) != con_id or t.order.orderRef in seen:
+                continue
+            seen.add(t.order.orderRef)
+            filled = int(t.orderStatus.filled or 0)
+            if t.order.action == "BUY":
+                net += filled
+            elif t.orderStatus.status in _TERMINAL:
+                net -= filled
+            else:
+                net -= int(t.order.totalQuantity)   # a working sell holds its whole quantity
+        return net
 
     def _settle(self, trade: Any) -> None:
         async def wait() -> None:
@@ -271,14 +300,14 @@ class IBKRPaperBroker(BrokerAdapter):
             ib = self._session()
             ibc = self._qualified(intent.contract)
             if intent.side is Side.SELL_TO_CLOSE:
+                # Only what THIS platform bought and has not sold: the account may also hold the Alerter's positions.
                 held = sum(p.quantity for p in self.get_positions() if p.contract == intent.contract)
-                working = sum(int(t.order.totalQuantity) - int(t.orderStatus.filled or 0) for t in self._run(ib.openTrades)
-                              if self._mine(t) and t.order.action == "SELL" and getattr(t.contract, "conId", None) == ibc.conId)
-                if qty > held - working:
-                    raise BrokerRejected("Cannot sell more than the IBKR paper account holds")
+                ours = self._our_net(ibc.conId)
+                if qty > min(held, ours):
+                    raise BrokerRejected("Cannot sell more than this platform holds in the IBKR paper account")
             order = self._api.LimitOrder("BUY" if intent.side is Side.BUY_TO_OPEN else "SELL", qty,
                                          _round_limit(limit, intent.side), tif="DAY", account=self.account_id,
-                                         orderRef=intent.idempotency_key, outsideRth=False, transmit=True)
+                                         orderRef=REF_PREFIX + intent.idempotency_key, outsideRth=False, transmit=True)
             trade = self._run(ib.placeOrder, ibc, order)   # an exception here means "unknown": the manager reconciles
             self._settle(trade)
             return self._status(trade)

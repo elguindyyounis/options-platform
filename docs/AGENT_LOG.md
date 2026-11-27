@@ -1235,6 +1235,21 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 ## 2026-11-27 (Claude): IBKR mirror connect timeout, retries, probe
 
 * First live mirrored order (owner's pipeline test, 1 SPY call) failed with `TimeoutError`: ib_async's startup sync (positions, orders, completed orders, account updates, then executions; each up to the connect timeout) outlasted the adapter's 20 s call limit, so the adapter gave up as the connection finished. Connect now gets 15 s per startup request and 75 s overall (> 3x). The mirror retries an unknown outcome twice (10 s, 30 s) by the same orderRef (idempotent), records each attempt with the stage it reached, and never retries a rejection. `POST /api/mirror/probe` connects now and reports `failed_at` and a detail with account ids masked; it places nothing. Verified: pytest 952. Not verified: live TWS (next step). Merged on the owner's standing instruction.
+
+## 2026-11-27 (Claude): own IBKR client id; never touch the Alerter's orders
+
+* The probe still stopped at connect: the Options Alerter's TWS paper worker uses client id 95, the platform's default, so TWS refused the second connection. Default is now 71; the Alerter's ids (91, 94, 95, 96, 98) are refused. The paper account is shared, so platform orders carry `orderRef` `optplat:<key>`, only those count as ours, and a sell may not exceed what platform orders bought net of its sells (and what the account holds). Verified: pytest 962. Merged on the owner's standing instruction.
+
+
+## 2026-11-27 (owner conversation): one-command export setup
+
+* The owner asked why scheduled runs never see real data (they run in the cloud; the database is on the Mac) and for a permanent fix. The nightly export already existed but `OPTPLAT_EXPORT_REPO` was never set (every EVOLUTION_LOG row says "data repo not attached"). Agent GitHub access cannot create repositories, so `deploy/setup_export.sh` does it on the Mac in one command: creates the private repo, writes the setting idempotently, refuses a non-private repo, runs one export.
+* Verified: 3 new tests in `tests/test_deploy.py` with a fake `gh`. Not verified: on macOS with a real `gh`. Still open: the alerter has no export of its own (UX-3), and the scheduled task needs access to the new repo. The owner must run the script once.
+
+## 2026-11-27 (Claude): paper account ids can have letters after DU
+
+* Live probe on the owner's Mac connected (client 71) and then refused the session: the paper account id has letters after `DU`. `is_paper_account` now accepts `DU` + 5-12 capital letters or digits (the Options Alerter found the same). Still refused: anything not starting with `DU` (live `U...`, `DF...`), lower case, too short, spaces. Verified: pytest. Merged on the owner's standing instruction.
+
 ## 2026-11-27 (Claude, owner request): error explainer and scheduled error check
 
 * Owner: an agent that reads the platform's errors and solves them. Live check of the Mac (build dc30bd9): NVDA `EMPTY_CHAIN (started with 0)` came from IBKR chain requests failing (bare `HTTPError` for all six names, so every chain came from Yahoo) and Yahoo also returning 0 NVDA rows. The "fills paused" pill is permanent on IBKR data: option lanes refuse every unverified chain and every mark, so they collect no evidence (backlog: blocked on the owner).

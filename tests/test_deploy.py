@@ -153,3 +153,45 @@ def test_installer_adds_the_watchdog_and_never_leaves_the_server_unloaded():
     assert text.index("trap reload_server EXIT") < text.index('launchctl bootout "gui/$(id -u)/com.optionsplatform.server"')
     launcher = (Path(deploy.ROOT) / "start-platform.command").read_text()
     assert launcher.index("com.optionsplatform.server.plist") < launcher.index(".venv/bin/python -m optplat")
+
+
+# ---- export setup script (2026-11-27): one command instead of five manual steps; private only, idempotent.
+def _setup_export(tmp_path, *, private="true", existing=False, preset=""):
+    import subprocess
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    data, app, calls = tmp_path / "data", tmp_path / "app", tmp_path / "calls"
+    (app / "deploy").mkdir(parents=True); data.mkdir()
+    (app / "deploy" / "export_push.sh").write_text(f'#!/bin/bash\necho ran >>"{calls}"\n')
+    if preset:
+        (data / "config.env").write_text(preset)
+    gh = tmp_path / "gh"
+    gh.write_text(f'''#!/bin/bash
+echo "gh $@" >>"{calls}"
+case "$1 $2" in
+ "auth status") exit 0;; "api user") echo alice;;
+ "repo view") if echo "$@" | grep -q isPrivate; then echo {private}; else exit {0 if existing else 1}; fi;;
+ "repo create") exit 0;;
+esac
+''')
+    gh.chmod(0o755)
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "OPTPLAT_DATA_DIR": str(data), "OPTPLAT_APP_DIR": str(app), "OPTPLAT_GH": str(gh)}
+    script = Path(deploy.ROOT) / "deploy" / "setup_export.sh"
+    r = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, timeout=30)
+    cfg = (data / "config.env").read_text() if (data / "config.env").exists() else ""
+    return r, cfg, calls.read_text() if calls.exists() else ""
+
+
+def test_setup_export_creates_a_private_repo_writes_config_and_exports(tmp_path):
+    r, cfg, calls = _setup_export(tmp_path)
+    assert r.returncode == 0 and "repo create alice/options-platform-data --private" in calls
+    assert cfg == "OPTPLAT_EXPORT_REPO=https://github.com/alice/options-platform-data.git\n" and calls.rstrip().endswith("ran")
+
+
+def test_setup_export_refuses_a_repo_that_is_not_private(tmp_path):
+    r, cfg, calls = _setup_export(tmp_path, private="false", existing=True)
+    assert r.returncode == 1 and "NOT private" in r.stdout and cfg == "" and "ran" not in calls
+
+
+def test_setup_export_is_idempotent_and_keeps_an_existing_setting(tmp_path):
+    r, cfg, calls = _setup_export(tmp_path, existing=True, preset="OPTPLAT_EXPORT_REPO=https://github.com/alice/other.git\n")
+    assert r.returncode == 0 and "repo create" not in calls and cfg.count("OPTPLAT_EXPORT_REPO") == 1 and "other.git" in cfg
