@@ -1284,6 +1284,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Not changed: no default, risk limit, sizing cap, auth or broker change. Per-position size is the owner's `OPTPLAT_MAX_POSITION_PCT` in config.env (0.1 to 50, already supported, must not exceed `OPTPLAT_MAX_TOTAL_PREMIUM_PCT`); I did not change a default.
 * Verified: `python -m pytest -q` passes (6 new in `tests/test_exit_agent.py`, 1 in `tests/test_engine.py`). Not verified: real fills, or that it beats fixed exits (X6 registered; it cannot be replayed until trend features are stored per path point). No edge claimed. The thresholds (0.30 broken, 0.45 weak, 0.65 hold past target, 15% minimum trim, 40% big gain) are engineering choices, not fitted.
 
+## 2026-11-27 (Claude): count fills of orders from an earlier IBKR session
+
+* Live exit test: the IBKR buy filled (1 SPY Jan-27 760 C at 6.03), then the mirrored sell was refused by our own guard. ib_async reports an earlier session's orders as completed with `orderStatus.filled = 0`; the count is in `order.filledQuantity`. `_filled()` now reads both (ignoring the unset sentinel) for statuses and the platform's net holding, and the refusal message states both numbers. Verified: pytest 1004. Merged on the owner's standing instruction.
 ## 2026-11-27 (Claude, owner request): measure the platform's share of the IBKR bar budget
 
 * The Mac showed chains falling back to Yahoo with `HTTP 503 Historical pacing budget exhausted`: the Alerter's service allows 30 bar requests per 10 minutes for all consumers (execution quotes may use up to 54). Before cutting anything, measure: `IBKRDataProvider` now records every request it sends (kind: chain, bars_daily, bars_5min, verify, quotes; the calling platform module; refusal reason) and `/api/health` `market_data.platform_usage` shows the last 10 minutes. errorhelp names the budget error (`IBKR_BUDGET`).
