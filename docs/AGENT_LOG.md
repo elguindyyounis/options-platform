@@ -1176,3 +1176,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Raising the two percentages loosens a risk limit; that is the owner's decision (given in conversation) and is only active through the owner's config.env, never by default.
 * Finding (demo): at $1,000 / 35% the baseline strategy cannot afford any contract it picks (SPY $1,700-2,800 each). Expect the same on real data; a $1,000 account needs cheaper contracts, which is a strategy question for the Lab.
 * Verified: `python -m pytest -q` passes (6 new tests in `tests/test_account.py`); end-to-end on demo: $100k run, restart at $1,000 starts a clean account (3 old open positions reported, cash $1,000), entries report NOTHING_AFFORDABLE_WITHIN_SIZE_CAP. Not verified: the Mac.
+
+## 2026-11-27 (Claude, scheduled challenger): regime hold count on the Desk
+
+* Alerter reviewed up to `4e207c1` (17 commits: TWS paper execution, signed valuation marks, morning brief, charts, CAD normalisation). Read `position_values.py`, `valuation_evidence.py`, `morning_brief.py`; notes in `docs/COMPARISON_ALERTER.md`.
+* Challenge UX-11 (in part): a lane with no new puts looked idle. `regime.held_back` counts `SKIPPED_REGIME` journal lines (puts and calls) over 24 h for the page's data kind; `/api/regime` returns it and the Desk regime line says "at least N", because the journal writes a candidate once an hour and caps lines per name. Display only: no entry, size, risk or auth change. UX-12 logged (nothing equivalent on the Trades page).
+* Verified: `python -m pytest -q` (2 new tests: counting by age, data kind and disposition; endpoint plus node check of the sentence). Not verified: in a browser; real data (cloud, Friday, so no weekend scan); alerter tests not run. The Mac copy at ~/options-platform is a git clone the owner updates; this merge does not reach it.

@@ -100,6 +100,7 @@ def test_engine_blocks_and_journals_a_put_into_a_bounce():
 
 # ---- Desk line (UX-9): display only, never an all-clear when the reading is missing ----
 import json  # noqa: E402
+from datetime import timedelta  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -157,3 +158,46 @@ def test_desk_line_never_reads_unknown_as_all_clear():
     assert unk["cls"] == "warn" and "not an all-clear" in unk["text"] and "Fictional demo data" in unk["text"]
     assert ok["cls"] == "ok" and "uptrend" in ok["text"] and "not an edge" in ok["text"]
     assert blocked["cls"] == "warn" and "New puts blocked" in blocked["text"] and "exits are untouched" in blocked["text"]
+
+
+# ---- UX-11: held-back count (display only, a minimum, same data kind as the page) ----
+HB_HARNESS = HARNESS.replace(
+    "console.log(JSON.stringify([T(null)",
+    "const hb=(h)=>T({...base,state:'known',label:'uptrend',puts_allowed:true,calls_allowed:true,held_back:h}).text;\n"
+    "console.log(JSON.stringify([hb({hours:24,total:0,puts:0,calls:0}),hb({hours:24,total:1,puts:1,calls:0}),hb({hours:24,total:5,puts:4,calls:1}),T(null)",
+)
+
+
+def _log(store, ts, right, disposition="SKIPPED_REGIME", fictional=False, kind="ENTRY"):
+    store.record_decision(ts, "SPY", kind, disposition, "SPY   261127P00600000", "s", 1.0, None, fictional, {"contract": {"right": right}})
+
+
+def test_held_back_counts_recent_regime_lines_only_for_this_data_kind():
+    store = Store(":memory:")
+    _log(store, NOW - timedelta(hours=1), "P")
+    _log(store, NOW - timedelta(hours=2), "P")
+    _log(store, NOW - timedelta(hours=3), "C")
+    _log(store, NOW - timedelta(hours=30), "P")  # too old
+    _log(store, NOW - timedelta(hours=1), "P", fictional=True)  # other data kind
+    _log(store, NOW - timedelta(hours=1), "P", disposition="SKIPPED_HELD")  # not a regime hold
+    h = regime.held_back(store, NOW, fictional=False)
+    assert (h["puts"], h["calls"], h["total"], h["lower_bound"]) == (2, 1, 3, True)
+    assert regime.held_back(store, NOW, fictional=True)["total"] == 1
+    assert regime.held_back(Store(":memory:"), NOW, fictional=False)["total"] == 0
+
+
+def test_regime_endpoint_includes_held_back_and_desk_says_minimum():
+    clock = lambda: NOW  # noqa: E731
+    m = OrderManager(SimBroker(), Store(":memory:"))
+    e = TradingEngine(m, DemoDataProvider(clock=clock), LiquidTrendStrategy(), default_config=EngineConfig(), clock=clock)
+    e.regime = regime.RegimeSource(selloff_then_bounce, clock)
+    _log(e.store, NOW - timedelta(hours=1), "P", fictional=True)
+    with TestClient(create_app(m, "t" * 24, e, Runner(e))) as c:
+        assert c.get("/api/regime", headers=H).json()["held_back"]["total"] == 1
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    none_yet, one, many, _ = json.loads(subprocess.run([node, "-e", HB_HARNESS, str(STATIC / "app.js")], capture_output=True, text=True, check=True).stdout)[:4]
+    assert "Nothing recorded as held back" in none_yet
+    assert "at least 1 new entry (1 put, 0 calls)" in one and "minimum" in one
+    assert "at least 5 new entries (4 puts, 1 call)" in many
