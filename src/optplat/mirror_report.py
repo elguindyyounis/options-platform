@@ -70,7 +70,7 @@ def _pair_rows(orders: Sequence[Order], events: Sequence[dict[str, Any]]) -> tup
 
 
 def report(store: Store) -> dict[str, Any]:
-    orders = store.list_orders(limit=ORDER_SCAN_LIMIT)
+    orders = store.list_orders(limit=ORDER_SCAN_LIMIT, all_history=True)  # every mirrored order, any account
     events = [e for e in store.audit_events() if e["kind"].startswith("ibkr_mirror_")]
     rows, extra = _pair_rows(orders, events)
     sim_filled = [r for r in rows if r["sim_filled_qty"] > 0]

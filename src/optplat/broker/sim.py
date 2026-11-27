@@ -31,6 +31,7 @@ class SimBroker(BrokerAdapter):
 
     def __init__(self, starting_cash: float = 100_000.0, slippage_pct: float = 0.5) -> None:
         self.cash = float(starting_cash)
+        self.starting_cash = float(starting_cash)
         self.slippage_pct = float(slippage_pct)
         self._quotes: dict[OptionContract, Quote] = {}
         self._orders: dict[str, dict[str, Any]] = {}

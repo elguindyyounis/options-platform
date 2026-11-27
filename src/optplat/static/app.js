@@ -414,6 +414,10 @@
       kpi(money(a.equity) + (a.carried_at_cost > 0 ? " (estimate)" : ""), "Paper balance", "cash " + money(a.cash) + (a.carried_at_cost > 0 ? "; " + a.carried_at_cost + " open position(s) have no bid and are counted at cost, so a loss on them is not in this number" : report.closed_trades ? "" : "; untouched"), "dim"),
     ]);
     $("sample").textContent = report.caveat;
+    // Say which account the chart and numbers belong to, and since when if it was restarted at a new size.
+    const st = portfolio.account_start || {};
+    $("acct-caption").textContent = "Options account balance (paper broker, mirrored to IBKR paper when switched on)" +
+      (st.start_cash ? ": started with " + money(st.start_cash) + (st.since ? " on " + fmtTime(st.since) + ". Earlier trades belong to the previous paper account and stay in the database." : ".") : ".");
     S.lastPoints = eq.points;
     drawEquity($("equity-chart"), eq.points);
     table($("equity-table"), [

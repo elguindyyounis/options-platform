@@ -168,7 +168,10 @@ def create_app(
 
     @app.get("/api/portfolio", dependencies=[Depends(auth)])
     def portfolio() -> dict[str, Any]:
-        return manager.portfolio()
+        body = manager.portfolio()
+        # The paper account's size and, if it was restarted at a new size, since when (account.py). Display only.
+        body["account_start"] = {"start_cash": getattr(manager.broker, "starting_cash", None), "since": manager.store.account_since}
+        return body
 
     @app.get("/api/paper/orders", dependencies=[Depends(auth)])
     def list_orders(open_only: bool = False) -> list[dict[str, Any]]:
@@ -238,7 +241,8 @@ def create_app(
     @app.get("/api/results", dependencies=[Depends(auth)])
     def results() -> dict[str, Any]:
         """Closed-trade summary with sample-size and limitation labels (research display only)."""
-        body = summarize_closed_trades(manager.store.list_orders(limit=5000))
+        body = summarize_closed_trades(manager.store.list_orders(limit=5000),
+                                       starting_equity=getattr(manager.broker, "starting_cash", 100_000.0))
         body["fill_model"] = describe_fill_model(manager.broker)
         try:
             positions = manager.broker.get_positions()
