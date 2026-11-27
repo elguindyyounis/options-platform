@@ -31,7 +31,7 @@ from .gex import ASSUMPTIONS as GEX_ASSUMPTIONS, net_gex
 from .marketdata import MarketDataProvider, MarketSnapshot, snapshot_to_dict
 from .models import Account, OptionContract, OrderIntent, OrderState, Position, Side, utcnow
 from .orders import OrderManager
-from .pricing import sell_limit_for
+from .pricing import buy_limit_for, sell_limit_for
 from .risk import RiskPolicy
 from .scanner import Scanner
 from .universe import SECTORS
@@ -721,6 +721,33 @@ class TradingEngine:
                 )
             out.append(item)
         return out
+
+    def pipeline_test_order(self, contract: OptionContract, side: Side) -> dict[str, Any]:
+        """Owner-triggered check of the whole path with ONE contract: verified IBKR quote, the risk policy, the simulated
+        main account and (when switched on) the IBKR paper mirror. Limits are the usual ask + 1% / bid - 1%.
+        Nothing is bypassed: an unverified quote, a risk failure or the kill switch stops it like any other order."""
+        verify = getattr(self.provider, "execution_quote", None)
+        sim = self.manager.broker
+        if verify is None or not isinstance(sim, SimBroker):
+            return {"result": "UNAVAILABLE", "detail": "needs IBKR data and the simulated main account"}
+        try:
+            quote = verify(contract)
+        except Exception:  # noqa: BLE001
+            quote = None
+        if quote is None:
+            return {"result": "NOT_VERIFIED", "detail": "IBKR could not cross-check this contract's bid/ask just now"}
+        sim.set_quote(quote)
+        if side is Side.SELL_TO_CLOSE and not quote.bid > 0:
+            return {"result": "NO_PRICE", "detail": "the verified bid is zero"}
+        limit = buy_limit_for(quote.ask) if side is Side.BUY_TO_OPEN else sell_limit_for(quote.bid)
+        now = self.clock()
+        intent = OrderIntent(
+            idempotency_key=f"pipe-{side.value[:1].lower()}-{contract.occ_symbol.replace(' ', '')}-{int(now.timestamp())}"[:64],
+            candidate_id="pipeline-test", contract=contract, quantity=1, limit_price=limit,
+            note="owner pipeline test (one contract)", side=side)
+        order = self.manager.submit(intent)
+        return {"result": order.state.value, "order": order.to_dict(),
+                "quote": {"bid": quote.bid, "ask": quote.ask, "as_of": quote.as_of.isoformat(), "source": quote.source}}
 
     MAX_QUOTE_VERIFICATIONS_PER_CYCLE = 3  # each spends two units of the shared IBKR historical budget
 

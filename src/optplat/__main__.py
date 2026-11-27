@@ -1,6 +1,7 @@
 """Run the local API:  python -m optplat"""
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import re
@@ -22,6 +23,12 @@ from .orders import OrderManager
 from .risk import RiskPolicy
 from .models import utcnow
 from .store import Store
+
+# Owner decision 2026-11-27, to test entries, exits and the IBKR mirror: the main account accepts option spreads up
+# to 25% of the ask and expiries 21-200 days out (defaults: 15%/10% spread, 30-120 days). Paper only.
+MAIN_MAX_SPREAD_PCT = 25.0
+MAIN_MIN_DTE = 21
+MAIN_MAX_DTE = 200
 from .strategy import FlowFollowStrategy, LiquidTrendStrategy
 
 
@@ -158,6 +165,8 @@ def main() -> None:
         policy = acct.risk_policy(os.environ, require_verified_quote_time=not allow_unverified)
     except ValueError as exc:
         sys.exit(str(exc))
+    # Owner decision 2026-11-27: the risk policy's spread limit follows the main account's test setting.
+    policy = dataclasses.replace(policy, max_spread_pct_of_ask=MAIN_MAX_SPREAD_PCT)
     if policy.version != RiskPolicy().version:
         print(f"Risk limits set by the owner: {policy.max_position_pct:g}% of equity per order, "
               f"{policy.max_total_premium_pct:g}% open in total.", flush=True)
@@ -187,7 +196,10 @@ def main() -> None:
 
     which_strategy = os.environ.get("OPTPLAT_STRATEGY", "liquid-trend")
     strategies = {
-        "liquid-trend": LiquidTrendStrategy,
+        # Owner decision 2026-11-27 ("loosen the expiry window and spread limit to test today"): wider than the
+        # class defaults (30-120 days, 10% spread). Remove to go back.
+        "liquid-trend": lambda: LiquidTrendStrategy(min_dte=MAIN_MIN_DTE, max_dte=MAIN_MAX_DTE,
+                                                    max_spread_pct=MAIN_MAX_SPREAD_PCT),
         "flow-otm": lambda: FlowFollowStrategy(mode="flagged"),
         "flow-near": lambda: FlowFollowStrategy(mode="nearer"),
     }
