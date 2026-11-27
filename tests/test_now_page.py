@@ -135,6 +135,8 @@ console.log(JSON.stringify({
               {ts:'2026-11-26T17:42:00Z',kind:'ibkr_mirror_rejected',role:'exit',payload:{reason:'no permissions'}}]}),
   tlOpen:W.optplatTradeTimeline({entry_time:'2026-11-26T17:00:00Z',entry_price:2,quantity:1,multiplier:100,status:'OPEN',remaining:1,mark:null,exit_orders:[],mirror:[]}),
   days:(()=>{const now=Date.UTC(2026,10,27,12,0,0);return [W.optplatDayLabel(new Date(now-3600e3).toISOString(),now),W.optplatDayLabel(new Date(now-24*3600e3).toISOString(),now),W.optplatDayLabel('nonsense',now)];})(),
+  builds:[W.optplatBuildAction('a','a',false),W.optplatBuildAction('a','b',false),W.optplatBuildAction('a','b',true),W.optplatBuildAction(null,'b',false),W.optplatBuildAction('a','unknown',false)],
+  tlOne:W.optplatTradeTimeline({entry_time:'2026-11-27T16:48:00Z',entry_price:4.92,quantity:1,multiplier:100,status:'OPEN',remaining:1,mark:4.4,entry_rank:{rank:1,of:1},exit_orders:[],mirror:[]}),
   why:[W.optplatWhy({payload:{rank:1,of:6,score:96.15}}),W.optplatWhy({payload:{score:88.6}}),W.optplatWhy({payload:{rank:1,of:1,risk_failures:['too wide']}}),W.optplatWhy({payload:{rank:3,of:9,score:50}})],
 }));
 """
@@ -326,7 +328,7 @@ def test_watchlist_chips_say_what_each_name_got_last_cycle(out):
     assert c["AAPL"]["text"].startswith("No clear trend") and not c["AAPL"]["text"].endswith(".")
     assert c["TSLA"] == {"symbol": "TSLA", "tone": "gain", "text": "bought call 365 × 2"}
     assert c["MSFT"]["text"] == "not reached: 1 new trade per cycle already used"  # the loop stopped before it
-    assert out["chipsClosed"][0]["text"] == "not checked: market closed: no new entries"
+    assert out["chipsClosed"][0]["text"] == "not checked"  # the plan headline and footnote already say why
 
 
 def test_plan_headline_says_what_happens_now(out):
@@ -360,3 +362,11 @@ def test_trade_timeline_tells_the_whole_story_newest_first(out):
 def test_activity_is_split_by_day(out):
     today, yesterday, bad = out["days"]
     assert today == "Today" and yesterday == "Yesterday" and bad == "Unknown day"
+
+
+def test_page_reloads_itself_when_a_new_build_is_installed_unless_busy(out):
+    assert out["builds"] == ["none", "reload", "ask", "none", "none"]
+
+
+def test_a_single_candidate_is_not_called_ranked_one_of_one(out):
+    assert out["tlOne"][-1]["text"] == "the only eligible candidate"

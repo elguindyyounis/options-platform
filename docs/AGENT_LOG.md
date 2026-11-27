@@ -1330,3 +1330,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 - Next-open preview shows such picks with `needs_ibkr_check` instead of blocking them.
 - Verified: `python -m pytest -q` (1011 passed), 9 new tests in `tests/test_lane_verified_quotes.py`.
 - Not verified: behaviour against the live shared IBKR service, how fast the shared historical budget is used in a busy open.
+
+## 2026-11-28 (check-in): page follows new builds
+* Verified on the owner's Mac (built-in browser): after a reload, Today's plan, Rules in force (real values: $100,000 account, 1% per order, spread under 25%), watchlist chips, Activity day headings and the trade timeline all show; a real IBKR paper fill appears in a trade file (IBKR 4.90 vs simulated 4.92).
+* Found: the page only reloaded for a new build when the owner refreshed during an update. When the hourly updater installed a build while the page was open, the page kept running old code while its label showed the new build id. Now the page reloads itself when the server's build differs from the one it loaded with; with unsaved settings or an open trade file it says a new version is installed and waits.
+* Polish: watchlist chips say "not checked" when entries are paused (the reason is in the headline and footnote); a single candidate reads "the only eligible candidate".
+* Verified: `python -m pytest -q` passes (node tests for the reload decision and the wording).
