@@ -330,7 +330,11 @@ class OptionLane:
             out["skips"].append(f"{sym}: {why}")
             return None
         try:
-            chk = check_snapshot(self.feed.window(sym, p.dte_min, p.dte_max, 3), now)
+            snap = self.feed.window(sym, p.dte_min, p.dte_max, 3)
+            # Judge the chain against the clock as it is NOW, not when this check began: a lane reads several chains in a
+            # row, and each one is stamped when it arrives, so against the start time a slow read looked "ahead of the
+            # clock" (2026-11-27: every swing chain refused as FUTURE_TIMESTAMP at the open). Same fix as engine._vet.
+            chk = check_snapshot(snap, max(now, self.clock()))
         except Exception as exc:  # noqa: BLE001
             out["errors"].append(f"{sym}: chain unavailable ({describe_exc(exc)})")
             return None

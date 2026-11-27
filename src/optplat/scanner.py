@@ -410,7 +410,8 @@ class Scanner:
                 out["errors"].append(f"time budget reached after {scanned} chains")
                 break
             try:
-                checked = check_snapshot(self.provider.snapshot_window(sym, SCAN_MIN_DTE, SCAN_MAX_DTE, SCAN_EXPIRIES), now)
+                snap = self.provider.snapshot_window(sym, SCAN_MIN_DTE, SCAN_MAX_DTE, SCAN_EXPIRIES)
+                checked = check_snapshot(snap, max(now, self.clock()))   # the clock now, not at scan start (see engine._vet)
             except Exception as exc:  # noqa: BLE001
                 failed += 1
                 out["errors"].append(f"{sym}: chain unavailable ({describe_exc(exc)})")

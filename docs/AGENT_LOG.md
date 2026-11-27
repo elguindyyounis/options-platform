@@ -3,6 +3,18 @@
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
 
+## 2026-11-27: lanes and the scanner judge a chain against the clock when it arrives (with the owner)
+
+* At today's open (09:37 ET) both swing option lanes refused every chain as FUTURE_TIMESTAMP and bought nothing; the
+  next-session plan had predicted the block. The Mac clock was checked and is within a second of a synced clock. Cause: a lane
+  takes `now` once when its check starts, then reads up to 8 chains in a row; the IBKR feed stamps each chain when its quotes
+  arrive, so a read finishing more than 5 s after the check began looked "ahead of the clock". `engine._vet` was fixed for the
+  same thing on 2026-11-25 (#67), but option lanes, the scanner and the next-session preview were not.
+* Fix: those three compare with `max(now, clock())`, as `_vet` does. The 5 s tolerance is unchanged and a quote truly ahead of
+  the clock is still refused (tested). A test with a 30 s chain read fails before the fix and passes after.
+* Cost of the bug: the two swing lanes judged the 2026-11-25 bar today, so its 16 signals are spent and will not retry.
+* 946 tests pass. Merged by the agent with the owner in the conversation (rule 6 owner decision 2026-11-27).
+
 ## 2026-11-27: "Next open" page with certainty tiers and planned vs taken (with the owner)
 
 * The owner asked whether the planned trades are 100% and whether the plan has to sit on the Desk. Neither: each plan line now
