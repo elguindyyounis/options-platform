@@ -128,6 +128,13 @@ console.log(JSON.stringify({
   rules:W.optplatRulesInForce({max_position_pct:1,max_total_premium_pct:10,max_open_positions:12,max_spread_pct_of_ask:15,max_quote_age_s:60,require_verified_quote_time:true},
     {take_profit_pct:40,stop_loss_pct:30,min_dte_to_hold:5,trim_at_pct:0,max_days_held:0},
     {account:{equity:101649},kill_switch:false,account_start:{start_cash:100000,since:null}}),
+  tl:W.optplatTradeTimeline({entry_time:'2026-11-26T17:00:00Z',entry_price:3.19,quantity:15,multiplier:100,status:'CLOSED',remaining:0,mark:null,exit_reason:'TAKE_PROFIT',
+      entry_rank:{rank:1,of:6},
+      exit_orders:[{time:'2026-11-26T17:20:00Z',quantity:7,price:4.80},{time:'2026-11-26T17:41:00Z',quantity:8,price:7.68}],
+      mirror:[{ts:'2026-11-26T17:01:00Z',kind:'ibkr_mirror_submitted',role:'entry',payload:{status:'Filled',filled_qty:15,avg_fill_price:3.21}},
+              {ts:'2026-11-26T17:42:00Z',kind:'ibkr_mirror_rejected',role:'exit',payload:{reason:'no permissions'}}]}),
+  tlOpen:W.optplatTradeTimeline({entry_time:'2026-11-26T17:00:00Z',entry_price:2,quantity:1,multiplier:100,status:'OPEN',remaining:1,mark:null,exit_orders:[],mirror:[]}),
+  days:(()=>{const now=Date.UTC(2026,10,27,12,0,0);return [W.optplatDayLabel(new Date(now-3600e3).toISOString(),now),W.optplatDayLabel(new Date(now-24*3600e3).toISOString(),now),W.optplatDayLabel('nonsense',now)];})(),
   why:[W.optplatWhy({payload:{rank:1,of:6,score:96.15}}),W.optplatWhy({payload:{score:88.6}}),W.optplatWhy({payload:{rank:1,of:1,risk_failures:['too wide']}}),W.optplatWhy({payload:{rank:3,of:9,score:50}})],
 }));
 """
@@ -337,3 +344,19 @@ def test_rules_in_force_list_the_real_limits_and_flag_the_100k_account(out):
     assert "Up to 1% of the account per order ($1,016" in r["Size"][1] and "10% open in total" in r["Size"][1]
     assert r["Exits"][1].startswith("Target +40% · stop −30%") and "sell half" not in r["Exits"][1]
     assert r["Quotes"][2] == "" and r["Stop everything"][1] == "Kill switch is off"
+
+
+def test_trade_timeline_tells_the_whole_story_newest_first(out):
+    tl = out["tl"]
+    assert [x["title"] for x in tl] == ["IBKR, exit", "Sold 8 at 7.68", "Sold part: 7 at 4.80", "IBKR, entry", "Bought 15 at 3.19", "Picked"]
+    assert tl[0]["tone"] == "loss" and "refused" in tl[0]["text"]
+    assert tl[1]["tone"] == "gain" and tl[1]["text"].endswith("+$3,592.00")
+    assert tl[3]["text"] == "IBKR paper filled 15 at 3.21 (0.02 worse than the simulator)"
+    assert tl[5]["text"] == "ranked #1 of 6 eligible candidates"
+    first = out["tlOpen"][0]
+    assert first["title"] == "Now" and first["text"] == "still holding 1, no usable bid"
+
+
+def test_activity_is_split_by_day(out):
+    today, yesterday, bad = out["days"]
+    assert today == "Today" and yesterday == "Yesterday" and bad == "Unknown day"

@@ -453,6 +453,17 @@
   .wchip { display:inline-flex; gap:4px; align-items:baseline; padding:4px 9px; border:1px solid var(--line); border-radius:6px; font:500 12px var(--mono); color:var(--mut); }
   .wchip b { color:var(--fg); } .wchip.gain { border-color:var(--gain); color:var(--gain); } .wchip.loss { border-color:var(--loss); color:var(--loss); } .wchip.warn { border-color:var(--warn); color:var(--warn); }
   @media (max-width:860px) { .plan-grid { grid-template-columns:1fr; } .plan-rows { grid-template-columns:1fr; gap:2px; } .plan-rows dd { margin-bottom:8px; } }
+  /* trade file: every update, newest first */
+  .tl2 { list-style:none; margin:0; padding:0; display:grid; gap:0; }
+  .tl2 li { display:grid; grid-template-columns:118px 14px minmax(0,1fr); gap:0 10px; padding-bottom:12px; position:relative; }
+  .tl2 li time { color:var(--mut); font-size:12px; padding-top:1px; }
+  .tl2 .dot { position:relative; border-left:2px solid var(--line); margin-left:5px; }
+  .tl2 .dot::before { content:""; position:absolute; left:-6px; top:4px; width:10px; height:10px; border-radius:50%; background:var(--mut); }
+  .tl2 li:last-child .dot { border-left-color:transparent; }
+  .tl2 li.gain .dot::before { background:var(--gain); } .tl2 li.loss .dot::before { background:var(--loss); }
+  .tl2 li.info .dot::before { background:var(--series-1); } .tl2 li.warn .dot::before { background:var(--warn); }
+  .feed-day { font:600 11px var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--mut); padding:12px 0 4px; border-bottom:1px solid var(--line-soft); }
+  .feed-day:first-child { padding-top:2px; }
 </style>
 </head>
 <body>

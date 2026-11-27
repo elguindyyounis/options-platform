@@ -98,6 +98,8 @@ def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
             "held_seconds": int(((held_to or None) - datetime.fromisoformat(t["entry_time"])).total_seconds()) if held_to else None,
             "exit_reason": (ed["payload"].get("trigger") or ed["payload"].get("reason") or ed["disposition"]) if ed else None,
             "entry_reason": en["payload"].get("rationale") if en else None,
+            # display only: where the entry ranked among that cycle's eligible candidates (journaled since 2026-11-27)
+            "entry_rank": {"rank": en["payload"].get("rank"), "of": en["payload"].get("of")} if en and en["payload"].get("rank") else None,
             "committee": None if committee is None else {k: committee["payload"].get(k) for k in
                                                           ("net_score", "quantity", "scale", "reasons", "verdicts", "trust")},
         })
@@ -129,4 +131,11 @@ def trade_detail(manager: OrderManager, trade_id: str) -> Optional[dict[str, Any
     for x in found["exit_orders"]:
         events += store.audit_events(x["order_id"])
     events.sort(key=lambda e: e["ts"])
-    return {**found, "audit": events}
+    # The IBKR paper mirror files its events by order key; collect them per order so the trade file can show the IBKR side.
+    mirror: list[dict[str, Any]] = []
+    for oid, role in [(trade_id, "entry")] + [(x["order_id"], "exit") for x in found["exit_orders"]]:
+        o = store.get_order(oid)
+        if o is not None:
+            mirror += [{**e, "role": role} for e in store.audit_for_key(o.intent.idempotency_key)]
+    mirror.sort(key=lambda e: e["ts"])
+    return {**found, "audit": events, "mirror": mirror}

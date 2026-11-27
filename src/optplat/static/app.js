@@ -779,6 +779,19 @@
   // Activity feed: what mattered (orders, exits, blocks, opinions) is listed; runs of routine skips fold into one line
   // that can be opened. Skips are the bulk of every cycle and carry the least news, so they must not push the page down.
   const DEC_SHOWN = 8;
+  // "Today", "Yesterday" or the date, in the viewer's time zone: the Activity feed is split by day so today's trades stand
+  // apart from older ones (owner, 2026-11-27). Pure; exposed for tests.
+  function dayLabel(ts, nowMs) {
+    const d = new Date(ts), now = new Date(nowMs === undefined ? Date.now() : nowMs);
+    if (isNaN(d)) return "Unknown day";
+    const key = (x) => x.getFullYear() + "-" + x.getMonth() + "-" + x.getDate();
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (key(d) === key(now)) return "Today";
+    if (key(d) === key(y)) return "Yesterday";
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
+  window.optplatDayLabel = dayLabel;
+
   function renderDecisions(all) {
     const host = $("decisions");
     if (!all.length) { empty(host, "No decisions recorded yet", "Run one cycle from Controls to see what it considers."); return; }
@@ -799,7 +812,10 @@
     });
     const feed = el("div", null, "feed");
     const limit = S.decShown || DEC_SHOWN;
+    let lastDay = null;
     items.slice(0, limit).forEach((it) => {
+      const day = dayLabel((it.skips ? it.skips[0] : it.d).ts);
+      if (day !== lastDay) { feed.appendChild(el("div", day, "feed-day")); lastDay = day; }
       if (it.skips) {
         const det = el("details", null, "skipfold");
         const sum = el("summary", null, "feed-item");
@@ -1211,6 +1227,46 @@
     kids(s, nodes);
     return s;
   }
+  // Every update on one trade in plain words, newest first (owner, 2026-11-27, from the TWI 2.0 video): picked, bought
+  // (simulated), what the IBKR paper mirror did, each sale with its reason, and what it holds now. Pure; exposed for tests.
+  function mirrorText(e, simPrice, isBuy) {
+    const p = e.payload || {}, k = e.kind;
+    if (k === "ibkr_mirror_rejected") return { tone: "loss", text: "IBKR paper refused it: " + (p.reason || "no reason given") };
+    if (k === "ibkr_mirror_error") return { tone: "warn", text: "IBKR paper did not answer (" + (p.error || "error") + "), attempt " + (p.attempt || "?") };
+    if (k === "ibkr_mirror_cancelled") return { tone: "", text: "IBKR paper order cancelled" + (p.filled_qty ? " after filling " + p.filled_qty : "") };
+    if (k === "ibkr_mirror_cancel_error") return { tone: "warn", text: "Cancelling the IBKR paper order failed (" + (p.error || "error") + ")" };
+    let text = "IBKR paper: " + String(p.status || "sent").toLowerCase();
+    if (p.filled_qty && p.avg_fill_price) {
+      text = "IBKR paper filled " + p.filled_qty + " at " + Number(p.avg_fill_price).toFixed(2);
+      if (simPrice) {
+        const better = isBuy ? simPrice - p.avg_fill_price : p.avg_fill_price - simPrice;
+        text += Math.abs(better) < 0.005 ? " (same as the simulator)" : " (" + Math.abs(better).toFixed(2) + (better > 0 ? " better" : " worse") + " than the simulator)";
+      }
+    }
+    return { tone: "", text };
+  }
+  function tradeTimeline(t) {
+    const out = [], mult = t.multiplier || 100, n = (t.exit_orders || []).length;
+    let seq = 0;
+    const add = (ts, title, text, tone) => out.push({ ts, title, text: text || "", tone: tone || "", seq: seq++ });
+    if (t.entry_rank && t.entry_rank.rank) add(t.entry_time, "Picked", "ranked #" + t.entry_rank.rank + " of " + t.entry_rank.of + " eligible candidates", "");
+    add(t.entry_time, "Bought " + t.quantity + " at " + Number(t.entry_price).toFixed(2), "simulated fill at the ask", "info");
+    (t.exit_orders || []).forEach((x, i) => {
+      const last = i === n - 1 && t.status === "CLOSED", part = (x.price - t.entry_price) * x.quantity * mult;
+      add(x.time, (last ? "Sold " : "Sold part: ") + x.quantity + " at " + Number(x.price).toFixed(2),
+        (last ? (EXIT_WHY[t.exit_reason] || (t.exit_reason ? words(t.exit_reason) : "reason not recorded")) + " · " : "") + sgn(part), part >= 0 ? "gain" : "loss");
+    });
+    const exitPrice = (key) => (t.exit_orders || []).length ? t.exit_orders[t.exit_orders.length - 1].price : null;
+    (t.mirror || []).forEach((e) => {
+      const m = mirrorText(e, e.role === "entry" ? t.entry_price : exitPrice(), e.role === "entry");
+      add(e.ts, e.role === "entry" ? "IBKR, entry" : "IBKR, exit", m.text, m.tone);
+    });
+    out.sort((a, b) => String(b.ts).localeCompare(String(a.ts)) || b.seq - a.seq);
+    if (t.remaining > 0) out.unshift({ ts: null, title: "Now", text: "still holding " + t.remaining + (t.mark !== null && t.mark !== undefined ? ", bid " + Number(t.mark).toFixed(2) : ", no usable bid"), tone: "info", seq: -1 });
+    return out;
+  }
+  window.optplatTradeTimeline = tradeTimeline;
+
   function renderTradeFile(t) {
     $("drawer-title").textContent = contractText(t);
     $("drawer-sub").textContent = exitLabel(t);
@@ -1222,6 +1278,14 @@
     res.appendChild(el("div", (t.pnl_pct === null ? "No usable bid to mark this trade." : pct(t.pnl_pct) + " on " + money(t.entry_price * t.quantity * t.multiplier) + " paid")
       + (t.status === "CLOSED" ? "" : " (still open, marked at the bid)"), "muted"));
     body.appendChild(res);
+
+    const tl = el("ol", null, "tl2");
+    tradeTimeline(t).forEach((x) => {
+      const li = el("li", null, x.tone);
+      kids(li, [el("time", x.ts ? fmtTime(x.ts) : "now"), el("span", null, "dot"), kids(el("div"), [el("b", x.title), x.text ? el("div", x.text, "muted") : el("span")])]);
+      tl.appendChild(li);
+    });
+    body.appendChild(section("Every update, newest first", [tl]));
 
     const facts = el("dl", null, "facts");
     const row = (k, v) => { facts.appendChild(el("dt", k)); facts.appendChild(el("dd", v)); };
@@ -1264,7 +1328,9 @@
 
     const trail = el("div");
     trail.appendChild(el("p", "Loading the order trail", "muted"));
-    body.appendChild(section("Order trail", [trail]));
+    const raw = el("details", null, "techdetail");
+    kids(raw, [el("summary", "Technical detail: raw order events"), trail]);
+    body.appendChild(raw);
     return trail;
   }
 

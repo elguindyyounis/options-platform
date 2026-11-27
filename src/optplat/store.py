@@ -276,6 +276,18 @@ class Store:
             for r in rows
         ]
 
+    def audit_for_key(self, key: str) -> list[dict[str, Any]]:
+        """IBKR mirror events for one order, which are filed by its idempotency key, not its id (display only)."""
+        if not key:
+            return []
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT ts, kind, order_id, payload FROM audit WHERE kind LIKE 'ibkr_mirror%' AND payload LIKE ? ORDER BY id",
+                ("%" + key.replace("%", "") + "%",),
+            ).fetchall()
+        out = [{"ts": r["ts"], "kind": r["kind"], "order_id": r["order_id"], "payload": json.loads(r["payload"])} for r in rows]
+        return [e for e in out if isinstance(e["payload"], dict) and e["payload"].get("idempotency_key") == key]
+
     # ---- recorded market snapshots -----------------------------------
     def record_snapshot(
         self,
