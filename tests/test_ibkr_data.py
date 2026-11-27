@@ -1,6 +1,6 @@
 """Synthetic protocol fixtures only; no live connection or performance claim."""
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -125,3 +125,27 @@ def test_one_failing_name_and_index_symbols_do_not_sink_the_batch():
     p = IBKRDataProvider(bars_for(calls, fail={'BAD'}), clock=Clock(NOW))
     out = p.daily_bars(['SPY', 'BAD', '^VIX', 'QQQ'])
     assert set(out) == {'SPY', 'QQQ'} and '^VIX' not in calls
+
+
+def test_usage_counts_what_this_platform_sent_by_caller_kind_and_refusal():
+    from optplat.ibkr_data import ServiceError
+    from optplat.fallback_data import IBKRWithYahooFallback
+    now = [datetime(2026, 11, 27, 15, 0, tzinfo=timezone.utc)]
+
+    def transport(resource, params=None, **_kw):
+        if resource == 'history' and params.get('interval') == '5 mins':
+            raise ServiceError('HTTP 503 Historical pacing budget exhausted')
+        return {'bars': []}
+
+    p = IBKRDataProvider(transport, clock=lambda: now[0])
+    p.daily_bars(['AAA', 'BBB'])
+    with pytest.raises(ServiceError):
+        p.intraday_bars('AAA')
+    u = p.usage()
+    assert u['sent'] == 3 and u['budgeted_sent'] == 3
+    assert u['by_caller'] == {'other': {'bars_daily': 2, 'bars_5min': 1}}  # called from the test, not a platform module
+    assert u['refused'] == {'HTTP 503 Historical pacing budget exhausted': 1}
+    now[0] += timedelta(seconds=601)
+    assert p.usage()['sent'] == 0  # only the service's 10-minute window counts
+    p.daily_bars(['CCC'])
+    assert IBKRWithYahooFallback(p, lambda: None).health()['platform_usage']['sent'] == 1
