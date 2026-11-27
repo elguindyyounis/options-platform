@@ -117,3 +117,24 @@ def test_each_lane_says_whether_it_has_a_pre_registered_hypothesis(parts):
     assert by[sw_mod.LANE]["hypothesis"]["id"] == "SW1" and by[st_mod.LANE]["hypothesis"]["id"] == "ST1"
     assert by[sw_mod.LANE]["hypothesis"]["first_day"] == "2026-11-27"
     assert by["swing-options-base"]["hypothesis"] is None and by["flow-options"]["hypothesis"] is None
+
+
+def test_every_lane_says_what_capital_it_works_with(parts):
+    # Owner 2026-11-28: a result means little without the capital behind it. Only the account and the challenge have a
+    # balance; the other lanes report the most they can have at risk at once, and say so.
+    from optplat import challenge as ch_mod
+    from optplat.optionlanes import SWING_BASE as SWING_AGGR
+
+    manager, engine = parts
+    seed(engine.store)
+    out = build_all(manager, engine.store, True, T0 + timedelta(days=3), engine.option_lanes)
+    by = {x["source"]: x for x in out["sources"]}
+    assert by[SWING_AGGR.lane]["capital"]["amount"] == SWING_AGGR.budget_usd * SWING_AGGR.max_open
+    assert by[SWING_AGGR.lane]["capital"]["basis"] == "most at risk"
+    assert by[sw_mod.LANE]["capital"]["amount"] == sw_mod.NOTIONAL_USD * sw_mod.MAX_OPEN
+    for x in by.values():
+        cap = x["capital"]
+        assert cap and cap["amount"] > 0 and cap["text"]
+        assert x["return_pct"] == round(x["realized_pnl"] / cap["amount"] * 100, 2)
+    if "challenge-10x" in by:
+        assert by["challenge-10x"]["capital"]["amount"] == ch_mod.START_EQUITY and by["challenge-10x"]["capital"]["basis"] == "balance"

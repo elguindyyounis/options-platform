@@ -67,6 +67,35 @@ def _lane_rows(rep: dict[str, Any], source: str, source_label: str, horizon: str
     return rows
 
 
+def lane_capital(manager: Any, option_lanes: Any) -> dict[str, dict[str, Any]]:
+    """The capital each book works with, so a result can be read against it (owner, 2026-11-28: "not being able to see the
+    starting capital is kind of weird"). Display only; nothing here sizes a trade.
+
+    Only the options account and the 10x challenge have a balance. Every other lane spends a fixed amount per trade with a
+    cap on open trades, so the capital it needs is the most it can have at risk at once: per-trade size × most open. Each
+    entry says which of the two it is, because they are not the same thing."""
+    from . import challenge as ch_mod
+    from . import shortterm as st_mod
+    from . import swing as sw_mod
+    from .optionlanes import ALL_PARAMS
+
+    out: dict[str, dict[str, Any]] = {}
+    start = getattr(getattr(manager, "broker", None), "starting_cash", None)
+    if start:
+        out["main"] = {"amount": float(start), "basis": "balance", "text": f"${start:,.0f} paper account balance at its start"}
+    out["challenge-10x"] = {"amount": ch_mod.START_EQUITY, "basis": "balance",
+                            "text": f"${ch_mod.START_EQUITY:,.0f} per attempt; a new attempt starts after the goal or ruin"}
+    for p in ALL_PARAMS:
+        out[p.lane] = {"amount": float(p.budget_usd * p.max_open), "basis": "most at risk",
+                       "text": f"${p.budget_usd:,.0f} per trade × up to {p.max_open} open: the most it can have at risk at once"}
+    for mod in (sw_mod, st_mod):
+        out[mod.LANE] = {"amount": float(mod.NOTIONAL_USD * mod.MAX_OPEN), "basis": "most at risk",
+                         "text": f"${mod.NOTIONAL_USD:,.0f} per trade × up to {mod.MAX_OPEN} open: the most it can have invested at once"}
+    if option_lanes is not None and getattr(option_lanes, "challenge", None) is None:
+        out.pop("challenge-10x", None)
+    return out
+
+
 def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_lanes: Any) -> dict[str, Any]:
     from . import swing as sw_mod
     from . import shortterm as st_mod
@@ -97,9 +126,13 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
         sources.setdefault(r["source"], {"source": r["source"], "label": r["source_label"], "instrument": r["instrument"]})
     from .lane_hypotheses import REGISTERED  # display only: which lane has a pre-registered test, and since when
     registered = {h.lane: {"id": h.hid, "first_day": h.first_day.isoformat(), "sample": h.sample} for h in REGISTERED}
+    capital = lane_capital(manager, option_lanes)
     for s in sources.values():
         s.update(summarise([r for r in rows if r["source"] == s["source"]]))
         s["hypothesis"] = registered.get(s["source"])
+        s["capital"] = capital.get(s["source"])
+        cap = (s["capital"] or {}).get("amount")
+        s["return_pct"] = round(s["realized_pnl"] / cap * 100, 2) if cap else None
     return {
         "fictional": fictional, "as_of": now.isoformat(), "trades": rows,
         "summary": {"all": summarise(rows), "options": summarise([r for r in rows if r["instrument"] == "options"]),

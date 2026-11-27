@@ -137,6 +137,9 @@ console.log(JSON.stringify({
   days:(()=>{const now=Date.UTC(2026,10,27,12,0,0);return [W.optplatDayLabel(new Date(now-3600e3).toISOString(),now),W.optplatDayLabel(new Date(now-24*3600e3).toISOString(),now),W.optplatDayLabel('nonsense',now)];})(),
   builds:[W.optplatBuildAction('a','a',false),W.optplatBuildAction('a','b',false),W.optplatBuildAction('a','b',true),W.optplatBuildAction(null,'b',false),W.optplatBuildAction('a','unknown',false)],
   tlOne:W.optplatTradeTimeline({entry_time:'2026-11-27T16:48:00Z',entry_price:4.92,quantity:1,multiplier:100,status:'OPEN',remaining:1,mark:4.4,entry_rank:{rank:1,of:1},exit_orders:[],mirror:[]}),
+  cap:[W.optplatCapitalLine({capital:{amount:75000,basis:'most at risk',text:'t'},return_pct:33.93}),
+       W.optplatCapitalLine({capital:{amount:100000,basis:'balance',text:'t'},return_pct:-0.5}),
+       W.optplatCapitalLine({capital:null,return_pct:null})],
   why:[W.optplatWhy({payload:{rank:1,of:6,score:96.15}}),W.optplatWhy({payload:{score:88.6}}),W.optplatWhy({payload:{rank:1,of:1,risk_failures:['too wide']}}),W.optplatWhy({payload:{rank:3,of:9,score:50}})],
 }));
 """
@@ -370,3 +373,10 @@ def test_page_reloads_itself_when_a_new_build_is_installed_unless_busy(out):
 
 def test_a_single_candidate_is_not_called_ranked_one_of_one(out):
     assert out["tlOne"][-1]["text"] == "the only eligible candidate"
+
+
+def test_capital_line_reads_the_result_against_the_capital(out):
+    lane, acct, none = out["cap"]
+    assert lane["head"] == "Capital $75,000 · +33.9% on it" and lane["basis"] == "most at risk at once" and lane["tone"] == "gain"
+    assert acct["basis"] == "starting balance" and acct["head"].endswith("-0.5% on it") and acct["tone"] == "loss"
+    assert none is None
