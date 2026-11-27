@@ -146,6 +146,7 @@ Existing items, in order:
   Each name is now fetched once per completed bar, inside 12 new fetches per 10 minutes; the short-term lane's six
   names come first, others use the research fallback when the share is full. Next: re-measure; chains (`snapshot`)
   still each cost a daily-bar request on a service cache miss.
+- 2026-11-27: option lanes verify the one picked contract with IBKR before any fill (entries and exits).
 
 * 2026-11-27: error explainer (owner request): `errorhelp.py` gives each cycle and lane error a cause, a fix, who acts
   (wait / you / agent / Alerter / decision) and cycles in a row; the Desk Act card shows it, `GET /api/errors` returns

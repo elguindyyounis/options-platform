@@ -43,6 +43,10 @@ MAX_ENTRIES_PER_STEP = 3
 MAX_CHAIN_READS_PER_STEP = 8
 MAX_STRIKE_MISS_PCT = 5.0        # the chosen strike may sit this far (of spot) from the target before the lane gives up
 SCAN_MAX_AGE = timedelta(hours=20)
+# On IBKR data (owner decision 2026-11-27: "Lets not worry about the Options alerter"): a lane may open or close only at a
+# quote IBKR itself cross-checked for that one contract (``execution_quote``), the same rule as the main account. Each
+# check spends shared IBKR historical budget, so a lane makes at most this many per pass.
+VERIFY_PER_STEP = 4
 
 
 @dataclass(frozen=True)
@@ -129,10 +133,20 @@ def intrinsic(right: str, strike: float, spot: Optional[float]) -> float:
     return max(0.0, spot - strike) if right == "C" else max(0.0, strike - spot)
 
 
-def pick_contract(snap: MarketSnapshot, right: Right, now: datetime, p: Params) -> Optional[ChainRow]:
+def unverified_ibkr(snap: MarketSnapshot) -> bool:
+    return snap.source.startswith(('ibkr', 'yahoo-fallback')) and not snap.timestamp_verified
+
+
+def quote_fits(bid: float, ask: float, p: Params) -> bool:
+    return bid > 0 and ask >= bid and ask >= p.min_ask and (ask - bid) / ask * 100 <= p.max_spread_pct
+
+
+def pick_contract(snap: MarketSnapshot, right: Right, now: datetime, p: Params, *, verify_later: bool = False) -> Optional[ChainRow]:
     """The row nearest the aimed strike inside the expiry window that passes the lane's quote limits, or None."""
-    # Unverified IBKR chains, and Yahoo chains used as IBKR's fallback, never open a lane trade.
-    if snap.source.startswith(('ibkr', 'yahoo-fallback')) and not snap.timestamp_verified:
+    # Unverified IBKR chains, and Yahoo chains used as IBKR's fallback, never open a lane trade on their own quotes. With
+    # ``verify_later`` the row may be CHOSEN from them, but the caller must then get IBKR's verified quote for that one
+    # contract and fill only at it (OptionLane._enter does).
+    if unverified_ibkr(snap) and not verify_later:
         return None
     spot = snap.underlying
     target = spot * (1 + p.otm_pct / 100) if right is Right.CALL else spot * (1 - p.otm_pct / 100)
@@ -290,18 +304,43 @@ class OptionLane:
         return "UNKNOWN" if ev is None else ("SOON" if ev else "CLEAR")
 
     # -- marking
+    def _needs_verification(self) -> bool:
+        return bool(getattr(self.provider, "execution_veto", False))
+
+    def _verify(self, contract: OptionContract, out: dict[str, Any]) -> Optional[Any]:
+        """IBKR's cross-checked quote for ONE contract, or None (no method, budget spent this pass, refused, or failed)."""
+        verify = getattr(self.provider, "execution_quote", None)
+        log = out.setdefault("verifications", [])
+        if verify is None:
+            return None
+        if len(log) >= VERIFY_PER_STEP:
+            log.append({"contract": contract.occ_symbol.strip(), "result": "BUDGET_SPENT_THIS_CHECK"})
+            return None
+        try:
+            q = verify(contract)
+        except Exception:  # noqa: BLE001 - no verification means no fill
+            q = None
+        ok = q is not None and getattr(q, "timestamp_verified", False) and q.is_valid()
+        log.append({"contract": contract.occ_symbol.strip(), "result": "VERIFIED" if ok else "NOT_VERIFIED"})
+        return q if ok else None
+
     def _marks(self, held: list[dict[str, Any]], now: datetime, out: dict[str, Any]) -> dict[str, tuple[float, float]]:
-        if getattr(self.provider, 'execution_veto', False):
-            out['errors'].append('IBKR BBO exchange time unverified; simulated marks and fills paused')
-            return {}
         if not held:
             return {}
+        quote_fn = self.provider.quotes_for
+        if self._needs_verification():
+            # Unverified live IBKR quotes may NOTICE an exit (as for the main account); the close itself waits for a
+            # verified quote in _close. Without them the lane has no marks and says so.
+            quote_fn = getattr(self.provider, "decision_quotes_for", None)
+            if quote_fn is None:
+                out['errors'].append('IBKR BBO exchange time unverified; simulated marks and fills paused')
+                return {}
         contracts = []
         for t in held:
             o = t["open_payload"]
             contracts.append(OptionContract(t["symbol"], date.fromisoformat(o["expiry"]), Right(o["right"]), o["strike"]))
         try:
-            quotes = self.provider.quotes_for(contracts)
+            quotes = quote_fn(contracts)
         except Exception as exc:  # noqa: BLE001 - no marks means no premium exits this pass, and it is shown
             out["errors"].append(f"quotes unavailable: {type(exc).__name__}: {str(exc)[:80]}")
             return {}
@@ -309,11 +348,21 @@ class OptionLane:
         for t in held:
             m = marks.get(t["open_payload"]["contract"])
             if m:
-                self.store.set_state(f"lane_mark:{t['id']}", json.dumps({"bid": m[0], "ask": m[1], "at": now.isoformat()}))
+                self.store.set_state(f"lane_mark:{t['id']}", json.dumps({"bid": m[0], "ask": m[1], "at": now.isoformat(),
+                                                                       "verified": not self._needs_verification()}))
         return marks
 
     # -- closing and opening
     def _close(self, t: dict[str, Any], bid: float, reason: str, now: datetime, out: dict[str, Any], info: dict[str, Any]) -> bool:
+        if self._needs_verification() and reason != "expired_unmarked":
+            o = t["open_payload"]
+            q = self._verify(OptionContract(t["symbol"], date.fromisoformat(o["expiry"]), Right(o["right"]), o["strike"]), out)
+            if q is None or not q.bid > 0:
+                out["errors"].append(f"{t['symbol']}: wanted to close on {reason} but IBKR could not verify a bid; it stays open")
+                return False
+            bid = q.bid
+            info = {**info, "bid": q.bid, "ask": q.ask, "quote_verified": True, "verified_quote_at": q.as_of.isoformat(),
+                    "spread_pct": round((q.ask - q.bid) / q.ask * 100, 2) if q.ask > 0 else None}
         fees = round(t["quantity"] * FEE_PER_CONTRACT, 2)
         info = {**info, "fees_close": fees}
         info["postmortem"] = post_mortem(t, bid, reason, now, info)
@@ -341,11 +390,23 @@ class OptionLane:
         if chk.snapshot is None:
             out["errors"].append(f"{sym}: chain rejected by the data-quality gate ({chk.issues[-1].kind if chk.issues else 'unknown'})")
             return None
-        row = pick_contract(chk.snapshot, Right(right), now, p)
+        needs_check = self._needs_verification() and unverified_ibkr(chk.snapshot)
+        row = pick_contract(chk.snapshot, Right(right), now, p, verify_later=needs_check and hasattr(self.provider, "execution_quote"))
         if row is None:
             out["skips"].append(f"{sym}: no {'call' if right == 'C' else 'put'} met the expiry, spread and open interest limits")
             return None
         shadow.follow_lane_pick(self.store, chk.snapshot, row, now, self.provider.fictional, p.lane, p.label, self.calendar, self.feed.regime)
+        verified: dict[str, Any] = {}
+        if needs_check:
+            q = self._verify(row.contract, out)
+            if q is None:
+                out["skips"].append(f"{sym}: IBKR could not verify {row.contract.occ_symbol.strip()} just now; not bought")
+                return None
+            if not quote_fits(q.bid, q.ask, p):
+                out["skips"].append(f"{sym}: the verified quote ({q.bid}/{q.ask}) is outside the lane's price or spread limits")
+                return None
+            verified = {"quote_verified": True, "verified_quote_at": q.as_of.isoformat(), "chain_bid": row.bid, "chain_ask": row.ask}
+            row = replace(row, bid=q.bid, ask=q.ask)
         budget = p.budget_usd * budget_mult
         qty = int(budget // (row.ask * MULTIPLIER))
         if qty < 1:
@@ -362,7 +423,7 @@ class OptionLane:
                    "signal": signal, "earnings_state": "n/a", "budget_usd": round(budget), "stack_index": len(mine),
                    "stacked_on": [t["id"] for t in mine],
                    "size_vs_volume_pct": round(qty / row.volume * 100, 1) if row.volume else None,
-                   "size_vs_oi_pct": round(qty / row.open_interest * 100, 1) if row.open_interest else None, **(extra or {})}
+                   "size_vs_oi_pct": round(qty / row.open_interest * 100, 1) if row.open_interest else None, **verified, **(extra or {})}
         veto, new_qty = self._review(sym, right, row, qty, payload, held, now)
         if veto:
             out["skips"].append(f"{sym}: {veto}")

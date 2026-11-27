@@ -1318,3 +1318,15 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * From the TWI 2.0 video review, items 3 and 4. The options-account trade file opens with "Every update, newest first": picked (rank of eligible candidates), bought (simulated fill), what the IBKR paper mirror did (filled at what price and how far from the simulator, refused, no answer, cancelled), each sale with its reason and profit, and what it holds now. The raw order events moved under "Technical detail". `/api/trades/{id}` now returns `mirror` (IBKR mirror audit events found by the order's idempotency key, via `Store.audit_for_key`) and trades carry `entry_rank`. The Desk Activity feed is split under Today / Yesterday / date headings.
 * Verified: `python -m pytest -q` passes (API test that the trade file carries only its own mirror events; node tests for the timeline and day labels); drawer screenshot on demo data. Not verified: the Mac or a real IBKR mirror run.
 * Not built: phone notifications (item 6) need the owner to pick a push service, because it sends data off the Mac.
+## 2026-11-27: option lanes fill only at IBKR's verified quote for the one contract (PR: agent/2026-11-27-lane-verified-quotes)
+- Owner OK (2026-11-27, "Lets not worry about the Options alerter for now"): spend shared IBKR historical budget on per-contract checks.
+- On IBKR (`execution_veto`), lanes now choose a contract from the unverified chain, then call `execution_quote` for that one contract and
+  buy only at the verified ask, after re-checking bid > 0, `min_ask` and `max_spread_pct`; size is recomputed at the verified ask.
+  No verification (refused, failed, unverified, or more than `VERIFY_PER_STEP = 4` checks this pass) means no trade.
+- Exits: live unverified IBKR quotes (`decision_quotes_for`) are used to NOTICE an exit (as the main account does); the close happens only at a
+  verified bid. If it cannot be verified the position stays open and is retried next pass. Saved marks carry `"verified": false`.
+- Challenge: an attempt no longer ends while any of its closes failed (fixed a gap the change exposed); test fails before the fix.
+- `pick_contract` still refuses unverified IBKR / fallback chains by default (existing test kept); `verify_later=True` is only used by `_enter`.
+- Next-open preview shows such picks with `needs_ibkr_check` instead of blocking them.
+- Verified: `python -m pytest -q` (1011 passed), 9 new tests in `tests/test_lane_verified_quotes.py`.
+- Not verified: behaviour against the live shared IBKR service, how fast the shared historical budget is used in a busy open.

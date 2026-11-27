@@ -178,11 +178,11 @@ def _swing_option_lane(lane: ol.OptionLane, now: datetime, session: dict[str, An
             out["queued"].append({**base, "earnings_state": state, "why_no_contract_yet": why_not})
             continue
         snapx = chk.snapshot
-        if snapx.source.startswith(("ibkr", "yahoo-fallback")) and not snapx.timestamp_verified:
-            # pick_contract refuses these by design; say so instead of blaming the lane's quote limits
-            block("IBKR quote time not verified: lanes do not open on unverified IBKR chains (owner decision pending)")
+        later = ol.unverified_ibkr(snapx) and lane._needs_verification() and hasattr(lane.provider, "execution_quote")
+        if ol.unverified_ibkr(snapx) and not later:
+            block("IBKR quote time not verified and this data source cannot verify one contract")
             continue
-        row = ol.pick_contract(snapx, Right(right), sess_open, p)
+        row = ol.pick_contract(snapx, Right(right), sess_open, p, verify_later=later)
         if row is None:
             block("no contract met the expiry, spread and open-interest limits on the last quotes")
             continue
@@ -197,7 +197,7 @@ def _swing_option_lane(lane: ol.OptionLane, now: datetime, session: dict[str, An
                 "premium_usd": round(qty * row.ask * ol.MULTIPLIER, 2), "earnings_state": state,
                 "size_vs_volume_pct": round(qty / row.volume * 100, 1) if row.volume else None,
                 "size_vs_oi_pct": round(qty / row.open_interest * 100, 1) if row.open_interest else None,
-                "quote_as_of": chk.snapshot.as_of.isoformat()}
+                "quote_as_of": chk.snapshot.as_of.isoformat(), "needs_ibkr_check": later}
         out["buys"].append(pick)
         remaining.append({"symbol": sym, "open_payload": {"contract": pick["contract"]}, "entry_price": row.ask})
     return out
