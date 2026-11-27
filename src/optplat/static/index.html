@@ -391,86 +391,92 @@
   .cfg-group legend { padding:0 6px; font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mut); }
   .cfg-group.risky { border-color:var(--warn); } .cfg-group.risky legend { color:var(--warn); }
   #ln-board .legend { padding:10px 14px 12px; font-size:12.5px; }
-  /* ---- top bar navigation (owner, 2026-11-27): one bar for pages and status, four daily tabs, two menus ---- */
-  .shell { display:block; min-height:100vh; }
-  .rail, .rail-foot { display:none; }
-  .topbar { position:sticky; top:0; z-index:20; display:flex; flex-wrap:wrap; align-items:center; gap:4px 18px; padding:0 20px; min-height:58px; background:var(--surface); border-bottom:1px solid var(--line); }
-  .topbar .brand { display:flex; flex-direction:column; line-height:1.2; padding:8px 0; color:var(--fg); text-decoration:none; }
-  .topbar .brand b { font:700 15px var(--sans); letter-spacing:-.01em; } .topbar .brand small { color:var(--mut); font-size:11.5px; }
-  .tabs { display:flex; gap:2px; align-self:stretch; }
-  .tabs a.nav { display:flex; align-items:center; gap:8px; padding:0 14px; color:var(--mut); text-decoration:none; font-weight:600; border-bottom:3px solid transparent; border-top:3px solid transparent; }
-  .tabs a.nav:hover { color:var(--fg); background:var(--raised); }
-  .tabs a.nav[aria-current="page"] { color:var(--fg); border-bottom-color:var(--series-1); }
-  .navstat { font-size:12px; font-weight:500; color:var(--mut); }
-  .navdot { width:8px; height:8px; border-radius:50%; background:var(--loss); display:inline-block; }
-  .menus { display:flex; gap:6px; flex:1 1 auto; }
-  .navmenu { position:relative; }
-  .navmenu > summary { list-style:none; cursor:pointer; padding:7px 12px; border:1px solid var(--line); border-radius:8px; color:var(--mut); font-weight:600; font-size:13.5px; }
-  .navmenu > summary::-webkit-details-marker { display:none; }
-  .navmenu > summary::after { content:" \25BE"; }
-  .navmenu[open] > summary, .navmenu.has-current > summary { color:var(--fg); border-color:var(--series-1); }
-  .navmenu .menu { position:absolute; top:calc(100% + 6px); left:0; z-index:30; width:300px; padding:6px; border:1px solid var(--line); border-radius:12px; background:var(--surface); box-shadow:0 14px 30px rgba(0,0,0,.35); display:grid; gap:2px; }
-  .menu-head { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mut); padding:6px 10px 4px; }
-  .menu a.nav { display:grid; padding:8px 10px; border-radius:8px; color:var(--fg); text-decoration:none; font-weight:600; }
-  .menu a.nav small { color:var(--mut); font-weight:400; font-size:12px; }
-  .menu a.nav:hover { background:var(--raised); } .menu a.nav[aria-current="page"] { background:var(--info-bg); }
-  .topbar .status { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:8px 0; font-size:12px; }
-  .topbar .status .pill { font-size:12px; padding:2px 9px; }
-  .strip { display:none; }
+  /* ---- side rail v3 (owner, 2026-11-27: top bar felt wrong; keep the rail, make it carry status) ---- */
+  .content { max-width:1680px; }
+  .lanebar { flex-wrap:wrap; overflow-x:visible; }
+  .lane-grid { grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+  .lc-head { flex-wrap:wrap; }
+  .lc-spark svg, .mult-chart svg { display:block; width:100%; height:auto; overflow:visible; }
+  .spark-zero { stroke:var(--line); stroke-width:1; stroke-dasharray:3 3; }
+  .spark-line { fill:none; stroke:var(--series-1); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+  .spark-line.thin { stroke:var(--mut); stroke-dasharray:4 3; }
+  .spark-end { fill:var(--series-1); stroke:var(--surface); stroke-width:2; }
+  .spark-hit { fill:transparent; } .spark-hit:hover { fill:var(--series-1); fill-opacity:.35; }
+  .multiples { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; margin-top:12px; }
+  .mult { border:1px solid var(--line-soft); border-radius:12px; background:var(--raised); padding:12px 14px; display:grid; gap:8px; }
+  .mult-head { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  .mult-foot { font-size:12px; }
+  #ln-detail .feed-item { grid-template-columns:minmax(0,1fr) auto; }
+  @media (max-width:860px) { .need { flex-wrap:wrap; } .need > div { flex-basis:calc(100% - 60px); } .need .need-act { margin-left:52px; } }
+  .rail { width:232px; gap:2px; overflow-y:auto; }
+  .shell { grid-template-columns:232px minmax(0,1fr); }
+  .rail .brand { display:flex; flex-direction:column; gap:2px; padding:2px 12px 16px; color:var(--fg); text-decoration:none; }
+  .rail .brand small { line-height:1.35; }
+  .rail a.nav { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .rail a.nav .badge { margin-left:0; }
+  .navstat { font-size:12px; font-weight:500; color:var(--mut); white-space:nowrap; }
+  .navstat.alert { color:var(--loss); font-weight:600; }
+  .navfold { border-top:1px solid var(--line-soft); margin-top:8px; padding-top:6px; }
+  .navfold > summary { list-style:none; cursor:pointer; display:flex; justify-content:space-between; padding:8px 14px; font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--mut); border-radius:8px; }
+  .navfold > summary::-webkit-details-marker { display:none; }
+  .navfold > summary::after { content:"+"; font-family:var(--mono); } .navfold[open] > summary::after { content:"\2212"; }
+  .navfold > summary:hover { color:var(--fg); background:var(--raised); }
+  .navfold.has-current > summary { color:var(--fg); }
+  .navfold a.nav { padding:7px 14px; font-size:13.5px; }
   @media (max-width:860px) {
-    .shell { display:block; }
-    .topbar { padding:0 12px; gap:2px 10px; }
-    .tabs { position:fixed; left:0; right:0; bottom:0; z-index:25; background:var(--surface); border-top:1px solid var(--line); padding:0 4px env(safe-area-inset-bottom); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
-    .tabs a.nav { flex-direction:column; justify-content:center; gap:0; padding:9px 2px; font-size:12.5px; border-bottom:0; border-top:3px solid transparent; }
-    .tabs a.nav[aria-current="page"] { border-top-color:var(--series-1); }
-    .navmenu .menu { position:fixed; left:12px; right:12px; top:auto; width:auto; }
-    .topbar .status #updated, .topbar .status #market { display:none; }
+    .rail { width:auto; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); align-items:stretch; padding:0 2px env(safe-area-inset-bottom); gap:0; }
+    .rail .brand, .rail .navgroup { display:none; }
+    .rail a.nav { flex-direction:column; justify-content:center; gap:0; padding:8px 2px; font-size:12px; border-radius:0; box-shadow:none; }
+    .rail a.nav[aria-current="page"] { box-shadow:inset 0 3px 0 var(--series-1); }
+    .navfold { border:0; margin:0; padding:0; position:static; }
+    .navfold > summary { height:100%; align-items:center; justify-content:center; padding:8px 2px; font-size:11px; letter-spacing:.02em; }
+    .navfold > summary::after { content:""; }
+    .navfold[open] { position:static; }
+    .navfold[open] > div { position:fixed; left:10px; right:10px; bottom:64px; z-index:30; display:grid; padding:6px; border:1px solid var(--line); border-radius:12px; background:var(--surface); box-shadow:0 -10px 30px rgba(0,0,0,.35); }
+    .navfold[open] > div a.nav { flex-direction:row; justify-content:flex-start; padding:12px; font-size:14px; }
   }
 </style>
 </head>
 <body>
 <div class="shell">
-  <header class="topbar">
+  <nav class="rail" aria-label="Sections">
     <a class="brand" href="#/desk"><b>options-platform</b><small>Paper only. No live orders exist in this app.</small></a>
-    <nav class="tabs" aria-label="Daily pages">
-      <a class="nav" href="#/desk" data-page="desk">Desk<span id="nav-needs" class="badge" hidden></span></a>
-      <a class="nav" href="#/trades" data-page="trades">Trades<span id="nav-trades" class="navstat"></span></a>
-      <a class="nav" href="#/lanes" data-page="lanes">Lanes<span id="nav-lanes" class="navstat"></span></a>
-      <a class="nav" href="#/system" data-page="system">System<span id="nav-system" class="navdot" hidden></span></a>
-    </nav>
-    <div class="menus">
-      <details class="navmenu" id="menu-research">
-        <summary>Research</summary>
-        <div class="menu" aria-label="Research pages">
-          <div class="menu-head">Weekly reading: is any rule worth changing?</div>
-          <a class="nav" href="#/research" data-page="research">Lab<small>Gate progress and registered tests</small></a>
-          <a class="nav" href="#/agents" data-page="agents">Agents<small>Which agent is right, from matured votes</small></a>
-          <a class="nav" href="#/options" data-page="options">Options<small>Option lanes and the 10x challenge</small></a>
-          <a class="nav" href="#/swing" data-page="swing">Swing<small>Swing share lane (SW1)</small></a>
-          <a class="nav" href="#/shortterm" data-page="shortterm">Short-term<small>Intraday share lane (ST1)</small></a>
-          <a class="nav" href="#/tracker" data-page="tracker">Tracker<small>Does unusual flow lead anywhere?</small></a>
-        </div>
-      </details>
-      <details class="navmenu" id="menu-market">
-        <summary>Market</summary>
-        <div class="menu" aria-label="Market pages">
-          <div class="menu-head">Background for the watchlist and timing</div>
-          <a class="nav" href="#/market" data-page="market">Market<small>Sector heat, unusual flow, candidates</small></a>
-          <a class="nav" href="#/context" data-page="context">Context<small>Index options, gamma, events</small></a>
-        </div>
-      </details>
-    </div>
-    <div class="status">
+    <div class="navgroup" aria-hidden="true">Daily</div>
+    <a class="nav" href="#/desk" data-page="desk"><span>Desk</span><span id="nav-needs" class="badge" hidden></span></a>
+    <a class="nav" href="#/trades" data-page="trades"><span>Trades</span><span id="nav-trades" class="navstat"></span></a>
+    <a class="nav" href="#/lanes" data-page="lanes"><span>Lanes</span><span id="nav-lanes" class="navstat"></span></a>
+    <a class="nav" href="#/system" data-page="system"><span>System</span><span id="nav-system" class="navstat alert"></span></a>
+    <details class="navfold" id="menu-research">
+      <summary>Research</summary>
+      <div>
+        <a class="nav" href="#/research" data-page="research" title="Gate progress and registered tests">Lab</a>
+        <a class="nav" href="#/agents" data-page="agents" title="Which agent is right, from matured votes">Agents</a>
+        <a class="nav" href="#/options" data-page="options" title="Option lanes and the 10x challenge">Options</a>
+        <a class="nav" href="#/swing" data-page="swing" title="Swing share lane (SW1)">Swing</a>
+        <a class="nav" href="#/shortterm" data-page="shortterm" title="Intraday share lane (ST1)">Short-term</a>
+        <a class="nav" href="#/tracker" data-page="tracker" title="Does unusual flow lead anywhere?">Tracker</a>
+      </div>
+    </details>
+    <details class="navfold" id="menu-market">
+      <summary>Market</summary>
+      <div>
+        <a class="nav" href="#/market" data-page="market" title="Sector heat, unusual flow, candidates">Market</a>
+        <a class="nav" href="#/context" data-page="context" title="Index options, gamma, events">Context</a>
+      </div>
+    </details>
+  </nav>
+
+  <div class="main">
+    <header class="strip">
       <span id="mode" class="pill">connecting</span>
       <span id="data" class="pill"></span>
       <span id="market" class="pill"></span>
       <span id="kill" class="pill"></span>
       <span id="runner" class="pill"></span>
+      <span class="grow"></span>
       <span id="updated" class="muted"></span>
-    </div>
-  </header>
+    </header>
 
-  <div class="main">
     <main class="content">
       <section id="view-connect" data-plumbing="Connection to the local server" hidden>
         <h1>Connect</h1>
@@ -515,6 +521,7 @@
             </details>
           </div>
           <div class="hero-chart">
+          <div class="eyebrow">Options account balance (paper broker, mirrored to IBKR paper when switched on)</div>
             <div class="viz" id="equity-chart"></div>
             <button class="linkbtn" id="btn-table" type="button">Show as table</button>
             <div class="scroll" id="equity-table" hidden></div>
@@ -568,6 +575,11 @@
           <p id="ln-lede" class="lede"></p>
         </div>
         <div class="panel" style="padding:0;overflow:hidden"><div class="scroll" id="ln-board"></div></div>
+        <div class="panel">
+          <h2>Results over time, per lane</h2>
+          <p class="q">Cumulative result after fees, one point per closed trade. Each chart has its own scale because lanes trade very different sizes; compare the numbers under each, not the heights. Dashed lines have under 10 closed trades. Hover a point for the trade.</p>
+          <div id="ln-multiples" class="multiples"></div>
+        </div>
         <div class="deskcols">
           <div class="panel" id="ln-exposure-box">
             <h2>Market exposure</h2>
