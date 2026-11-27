@@ -348,6 +348,79 @@
     return { cls: "warn", text: (r.reasons || []).join(" ") + " Existing positions and exits are untouched." + hb + " Thresholds are engineering choices, not an edge." + fict };
   }
   window.optplatRegimeText = regimeText;
+  // ---- Today's plan and Rules in force (owner, 2026-11-27, from the TWI 2.0 video): what the platform will do and the
+  // rules it is held to, on the Desk, before any result. Pure functions of API data, exposed for tests; nothing here acts.
+  const FILLED_LIKE = ["FILLED", "SUBMITTED", "WORKING", "PARTIALLY_FILLED", "PENDING", "ACCEPTED"];
+  function watchChips(watchlist, cycle, cfg) {
+    const entries = (cycle && cycle.entries) || [], note = cycle && cycle.entries_note, max = (cfg && cfg.max_new_per_cycle) || 1;
+    const by = {};
+    entries.forEach((e) => { if (e.symbol && !by[e.symbol]) by[e.symbol] = e; });
+    return (watchlist || []).map((sym) => {
+      const e = by[sym];
+      if (!e) return { symbol: sym, tone: "mute", text: note ? "not checked: " + note.toLowerCase() : !cycle ? "no cycle yet" : "not reached: " + max + " new trade" + (max === 1 ? "" : "s") + " per cycle already used" };
+      const r = e.result, c = occParts(e.contract || "");
+      const what = c ? (c.right === "C" ? "call " : "put ") + c.strike : "";
+      if (FILLED_LIKE.indexOf(r) >= 0) return { symbol: sym, tone: "gain", text: "bought " + what + (e.quantity ? " × " + e.quantity : "") };
+      if (r === "RISK_REJECTED") return { symbol: sym, tone: "loss", text: what + " blocked: " + String((e.risk_failures || [])[0] || "risk check").toLowerCase() };
+      if (r === "REJECTED") return { symbol: sym, tone: "loss", text: what + " refused by the broker" };
+      if (r === "NOTHING_AFFORDABLE_WITHIN_SIZE_CAP") return { symbol: sym, tone: "warn", text: "too expensive for the size cap" };
+      if (r === "BLOCKED_REGIME") return { symbol: sym, tone: "warn", text: "held back by the market-regime guard" };
+      if (r === "COMMITTEE_DECLINED") return { symbol: sym, tone: "warn", text: "committee said no" };
+      if (r === "NO_DATA") return { symbol: sym, tone: "warn", text: "no data this cycle" };
+      if (r === "NO_PROPOSAL") return { symbol: sym, tone: "mute", text: e.reason ? String(e.reason).replace(/\.$/, "").slice(0, 90) : "no setup" };
+      if (r === "KEY_CONFLICT") return { symbol: sym, tone: "mute", text: "same order already sent this window" };
+      return { symbol: sym, tone: "mute", text: words(r || "unknown") };
+    });
+  }
+  function planHeadline(cfg, status, cycle) {
+    const c = cfg || {}, m = (status && status.market) || {}, max = c.max_new_per_cycle || 1;
+    const exits = c.auto_exits ? "exits are checked every cycle" : "automatic exits are off";
+    let head;
+    if (status && status.kill_switch) head = "No new trades: the kill switch is on. " + exits[0].toUpperCase() + exits.slice(1) + ".";
+    else if (!c.auto_entries) head = "No automatic buying: entries are off. " + exits[0].toUpperCase() + exits.slice(1) + ".";
+    else if (cycle && cycle.entries_note) head = cycle.entries_note + ". " + exits[0].toUpperCase() + exits.slice(1) + ".";
+    else head = "Looking for up to " + max + " new option" + (max === 1 ? "" : "s") + " per cycle across " + (c.watchlist || []).length + " names; " + exits + ".";
+    const session = m.open === undefined ? "Session unknown" : (m.open ? "Market open" : "Market closed") + (m.reason ? " (" + m.reason + ")" : "");
+    return { head, session, committee: !c.committee_mode || c.committee_mode === "off" ? "Committee off" : c.committee_mode === "shadow" ? "Committee in shadow: votes are recorded and change nothing" : "Committee active: its votes can stop or shrink a trade" };
+  }
+  function rulesInForce(pol, cfg, pf) {
+    const rows = [], p = pol || {}, c = cfg || {}, a = (pf && pf.account) || {}, st = (pf && pf.account_start) || {};
+    const pct = (v) => (v === undefined || v === null ? "?" : Number(v)) + "%";
+    const eq = Number(a.equity);
+    rows.push(["Account", (st.start_cash ? money(st.start_cash) + " paper" : "Paper") + (st.since ? ", started " + fmtTime(st.since) : "") + (isFinite(eq) ? " · now " + money(eq) : ""),
+      st.start_cash && st.start_cash >= 100000 ? "warn" : ""]);
+    rows.push(["Size", "Up to " + pct(p.max_position_pct) + " of the account per order" + (isFinite(eq) && p.max_position_pct ? " (" + money(eq * p.max_position_pct / 100) + ")" : "") +
+      " · " + pct(p.max_total_premium_pct) + " open in total · at most " + (p.max_open_positions || "?") + " positions", ""]);
+    rows.push(["Exits", "Target +" + pct(c.take_profit_pct) + " · stop −" + pct(c.stop_loss_pct) +
+      (c.trim_at_pct ? " · sell half at +" + pct(c.trim_at_pct) + ", then stop to entry" : "") + " · out " + (c.min_dte_to_hold || "?") + " days before expiry" +
+      (c.max_days_held ? " · at most " + c.max_days_held + " days held" : "") + (c.exit_agent ? " · exit agent on" : ""), ""]);
+    rows.push(["Quotes", "Spread under " + pct(p.max_spread_pct_of_ask) + " of the ask · under " + (p.max_quote_age_s || "?") + " s old" + (p.require_verified_quote_time ? " · time verified" : " · time NOT verified"),
+      p.require_verified_quote_time ? "" : "warn"]);
+    rows.push(["Stop everything", pf && pf.kill_switch ? "Kill switch is ON: no new entries" : "Kill switch is off", pf && pf.kill_switch ? "loss" : ""]);
+    return rows;
+  }
+  function renderPlan(status) {
+    const c = (status && status.config) || {}, cycle = status && status.last_cycle;
+    const h = planHeadline(c, status, cycle);
+    $("plan-head").textContent = h.head;
+    $("plan-session").textContent = h.session;
+    $("plan-committee").textContent = h.committee;
+    const box = $("plan-chips");
+    box.replaceChildren();
+    watchChips(c.watchlist, cycle, c).forEach((x) => {
+      const chip = el("span", null, "wchip " + x.tone);
+      kids(chip, [el("b", x.symbol), span(" " + x.text)]);
+      box.appendChild(chip);
+    });
+    $("plan-when").textContent = cycle && cycle.finished_at ? "From the cycle at " + fmtTime(cycle.finished_at) + "." : cycle && cycle.started_at ? "From the cycle at " + fmtTime(cycle.started_at) + "." : "";
+  }
+  function renderRules(pol, status, pf) {
+    const box = $("rules-rows");
+    box.replaceChildren();
+    rulesInForce(pol, status && status.config, pf).forEach((r) => { box.appendChild(el("dt", r[0])); box.appendChild(el("dd", r[1], r[2])); });
+  }
+  window.optplatWatchChips = watchChips; window.optplatPlanHeadline = planHeadline; window.optplatRulesInForce = rulesInForce;
+
   function renderRegime(r) {
     const p = $("regime-line");
     if (!p) return;
@@ -2106,16 +2179,26 @@
   // One explained error (engine errorhelp.py): what happened, the fix, who acts and how long it has been going on.
   const WHO_TEXT = { wait: "usually clears by itself", you: "needs you", agent: "the error check will look at it",
     alerter: "the shared IBKR data service (Alerter)", decision: "working as built; changing it is your call" };
+  // Plain words first: the cause and the fix are what the owner reads; the raw error text (often a Python exception) is kept
+  // as `detail` and shown folded under "Technical detail". Without a known cause, the raw text is all there is, so it leads.
   function errorLine(h) {
     const n = Number(h.repeats) || 0;
     const when = n > 1 ? n + " cycles in a row" : (n === 1 ? "first time" : "");
-    return "Error: " + String(h.error || "") + ". " + String(h.cause || "") + " Fix: " + String(h.fix || "") +
-      " (" + (WHO_TEXT[h.who] || "unknown") + (when ? "; " + when : "") + ")";
+    const tail = " (" + (WHO_TEXT[h.who] || "unknown") + (when ? "; " + when : "") + ")";
+    const raw = "Error: " + String(h.error || "");
+    if (!h.cause) return { kind: "error", text: raw + ". Fix: " + String(h.fix || "unknown") + tail, detail: null };
+    return { kind: "error", text: String(h.cause) + " Fix: " + String(h.fix || "") + tail, detail: raw };
+  }
+
+  function techDetail(text) {
+    const d = el("details", null, "techdetail"), sm = el("summary", "Technical detail");
+    kids(d, [sm, el("div", text, "mono")]);
+    return d;
   }
 
   function buildGlance(h, st, pf, res, pol, nowMs) {
     const out = [];
-    const add = (level, text) => out.push({ level, text });
+    const add = (level, text) => out.push(typeof text === "object" ? { level, ...text } : { level, text });
     if (h.mode !== "PAPER") add("bad", "Broker mode is " + h.mode + ", not PAPER. Stop and check.");
     else add("ok", "Paper only: no real money can be used by this app.");
     if (pf && pf.kill_switch) add("bad", "Kill switch is ON: no new orders are accepted.");
@@ -2205,7 +2288,11 @@
     box.appendChild(el("div", worst === "bad" ? "Needs your attention" : worst === "warn" ? "Check these" : "Nothing needs you right now", "pill " + worst));
     box.appendChild(el("span", " " + c.bad + " action, " + c.warn + " note, " + c.ok + " ok (most urgent first)", "muted"));
     const ul = el("ul");
-    orderGlance(items).forEach((i) => ul.appendChild(el("li", (i.level === "ok" ? "OK: " : i.level === "warn" ? "Note: " : "ACTION: ") + i.text, i.level)));
+    orderGlance(items).forEach((i) => {
+      const li = el("li", (i.level === "ok" ? "OK: " : i.level === "warn" ? "Note: " : "ACTION: ") + i.text, i.level);
+      if (i.detail) li.appendChild(techDetail(i.detail));
+      ul.appendChild(li);
+    });
     box.appendChild(ul);
   }
 
@@ -2332,7 +2419,9 @@
     st.needs.slice(0, 5).forEach((i) => {
       const row = el("div", null, "need");
       row.appendChild(el("span", i.level === "bad" ? "Act" : "Look", "tag " + (i.level === "bad" ? "loss" : "warn")));
-      row.appendChild(el("div", i.text));
+      const body = el("div", i.text);
+      if (i.detail) body.appendChild(techDetail(i.detail));
+      row.appendChild(body);
       const fix = needAction(i.text);
       if (fix) {
         const b = el("button", fix.label, "btn primary need-act");
@@ -2590,6 +2679,8 @@
       const now = renderNow(glanceItems, { health, status, portfolio, report, trades: allTrades, decisions, shadow: shadowRep, since: S.since });
       renderGlance(glanceItems, now.needs.length);
       renderNavStatus(navStatus(status, portfolio, allTrades, S.readyLanes));
+      renderPlan(status);
+      renderRules(policy, status, portfolio);
       renderResearchProgress(buildResearchProgress(shadowRep));
       renderSystemBand(status, (report.closed_trades !== undefined ? report.closed_trades : (allTrades && allTrades.trades ? allTrades.trades.filter((t) => t.status === "CLOSED").length : 0)), shadowRep, health);
       if (results) renderResults(results);

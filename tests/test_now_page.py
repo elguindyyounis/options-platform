@@ -112,6 +112,22 @@ console.log(JSON.stringify({
     {source:'a',status:'CLOSED',pnl:null,closed_at:'2026-11-03T15:00:00Z',label:'no result'},
     {source:'b',status:'CLOSED',pnl:50,closed_at:'2026-11-01T16:00:00Z',label:'other lane'},
   ],'a'),
+  chips:W.optplatWatchChips(['SPY','QQQ','NVDA','AAPL','TSLA','MSFT'],{entries:[
+      {symbol:'SPY',result:'NOTHING_AFFORDABLE_WITHIN_SIZE_CAP'},
+      {symbol:'QQQ',result:'NO_DATA'},
+      {symbol:'NVDA',result:'RISK_REJECTED',contract:'NVDA  261218P00148000',risk_failures:['Limit price exceeds the ask by more than the allowed margin']},
+      {symbol:'AAPL',result:'NO_PROPOSAL',reason:'No clear trend (price, 20-day and 50-day averages are not lined up), so no trade.'},
+      {symbol:'TSLA',result:'FILLED',contract:'TSLA  261218C00365000',quantity:2},
+    ]},{max_new_per_cycle:1}),
+  chipsClosed:W.optplatWatchChips(['SPY'],{entries:[],entries_note:'Market closed: no new entries'},{}),
+  plan:[
+    W.optplatPlanHeadline({auto_entries:true,auto_exits:true,max_new_per_cycle:1,watchlist:['SPY','QQQ'],committee_mode:'shadow'},{market:{open:true,reason:'Regular session (early close)'},kill_switch:false},{entries:[]}),
+    W.optplatPlanHeadline({auto_entries:true,auto_exits:true},{market:{open:true},kill_switch:true},null),
+    W.optplatPlanHeadline({auto_entries:false,auto_exits:false},{market:{}},null),
+  ],
+  rules:W.optplatRulesInForce({max_position_pct:1,max_total_premium_pct:10,max_open_positions:12,max_spread_pct_of_ask:15,max_quote_age_s:60,require_verified_quote_time:true},
+    {take_profit_pct:40,stop_loss_pct:30,min_dte_to_hold:5,trim_at_pct:0,max_days_held:0},
+    {account:{equity:101649},kill_switch:false,account_start:{start_cash:100000,since:null}}),
   why:[W.optplatWhy({payload:{rank:1,of:6,score:96.15}}),W.optplatWhy({payload:{score:88.6}}),W.optplatWhy({payload:{rank:1,of:1,risk_failures:['too wide']}}),W.optplatWhy({payload:{rank:3,of:9,score:50}})],
 }));
 """
@@ -293,3 +309,31 @@ def test_top_bar_tabs_show_live_status(out):
 
 def test_lane_path_is_the_running_result_of_closed_trades_in_closing_order(out):
     assert [(p["label"], p["v"]) for p in out["path"]] == [("Y", -4), ("X", 6)]  # open, unpriced and other lanes left out
+
+
+def test_watchlist_chips_say_what_each_name_got_last_cycle(out):
+    c = {x["symbol"]: x for x in out["chips"]}
+    assert c["SPY"]["text"] == "too expensive for the size cap" and c["SPY"]["tone"] == "warn"
+    assert c["QQQ"]["text"] == "no data this cycle"
+    assert c["NVDA"]["tone"] == "loss" and c["NVDA"]["text"].startswith("put 148 blocked: limit price exceeds the ask")
+    assert c["AAPL"]["text"].startswith("No clear trend") and not c["AAPL"]["text"].endswith(".")
+    assert c["TSLA"] == {"symbol": "TSLA", "tone": "gain", "text": "bought call 365 × 2"}
+    assert c["MSFT"]["text"] == "not reached: 1 new trade per cycle already used"  # the loop stopped before it
+    assert out["chipsClosed"][0]["text"] == "not checked: market closed: no new entries"
+
+
+def test_plan_headline_says_what_happens_now(out):
+    run, killed, off = out["plan"]
+    assert run["head"] == "Looking for up to 1 new option per cycle across 2 names; exits are checked every cycle."
+    assert run["session"] == "Market open (Regular session (early close))" and "shadow" in run["committee"]
+    assert killed["head"].startswith("No new trades: the kill switch is on.")
+    assert off["head"].startswith("No automatic buying") and "automatic exits are off" in off["head"].lower()
+    assert off["session"] == "Session unknown"
+
+
+def test_rules_in_force_list_the_real_limits_and_flag_the_100k_account(out):
+    r = {row[0]: row for row in out["rules"]}
+    assert r["Account"][2] == "warn" and "$100,000" in r["Account"][1]  # the $1,000 setting is not on yet
+    assert "Up to 1% of the account per order ($1,016" in r["Size"][1] and "10% open in total" in r["Size"][1]
+    assert r["Exits"][1].startswith("Target +40% · stop −30%") and "sell half" not in r["Exits"][1]
+    assert r["Quotes"][2] == "" and r["Stop everything"][1] == "Kill switch is off"
