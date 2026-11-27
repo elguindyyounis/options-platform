@@ -112,7 +112,8 @@ def _swing_option_lane(lane: ol.OptionLane, now: datetime, session: dict[str, An
     sess_day = date.fromisoformat(session["date"])
     sess_open = datetime.fromisoformat(session["opens_at"])
     out: dict[str, Any] = {"lane": p.lane, "label": p.label, "kind": p.kind, "previewable": True,
-                           "buys": [], "sells": [], "holds": [], "blocked": [], "errors": []}
+                           "buys": [], "queued": [], "sells": [], "holds": [], "blocked": [], "errors": [],
+                           "max_entries": ol.MAX_ENTRIES_PER_STEP}
     held = lane._held()
     try:
         raw = lane.feed.daily(p.symbols, sw_mod.BARS_MONTHS)
@@ -144,8 +145,11 @@ def _swing_option_lane(lane: ol.OptionLane, now: datetime, session: dict[str, An
         def block(why: str) -> None:
             out["blocked"].append({**base, "reason": why})
 
-        if entries >= ol.MAX_ENTRIES_PER_STEP or reads_done >= ol.MAX_CHAIN_READS_PER_STEP:
-            block(f"over the lane's {ol.MAX_ENTRIES_PER_STEP} entries per check")
+        if entries >= ol.MAX_ENTRIES_PER_STEP:
+            block(f"after the lane's {ol.MAX_ENTRIES_PER_STEP} entries for this bar")
+            continue
+        if reads_done >= ol.MAX_CHAIN_READS_PER_STEP:
+            block(f"after the lane's {ol.MAX_CHAIN_READS_PER_STEP} option-chain reads for this bar")
             continue
         if not lane._may_open(sym, remaining, marks):
             block("book full: open positions, sector share or stacking limit")
@@ -164,11 +168,12 @@ def _swing_option_lane(lane: ol.OptionLane, now: datetime, session: dict[str, An
         reads_done += 1
         try:
             chk = check_snapshot(lane.feed.window(sym, p.dte_min, p.dte_max, 3), now, max_age_s=PREVIEW_MAX_QUOTE_AGE_S)
+            why_not = None if chk.snapshot is not None else (chk.issues[-1].kind if chk.issues else "unknown")
         except Exception as exc:  # noqa: BLE001
-            block(f"chain unavailable ({type(exc).__name__})")
-            continue
-        if chk.snapshot is None:
-            block("chain rejected by the data-quality gate")
+            chk, why_not = None, type(exc).__name__
+        if why_not is not None:
+            # Off-hours chains are often stale or empty; the lane reads them again at the open. Queued, not refused.
+            out["queued"].append({**base, "earnings_state": state, "why_no_contract_yet": why_not})
             continue
         row = ol.pick_contract(chk.snapshot, Right(right), sess_open, p)
         if row is None:
@@ -273,7 +278,7 @@ def build_plan(engine: Any, now: Optional[datetime] = None) -> dict[str, Any]:
         plan["decided_in_session"].append({"lane": "main", "label": "Main options account",
                                            "when": "each engine cycle while the market is open, from live chains"})
     plan["status"] = "READY"
-    plan["counts"] = {k: sum(len(l.get(k, [])) for l in plan["lanes"]) for k in ("buys", "sells", "blocked")}
+    plan["counts"] = {k: sum(len(l.get(k, [])) for l in plan["lanes"]) for k in ("buys", "queued", "sells", "blocked")}
     return plan
 
 

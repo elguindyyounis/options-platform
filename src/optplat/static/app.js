@@ -403,10 +403,12 @@
     if (plan.status === "NOT_BUILT") {
       $("ns-summary").textContent = "Not worked out yet: it is built about 20 minutes after each close, or press Recalculate."; return;
     }
-    const lanes = plan.lanes || [], c = plan.counts || { buys: 0, sells: 0, blocked: 0 };
-    $("ns-summary").textContent = (c.buys || c.sells)
-      ? "Would buy " + c.buys + ", would sell " + c.sells + (c.blocked ? " · " + c.blocked + " signal" + (c.blocked === 1 ? "" : "s") + " blocked" : "")
-      : "No swing buys or sells planned" + (c.blocked ? " (" + c.blocked + " signal" + (c.blocked === 1 ? "" : "s") + " blocked)" : "") + ". Short-term lanes still decide during the session.";
+    const lanes = plan.lanes || [], c = plan.counts || { buys: 0, queued: 0, sells: 0, blocked: 0 };
+    const nq = c.queued || 0, plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
+    $("ns-summary").textContent = (c.buys || nq || c.sells)
+      ? "Would buy " + c.buys + (nq ? " now, plus " + plural(nq, "signal") + " queued for the open" : "") + ", would sell " + c.sells +
+        (c.blocked ? " · " + plural(c.blocked, "signal") + " blocked" : "") + ". Each swing lane opens at most 3 per bar."
+      : "No swing buys or sells planned" + (c.blocked ? " (" + plural(c.blocked, "signal") + " blocked)" : "") + ". Short-term lanes still decide during the session.";
     lanes.forEach((l) => {
       (l.sells || []).forEach((x) => rows.appendChild(kids(el("div", null, "decision"), [
         span("SELL", "tag loss"), span(" " + l.label + ": " + nsContract(x) + " × " + x.quantity + " · " + nsSellWhy(x) +
@@ -417,6 +419,9 @@
           (x.notional_usd != null ? " · about $" + Math.round(x.notional_usd).toLocaleString() : "") +
           " · signal from the " + x.signal_bar + " close" +
           (x.size_vs_volume_pct != null && x.size_vs_volume_pct > 10 ? " · size is " + x.size_vs_volume_pct + "% of the day's volume" : ""))])));
+      (l.queued || []).forEach((x) => rows.appendChild(kids(el("div", null, "decision"), [
+        span("QUEUED", "tag info"), span(" " + l.label + ": " + x.symbol + " " + (x.right === "P" ? "put" : "call") +
+          " · signal from the " + x.signal_bar + " close · contract picked at the open (no usable quotes now: " + x.why_no_contract_yet + ")")])));
       (l.errors || []).forEach((e) => rows.appendChild(kids(el("div", null, "decision"), [span("NO DATA", "tag warn"), span(" " + l.label + ": " + e)])));
     });
     lanes.forEach((l) => {
