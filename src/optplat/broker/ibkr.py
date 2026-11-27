@@ -105,6 +105,15 @@ def _safe(text: str) -> str:
     return re.sub(r"\b[DU][A-Z]?\d{5,}\b", "<account>", text)[:200]
 
 
+def _filled(trade: Any) -> int:
+    """Contracts filled. ib_async leaves orderStatus.filled at 0 for orders reported as completed (for example after a
+    restart); the real count is then the order's filledQuantity (unset is a huge sentinel)."""
+    live = float(getattr(trade.orderStatus, "filled", 0) or 0)
+    done = getattr(trade.order, "filledQuantity", None)
+    done = float(done) if isinstance(done, (int, float)) and 0 <= done < 1e9 else 0.0
+    return int(max(live, done))
+
+
 def _round_limit(price: float, side: Side) -> float:
     """Cents, never past the approved limit: buys round down, sells round up."""
     cents = price * 100
@@ -236,7 +245,7 @@ class IBKRPaperBroker(BrokerAdapter):
 
     def _status(self, trade: Any) -> BrokerOrderStatus:
         st = trade.orderStatus
-        raw, filled = st.status, int(st.filled or 0)
+        raw, filled = st.status, _filled(trade)
         total = int(trade.order.totalQuantity)
         if raw == "Filled" or (filled and filled >= total):
             mapped = STATUS_FILLED
@@ -246,7 +255,7 @@ class IBKRPaperBroker(BrokerAdapter):
             mapped = STATUS_REJECTED if not filled else STATUS_CANCELLED
         else:
             mapped = STATUS_PARTIALLY_FILLED if filled else STATUS_SUBMITTED
-        avg = float(st.avgFillPrice) if filled and st.avgFillPrice else None
+        avg = float(st.avgFillPrice) if filled and st.avgFillPrice else None  # None for an earlier session's order
         key = trade.order.orderRef[len(REF_PREFIX):]
         return BrokerOrderStatus(ID_PREFIX + key, key, mapped, filled, avg)
 
@@ -268,7 +277,7 @@ class IBKRPaperBroker(BrokerAdapter):
             if not self._mine(t) or getattr(t.contract, "conId", None) != con_id or t.order.orderRef in seen:
                 continue
             seen.add(t.order.orderRef)
-            filled = int(t.orderStatus.filled or 0)
+            filled = _filled(t)
             if t.order.action == "BUY":
                 net += filled
             elif t.orderStatus.status in _TERMINAL:
@@ -304,7 +313,8 @@ class IBKRPaperBroker(BrokerAdapter):
                 held = sum(p.quantity for p in self.get_positions() if p.contract == intent.contract)
                 ours = self._our_net(ibc.conId)
                 if qty > min(held, ours):
-                    raise BrokerRejected("Cannot sell more than this platform holds in the IBKR paper account")
+                    raise BrokerRejected(f"Cannot sell more than this platform holds in the IBKR paper account "
+                                         f"(account holds {held}, this platform's orders net {ours})")
             order = self._api.LimitOrder("BUY" if intent.side is Side.BUY_TO_OPEN else "SELL", qty,
                                          _round_limit(limit, intent.side), tif="DAY", account=self.account_id,
                                          orderRef=REF_PREFIX + intent.idempotency_key, outsideRth=False, transmit=True)

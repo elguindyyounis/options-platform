@@ -321,3 +321,24 @@ def test_detects_a_paper_account_with_letters(monkeypatch):
     broker.submit_limit_order(make_intent(limit=2.50))
     assert ib.placed[0].account == "DUH123456"
 
+
+def test_sells_what_an_earlier_session_bought():
+    """After a restart IBKR reports our filled buy as a completed order whose orderStatus.filled is 0."""
+    ib = FakeIB()
+    ib.held[777] = [1, 603.0]
+    ib.completed.append(SimpleNamespace(
+        contract=SimpleNamespace(conId=777),
+        order=SimpleNamespace(account=ACCOUNT, orderRef="optplat:buy-earlier", totalQuantity=1, action="BUY",
+                              filledQuantity=1.0),
+        orderStatus=SimpleNamespace(status="Filled", filled=0, avgFillPrice=0.0)))
+    broker = make(ib)
+    assert broker.find_order_by_client_id("buy-earlier").filled_qty == 1
+    broker.submit_limit_order(make_intent("sell-now", qty=1, limit=1.0, side=Side.SELL_TO_CLOSE))
+    assert ib.placed[-1].orderRef == "optplat:sell-now"
+
+
+def test_unset_filled_quantity_sentinel_is_ignored():
+    t = SimpleNamespace(order=SimpleNamespace(filledQuantity=1.7976931348623157e308),
+                        orderStatus=SimpleNamespace(filled=2))
+    assert ibkr._filled(t) == 2
+
