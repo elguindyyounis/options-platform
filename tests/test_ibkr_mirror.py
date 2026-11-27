@@ -137,3 +137,30 @@ def test_bad_mirror_settings_disable_the_mirror_instead_of_the_platform(monkeypa
     sim.mirror_disabled_reason = "A paper account id beginning with DU is required"
     assert sim.healthcheck()["ibkr_mirror"] == {"state": "disabled", "reason": sim.mirror_disabled_reason}
     assert "ibkr_mirror" not in SimBroker().healthcheck()
+
+
+def test_unknown_outcomes_are_retried_by_the_same_key_then_succeed():
+    class Flaky(RecordingMirror):
+        def submit_limit_order(self, intent):
+            self.calls.append(("submit", intent.idempotency_key, intent.side))
+            if len(self.calls) < 3:
+                raise TimeoutError()
+            return super().submit_limit_order(intent)
+    m = Flaky()
+    b = MirroredSimBroker(m, background=False)
+    b.retry_delays_s = (0.0, 0.0)
+    events = []
+    b.attach_audit(lambda kind, oid, payload: events.append((kind, payload)))
+    b.set_quote(make_quote())
+    b.submit_limit_order(make_intent(limit=2.50))
+    assert [c[1] for c in m.calls] == ["key-00000001"] * 4  # two failures, then success (the 4th is the recorder's)
+    assert [k for k, _ in events] == ["ibkr_mirror_error", "ibkr_mirror_error", "ibkr_mirror_submitted"]
+    assert events[0][1]["attempt"] == 1 and events[1][1]["attempt"] == 2
+
+
+def test_rejections_are_not_retried():
+    b, m, events = mirrored(BrokerRejected("no"))
+    b.retry_delays_s = (0.0, 0.0)
+    b.submit_limit_order(make_intent(limit=2.50))
+    assert len(m.calls) == 1 and [k for k, _ in events] == ["ibkr_mirror_rejected"]
+

@@ -3,6 +3,18 @@
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
 
+## 2026-11-27: lanes and the scanner judge a chain against the clock when it arrives (with the owner)
+
+* At today's open (09:37 ET) both swing option lanes refused every chain as FUTURE_TIMESTAMP and bought nothing; the
+  next-session plan had predicted the block. The Mac clock was checked and is within a second of a synced clock. Cause: a lane
+  takes `now` once when its check starts, then reads up to 8 chains in a row; the IBKR feed stamps each chain when its quotes
+  arrive, so a read finishing more than 5 s after the check began looked "ahead of the clock". `engine._vet` was fixed for the
+  same thing on 2026-11-25 (#67), but option lanes, the scanner and the next-session preview were not.
+* Fix: those three compare with `max(now, clock())`, as `_vet` does. The 5 s tolerance is unchanged and a quote truly ahead of
+  the clock is still refused (tested). A test with a 30 s chain read fails before the fix and passes after.
+* Cost of the bug: the two swing lanes judged the 2026-11-25 bar today, so its 16 signals are spent and will not retry.
+* 946 tests pass. Merged by the agent with the owner in the conversation (rule 6 owner decision 2026-11-27).
+
 ## 2026-11-27: "Next open" page with certainty tiers and planned vs taken (with the owner)
 
 * The owner asked whether the planned trades are 100% and whether the plan has to sit on the Desk. Neither: each plan line now
@@ -1220,6 +1232,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Owner: "I just want to make sure data flows properly and you can enter and exit fluidly"; approved loosening the main account's expiry window and spread limit to test today. `__main__` now builds the main strategy with 21-200 days and 25% spread, and the risk policy's spread limit at 25% (class defaults unchanged: 30-120 days, 10%/15%). Revert by removing `MAIN_*` in `__main__`.
 * `TradingEngine.pipeline_test_order` + `POST /api/paper/pipeline-test`: owner-triggered, ONE contract, verified IBKR quote required, normal risk policy and kill switch, usual limit offsets; feeds the IBKR mirror like any main-account order. Verified: pytest (948). Merged on the owner's standing instruction.
 
+## 2026-11-27 (Claude): IBKR mirror connect timeout, retries, probe
+
+* First live mirrored order (owner's pipeline test, 1 SPY call) failed with `TimeoutError`: ib_async's startup sync (positions, orders, completed orders, account updates, then executions; each up to the connect timeout) outlasted the adapter's 20 s call limit, so the adapter gave up as the connection finished. Connect now gets 15 s per startup request and 75 s overall (> 3x). The mirror retries an unknown outcome twice (10 s, 30 s) by the same orderRef (idempotent), records each attempt with the stage it reached, and never retries a rejection. `POST /api/mirror/probe` connects now and reports `failed_at` and a detail with account ids masked; it places nothing. Verified: pytest 952. Not verified: live TWS (next step). Merged on the owner's standing instruction.
 ## 2026-11-27 (Claude, owner request): error explainer and scheduled error check
 
 * Owner: an agent that reads the platform's errors and solves them. Live check of the Mac (build dc30bd9): NVDA `EMPTY_CHAIN (started with 0)` came from IBKR chain requests failing (bare `HTTPError` for all six names, so every chain came from Yahoo) and Yahoo also returning 0 NVDA rows. The "fills paused" pill is permanent on IBKR data: option lanes refuse every unverified chain and every mark, so they collect no evidence (backlog: blocked on the owner).

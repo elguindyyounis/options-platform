@@ -17,7 +17,7 @@ from optplat.models import Side
 ACCOUNT = "DU1234567"
 
 
-def run_inline(fn, *args, **kwargs):
+def run_inline(fn, *args, _timeout=None, **kwargs):
     out = fn(*args, **kwargs)
     return asyncio.run(out) if inspect.isawaitable(out) else out
 
@@ -242,4 +242,27 @@ def test_unset_account_refuses_anything_but_exactly_one_paper_account(monkeypatc
     with pytest.raises(RuntimeError):
         broker.submit_limit_order(make_intent(limit=2.50))
     assert ib.placed == [] and broker.account_id is None and not ib.connected
+
+
+def test_connect_gets_more_time_than_ib_async_startup_needs_and_health_says_where_it_stopped():
+    ib = FakeIB()
+    seen = {}
+
+    async def slow_connect(host, port, **kw):
+        seen.update(kw)
+        raise TimeoutError()
+    ib.connectAsync = slow_connect
+    h = make(ib).healthcheck()
+    assert h["connected"] is False and h["failed_at"] == "connect" and h["reason"] == "TimeoutError"
+    assert ibkr.CONNECT_CALL_TIMEOUT_S > 3 * ibkr.CONNECT_TIMEOUT_S  # connect + startup requests + executions
+    assert seen["timeout"] == ibkr.CONNECT_TIMEOUT_S
+
+
+def test_health_detail_hides_account_ids():
+    ib = FakeIB()
+
+    async def boom(host, port, **kw):
+        raise ConnectionError("account DU1234567 refused")
+    ib.connectAsync = boom
+    assert "DU1234567" not in make(ib).healthcheck()["detail"]
 

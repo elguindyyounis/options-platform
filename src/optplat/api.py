@@ -182,6 +182,14 @@ def create_app(
     def list_orders(open_only: bool = False) -> list[dict[str, Any]]:
         return [o.to_dict() for o in manager.list(open_only=open_only)]
 
+    @app.post("/api/mirror/probe", dependencies=[Depends(auth)])
+    def mirror_probe() -> dict[str, Any]:
+        """Owner-triggered: connect the IBKR paper adapter now and say where it stops. Places nothing."""
+        adapter = getattr(manager.broker, "mirror", None)
+        if adapter is None:
+            return {"mirror": "off"}
+        return adapter.healthcheck()
+
     @app.get("/api/mirror", dependencies=[Depends(auth)])
     def mirror() -> dict[str, Any]:
         """Read-only: simulated fills against the IBKR paper mirror, per order (the mirror report, newest 200 orders)."""

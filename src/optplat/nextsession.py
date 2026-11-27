@@ -168,7 +168,8 @@ def _swing_option_lane(lane: ol.OptionLane, now: datetime, session: dict[str, An
         reads_done += 1
         base["rank"] = reads_done                       # the order the lane will try it at the open
         try:
-            chk = check_snapshot(lane.feed.window(sym, p.dte_min, p.dte_max, 3), now, max_age_s=PREVIEW_MAX_QUOTE_AGE_S)
+            snap = lane.feed.window(sym, p.dte_min, p.dte_max, 3)
+            chk = check_snapshot(snap, max(now, lane.clock()), max_age_s=PREVIEW_MAX_QUOTE_AGE_S)
             why_not = None if chk.snapshot is not None else (chk.issues[-1].kind if chk.issues else "unknown")
         except Exception as exc:  # noqa: BLE001
             chk, why_not = None, type(exc).__name__
