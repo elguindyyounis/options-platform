@@ -1307,3 +1307,8 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Root cause of the owner's "'NoneType' object has no attribute 'to_dict'": Yahoo sometimes returns no chain table; `_chain_rows` now returns no rows (reported as an empty chain) instead of crashing.
 * Phone bar: fits any number of items in one row; "Next open" is hidden there (linked from the plan card); System's alert shows as a dot.
 * Verified: `python -m pytest -q` passes (3 node tests for chips, headline and rules; 1 regression test for the Yahoo chain); screenshots on demo at 1728 px and 390 px. Not verified: the Mac.
+
+## 2026-11-28 (owner conversation): trade timeline, Activity by day
+* From the TWI 2.0 video review, items 3 and 4. The options-account trade file opens with "Every update, newest first": picked (rank of eligible candidates), bought (simulated fill), what the IBKR paper mirror did (filled at what price and how far from the simulator, refused, no answer, cancelled), each sale with its reason and profit, and what it holds now. The raw order events moved under "Technical detail". `/api/trades/{id}` now returns `mirror` (IBKR mirror audit events found by the order's idempotency key, via `Store.audit_for_key`) and trades carry `entry_rank`. The Desk Activity feed is split under Today / Yesterday / date headings.
+* Verified: `python -m pytest -q` passes (API test that the trade file carries only its own mirror events; node tests for the timeline and day labels); drawer screenshot on demo data. Not verified: the Mac or a real IBKR mirror run.
+* Not built: phone notifications (item 6) need the owner to pick a push service, because it sends data off the Mac.
