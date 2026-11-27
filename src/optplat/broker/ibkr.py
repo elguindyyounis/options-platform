@@ -22,6 +22,7 @@ import asyncio
 import inspect
 import math
 import os
+import re
 import threading
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Optional
@@ -74,12 +75,14 @@ def ibkr_paper_config() -> tuple[str, int, Optional[str]]:
     if port not in ALLOWED_PAPER_PORTS:
         raise ValueError("IBKR paper-only port required (7497/4002)")
     if account and not is_paper_account(account):
-        raise ValueError("IBKR_PAPER_ACCOUNT must be a paper account id: DU followed by digits (or leave it unset)")
+        raise ValueError("IBKR_PAPER_ACCOUNT must be a paper account id beginning with DU (or leave it unset)")
     return host, port, account or None
 
 
 def is_paper_account(account: Any) -> bool:
-    return isinstance(account, str) and account.startswith("DU") and account[2:].isdigit()
+    """IBKR paper accounts begin with DU. Real paper ids can have letters after the prefix (seen on the owner's
+    account), so DU + 5-12 capital letters or digits; live accounts begin with U and never match."""
+    return isinstance(account, str) and re.fullmatch(r"DU[A-Z0-9]{5,12}", account) is not None
 
 
 class LoopThread:

@@ -1245,3 +1245,8 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 * The owner asked why scheduled runs never see real data (they run in the cloud; the database is on the Mac) and for a permanent fix. The nightly export already existed but `OPTPLAT_EXPORT_REPO` was never set (every EVOLUTION_LOG row says "data repo not attached"). Agent GitHub access cannot create repositories, so `deploy/setup_export.sh` does it on the Mac in one command: creates the private repo, writes the setting idempotently, refuses a non-private repo, runs one export.
 * Verified: 3 new tests in `tests/test_deploy.py` with a fake `gh`. Not verified: on macOS with a real `gh`. Still open: the alerter has no export of its own (UX-3), and the scheduled task needs access to the new repo. The owner must run the script once.
+
+## 2026-11-27 (Claude): paper account ids can have letters after DU
+
+* Live probe on the owner's Mac connected (client 71) and then refused the session: the paper account id has letters after `DU`. `is_paper_account` now accepts `DU` + 5-12 capital letters or digits (the Options Alerter found the same). Still refused: anything not starting with `DU` (live `U...`, `DF...`), lower case, too short, spaces. Verified: pytest. Merged on the owner's standing instruction.
+
