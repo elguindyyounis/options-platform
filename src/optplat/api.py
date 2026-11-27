@@ -62,6 +62,8 @@ class EngineConfigBody(BaseModel):
     stop_loss_pct: Optional[float] = None
     max_days_held: Optional[int] = None
     min_dte_to_hold: Optional[int] = None
+    trim_at_pct: Optional[float] = None
+    trim_final_tp_pct: Optional[float] = None
     reentry_cooldown_s: Optional[int] = None
     record_snapshots: Optional[bool] = None
     snapshot_retention_days: Optional[int] = None

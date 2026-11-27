@@ -11,6 +11,7 @@ from .models import Position, Quote
 HOLD = "HOLD"
 EXIT = "EXIT"
 UNOBSERVABLE = "UNOBSERVABLE"
+TRIM = "TRIM"  # sell part of the position (X5 scale-out), keep the rest
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,8 @@ class ExitPolicy:
     max_days_held: int = 0        # 0 disables the time stop
     min_dte_to_hold: int = 5      # leave positions before expiry gets dangerous
     max_quote_age_s: int = 60
+    trim_at_pct: float = 0.0       # 0 = off. Otherwise sell half once the bid is this far above cost, then stop to entry on the rest
+    trim_final_tp_pct: float = 80.0  # take-profit for the rest after a trim
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,7 @@ def evaluate_exit(
     entry_time: Optional[datetime],
     now: datetime,
     policy: ExitPolicy,
+    trimmed: bool = False,
 ) -> ExitDecision:
     """A missing, crossed, zero-bid or stale quote is UNOBSERVABLE, never a silent HOLD."""
     if quote is None:
@@ -58,7 +62,15 @@ def evaluate_exit(
         return ExitDecision(EXIT, f"{dte} days to expiry", pnl_pct, "expiry_window")
     if pnl_pct <= -policy.stop_loss_pct:
         return ExitDecision(EXIT, f"Stop loss at {pnl_pct}%", pnl_pct, "stop_loss")
-    if pnl_pct >= policy.take_profit_pct:
+    if policy.trim_at_pct > 0 and trimmed:  # the rest of a trimmed position: stop to entry, own take-profit
+        if pnl_pct <= 0:
+            return ExitDecision(EXIT, f"Stop to entry after a trim, at {pnl_pct}%", pnl_pct, "stop_to_entry")
+        if pnl_pct >= policy.trim_final_tp_pct:
+            return ExitDecision(EXIT, f"Take profit on the rest at {pnl_pct}%", pnl_pct, "take_profit")
+        return ExitDecision(HOLD, "Trimmed: holding the rest", pnl_pct)
+    if policy.trim_at_pct > 0 and position.quantity >= 2 and policy.trim_at_pct <= pnl_pct < policy.trim_final_tp_pct:
+        return ExitDecision(TRIM, f"Trim half at {pnl_pct}%", pnl_pct, "trim")
+    if pnl_pct >= (policy.trim_final_tp_pct if policy.trim_at_pct > 0 and position.quantity >= 2 else policy.take_profit_pct):
         return ExitDecision(EXIT, f"Take profit at {pnl_pct}%", pnl_pct, "take_profit")
     if policy.max_days_held > 0 and entry_time is not None:
         held_days = (now - entry_time).total_seconds() / 86400

@@ -32,13 +32,15 @@ def snapshot(symbol="AAA", bid=4.90, ask=5.10, strike=160.0, oi=2000):
     return MarketSnapshot(symbol, UP[-1], UP, (ChainRow(contract, bid, ask, 200, oi, 0.3),), NOW, "test", True)
 
 
-def build(symbols=("AAA",), **config):
+def build(symbols=("AAA",), risk=None, **config):
+    """``risk`` swaps in a RiskPolicy for ONE test (for example a larger per-position premium so the engine buys several
+    contracts); the production defaults in risk.py are untouched."""
     clock = Clock()
     provider = StaticDataProvider(clock)
     for s in symbols:
         provider.set_snapshot(snapshot(s))
     broker = SimBroker()
-    manager = OrderManager(broker, Store(":memory:"), clock=clock)
+    manager = OrderManager(broker, Store(":memory:"), policy=risk, clock=clock)
     engine = TradingEngine(manager, provider, LiquidTrendStrategy(), clock=clock)
     engine.set_config({"watchlist": list(symbols), **config})
     return engine, manager, broker, provider, clock
@@ -517,3 +519,20 @@ def test_flow_strategy_runs_in_the_engine_and_orders_pass_the_unchanged_risk_gat
     assert entry["contract"].startswith("AAA") and entry["rationale"]["strategy"].startswith("flow-otm")
     assert entry["rationale"]["otm_pct"] > 20
     assert entry["result"] in {s.value for s in OrderState}  # accepted or risk-rejected, never bypassed
+
+
+def test_partial_exit_sells_half_once_then_stops_to_entry_on_the_rest():
+    # Test-only policy: a 4% per-position premium (the default 1% buys one $5 contract) so the engine itself buys several.
+    engine, manager, broker, provider, _ = build(auto_entries=True, risk=RiskPolicy(max_position_pct=4.0, max_total_premium_pct=20.0))
+    engine.run_cycle()
+    pos = broker.get_positions()[0]
+    assert pos.quantity >= 2
+    engine.set_config({"auto_entries": False, "trim_at_pct": 20.0})
+    cost = pos.avg_cost
+    provider.set_snapshot(snapshot(bid=round(cost * 1.3, 2), ask=round(cost * 1.3, 2) + 0.1))
+    item = engine.run_cycle()["exits"][0]
+    assert (item["action"], item["trigger"], item["result"]) == ("TRIM", "trim", "FILLED")
+    left = broker.get_positions()[0]
+    assert left.quantity == pos.quantity - pos.quantity // 2 and manager.is_trimmed(pos.contract)
+    again = engine.run_cycle()["exits"][0]  # same price next cycle: held, not trimmed again
+    assert again["action"] == "HOLD"

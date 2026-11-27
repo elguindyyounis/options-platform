@@ -19,7 +19,7 @@ from typing import Any, Callable, Optional
 from . import committee as cmt
 from .agents import Context
 from .broker.sim import SimBroker
-from .exits import EXIT, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
+from .exits import EXIT, TRIM, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
 from .market_clock import NY, session_status, upcoming_closures
 from .events import EventCalendar
 from .regime import spy_source
@@ -70,6 +70,8 @@ class EngineConfig:
     stop_loss_pct: float = 30.0
     max_days_held: int = 0
     min_dte_to_hold: int = 5
+    trim_at_pct: float = 0.0  # partial exit (X5), OFF by default: sell half at this gain, then stop to entry on the rest
+    trim_final_tp_pct: float = 80.0  # take-profit for the rest of a trimmed position
     reentry_cooldown_s: int = 86400  # do not re-buy a contract within this long of selling it
     record_snapshots: bool = True  # keep every observed snapshot: the raw material for honest replay
     snapshot_retention_days: int = 30
@@ -121,6 +123,7 @@ class EngineConfig:
             (1 <= self.stop_loss_pct <= 95, "stop_loss_pct must be 1-95"),
             (0 <= self.max_days_held <= 365, "max_days_held must be 0-365"),
             (0 <= self.min_dte_to_hold <= 60, "min_dte_to_hold must be 0-60"),
+            (self.trim_at_pct == 0 or 5 <= self.trim_at_pct < self.trim_final_tp_pct <= 1000, "trim_at_pct must be 0 (off) or 5 up to below trim_final_tp_pct (max 1000)"),
             (0 <= self.reentry_cooldown_s <= 2_592_000, "reentry_cooldown_s must be 0-2592000"),
             (1 <= self.snapshot_retention_days <= 3650, "snapshot_retention_days must be 1-3650"),
             (self.scan_interval_s == 0 or 600 <= self.scan_interval_s <= 86400, "scan_interval_s must be 0 or 600-86400"),
@@ -233,6 +236,8 @@ class TradingEngine:
             stop_loss_pct=cfg.stop_loss_pct,
             max_days_held=cfg.max_days_held,
             min_dte_to_hold=cfg.min_dte_to_hold,
+            trim_at_pct=cfg.trim_at_pct,
+            trim_final_tp_pct=cfg.trim_final_tp_pct,
         )
         try:
             now = self.clock()
@@ -698,6 +703,8 @@ class TradingEngine:
             stop_loss_pct=cfg.stop_loss_pct,
             max_days_held=cfg.max_days_held,
             min_dte_to_hold=cfg.min_dte_to_hold,
+            trim_at_pct=cfg.trim_at_pct,
+            trim_final_tp_pct=cfg.trim_final_tp_pct,
         )
         out: list[dict[str, Any]] = []
         for pos in positions:
@@ -706,7 +713,8 @@ class TradingEngine:
             except Exception:  # noqa: BLE001 - no quote means UNOBSERVABLE below
                 quote = None
             decision = evaluate_exit(
-                pos, quote, entry_time=self.manager.entry_time(pos.contract), now=now, policy=policy
+                pos, quote, entry_time=self.manager.entry_time(pos.contract), now=now, policy=policy,
+                trimmed=self.manager.is_trimmed(pos.contract),
             )
             item: dict[str, Any] = {
                 "contract": pos.contract.occ_symbol.strip(),
@@ -716,13 +724,13 @@ class TradingEngine:
                 "pnl_pct": decision.pnl_pct,
                 "trigger": decision.trigger,
             }
-            if decision.action == EXIT:
+            if decision.action in (EXIT, TRIM):
                 if not cfg.auto_exits:
                     item["result"] = "SHADOW_ONLY_AUTO_EXITS_OFF"
                 elif not trading_allowed:
                     item["result"] = "DEFERRED_MARKET_CLOSED"
                 else:
-                    item.update(self._submit_exit(cfg, pos, quote, now))
+                    item.update(self._submit_exit(cfg, pos, quote, now, trim=decision.action == TRIM))
             if decision.action != "HOLD":  # holds are the quiet default and would drown the journal
                 self._journal(
                     "EXIT", pos.contract.underlying, item.get("result") or decision.action, pos.contract,
@@ -790,20 +798,24 @@ class TradingEngine:
             log.append(entry)
         return quote
 
-    def _submit_exit(self, cfg: EngineConfig, pos: Position, quote: Any, now: datetime) -> dict[str, Any]:
+    def _submit_exit(self, cfg: EngineConfig, pos: Position, quote: Any, now: datetime, trim: bool = False) -> dict[str, Any]:
         pending = self.manager._pending_close_qty(pos.contract)
         quantity = pos.quantity - pending
+        if trim:
+            quantity = min(quantity, pos.quantity // 2)  # half, rounded down; never the whole position
+            if pending > 0:
+                return {"result": "ALREADY_CLOSING"}
         if quantity <= 0:
             return {"result": "ALREADY_CLOSING"}
         quote = self._verified_quote(pos.contract) or quote
         bucket = int(now.timestamp() // cfg.order_ttl_s)
         intent = OrderIntent(
-            idempotency_key=f"x-{pos.contract.occ_symbol.strip()}-{bucket}",
-            candidate_id="exit",
+            idempotency_key=f"{'t' if trim else 'x'}-{pos.contract.occ_symbol.strip()}-{bucket}",
+            candidate_id="trim" if trim else "exit",
             contract=pos.contract,
             quantity=quantity,
             limit_price=sell_limit_for(quote.bid),
-            note="automatic exit",
+            note="automatic partial exit (trim)" if trim else "automatic exit",
             side=Side.SELL_TO_CLOSE,
         )
         try:

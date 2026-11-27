@@ -216,6 +216,14 @@ class OrderManager:
                 return o.updated_at
         return None
 
+    def is_trimmed(self, contract: OptionContract) -> bool:
+        """True when a filled partial-exit ('trim') sell happened after the latest filled buy of this contract."""
+        since = self.entry_time(contract)
+        if since is None:
+            return False
+        return any(o.intent.side is Side.SELL_TO_CLOSE and o.intent.contract == contract and o.state is S.FILLED
+                   and o.intent.candidate_id == "trim" and o.updated_at >= since for o in self.store.list_orders(limit=1000))
+
     def last_close_time(self, contract: OptionContract) -> Optional[datetime]:
         """When this contract was most recently sold (None if never)."""
         for o in self.store.list_orders(limit=1000):  # newest first
