@@ -342,3 +342,13 @@ def test_unset_filled_quantity_sentinel_is_ignored():
                         orderStatus=SimpleNamespace(filled=2))
     assert ibkr._filled(t) == 2
 
+
+
+def test_owned_positions_count_only_this_platforms_buys():
+    ib = FakeIB()
+    ib.held[777] = [3, 200.0]                      # 3 in the account
+    ib.completed.append(alerter_trade(qty=2))      # 2 bought by the Alerter
+    broker = make(ib)
+    broker.submit_limit_order(make_intent(qty=1, limit=2.50))  # 1 by us -> account now 4
+    owned = broker.owned_positions()
+    assert [(p.quantity) for p in owned] == [1]

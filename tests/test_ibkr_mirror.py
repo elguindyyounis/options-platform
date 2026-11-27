@@ -164,3 +164,37 @@ def test_rejections_are_not_retried():
     b.submit_limit_order(make_intent(limit=2.50))
     assert len(m.calls) == 1 and [k for k, _ in events] == ["ibkr_mirror_rejected"]
 
+
+
+class OwnedMirror(RecordingMirror):
+    def __init__(self, owned):
+        super().__init__()
+        self.owned = owned
+
+    def owned_positions(self):
+        from optplat.models import Position
+        return [Position(CONTRACT, q, 2.0) for q in self.owned]
+
+
+def test_catch_up_sells_only_what_ibkr_holds_beyond_the_simulator():
+    from optplat.models import Quote
+    m = OwnedMirror([2])
+    b = MirroredSimBroker(m, background=False)
+    events = []
+    b.attach_audit(lambda kind, oid, payload: events.append((kind, payload)))
+    b.set_quote(make_quote())
+    b.submit_limit_order(make_intent(qty=1, limit=2.50))       # sim holds 1 (mirror records a submit)
+    m.calls.clear()
+    out = b.catch_up(lambda c: Quote(c, 1.90, 2.00, NOW, "ibkr-paper-verified", timestamp_verified=True), NOW)
+    assert [(r["quantity"], r["result"]) for r in out] == [(1, "FILLED")]
+    assert m.calls[0][2] is Side.SELL_TO_CLOSE and events[-1][0] == "ibkr_mirror_catch_up"
+    assert b.get_positions()[0].quantity == 1                  # the simulator is untouched
+
+
+def test_catch_up_needs_a_verified_quote_and_buys_nothing():
+    m = OwnedMirror([1])
+    b = MirroredSimBroker(m, background=False)
+    assert b.catch_up(lambda c: None, NOW) == [{"contract": CONTRACT.occ_symbol.strip(), "quantity": 1,
+                                                "result": "NOT_VERIFIED"}]
+    assert m.calls == []
+    assert MirroredSimBroker(OwnedMirror([]), background=False).catch_up(lambda c: None, NOW) == []
