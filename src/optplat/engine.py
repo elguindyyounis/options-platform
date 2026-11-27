@@ -19,6 +19,7 @@ from typing import Any, Callable, Optional
 from . import committee as cmt
 from .agents import Context
 from .broker.sim import SimBroker
+from . import exit_agent
 from .exits import EXIT, TRIM, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
 from .market_clock import NY, session_status, upcoming_closures
 from .events import EventCalendar
@@ -70,6 +71,7 @@ class EngineConfig:
     stop_loss_pct: float = 30.0
     max_days_held: int = 0
     min_dte_to_hold: int = 5
+    exit_agent: bool = False  # the exit agent judges hold / trim / exit from evidence (exit_agent.py); OFF by default
     trim_at_pct: float = 0.0  # partial exit (X5), OFF by default: sell half at this gain, then stop to entry on the rest
     trim_final_tp_pct: float = 80.0  # take-profit for the rest of a trimmed position
     reentry_cooldown_s: int = 86400  # do not re-buy a contract within this long of selling it
@@ -113,7 +115,7 @@ class EngineConfig:
         for name, value in asdict(self).items():
             if name == "watchlist":
                 continue
-            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots", "record_market_data", "shortterm_enabled", "swing_enabled", "option_lanes_enabled")):
+            if isinstance(value, bool) != (name in ("auto_entries", "auto_exits", "enforce_market_hours", "record_snapshots", "record_market_data", "shortterm_enabled", "swing_enabled", "option_lanes_enabled", "exit_agent")):
                 raise ValueError(f"{name} has the wrong type")
         checks = [
             (0 <= self.max_new_per_cycle <= 5, "max_new_per_cycle must be 0-5"),
@@ -336,7 +338,7 @@ class TradingEngine:
             self._guard(
                 report,
                 "exits",
-                lambda: report.__setitem__("exits", self._run_exits(cfg, positions, trading_allowed, now)),
+                lambda: report.__setitem__("exits", self._run_exits(cfg, positions, trading_allowed, now, snapshots, report)),
             )
             self._guard(
                 report,
@@ -696,7 +698,8 @@ class TradingEngine:
         return cancelled
 
     def _run_exits(
-        self, cfg: EngineConfig, positions: list[Position], trading_allowed: bool, now: datetime
+        self, cfg: EngineConfig, positions: list[Position], trading_allowed: bool, now: datetime,
+        snapshots: Optional[dict[str, Optional[MarketSnapshot]]] = None, report: Optional[dict[str, Any]] = None,
     ) -> list[dict[str, Any]]:
         policy = ExitPolicy(
             take_profit_pct=cfg.take_profit_pct,
@@ -712,10 +715,16 @@ class TradingEngine:
                 quote = self.manager.broker.get_quote(pos.contract)
             except Exception:  # noqa: BLE001 - no quote means UNOBSERVABLE below
                 quote = None
-            decision = evaluate_exit(
-                pos, quote, entry_time=self.manager.entry_time(pos.contract), now=now, policy=policy,
-                trimmed=self.manager.is_trimmed(pos.contract),
-            )
+            if cfg.exit_agent:
+                snap = self._snapshot(pos.contract.underlying, snapshots, report) if snapshots is not None and report is not None else None
+                decision = exit_agent.decide(
+                    pos, quote, snap.closes if snap is not None else None, entry_time=self.manager.entry_time(pos.contract),
+                    now=now, policy=policy, trimmed=self.manager.is_trimmed(pos.contract))
+            else:
+                decision = evaluate_exit(
+                    pos, quote, entry_time=self.manager.entry_time(pos.contract), now=now, policy=policy,
+                    trimmed=self.manager.is_trimmed(pos.contract),
+                )
             item: dict[str, Any] = {
                 "contract": pos.contract.occ_symbol.strip(),
                 "quantity": pos.quantity,
