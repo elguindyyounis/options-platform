@@ -141,6 +141,8 @@ Existing items, in order:
 
 ## Done
 
+- 2026-11-27: option lanes verify the one picked contract with IBKR before any fill (entries and exits).
+
 * 2026-11-27: error explainer (owner request): `errorhelp.py` gives each cycle and lane error a cause, a fix, who acts
   (wait / you / agent / Alerter / decision) and cycles in a row; the Desk Act card shows it, `GET /api/errors` returns
   cycle, lane and IBKR-mirror errors explained for the scheduled error check. IBKR service refusals now keep their

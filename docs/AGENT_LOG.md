@@ -1283,3 +1283,16 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Config `exit_agent` (default false). When on, `exit_agent.decide` judges each held option from the underlying's trend (5/20-day averages, 3-day move, stretched RSI) and the exit spread: keep holding past the old +40% target while the trend supports it, trim half of a 2+ contract winner when support weakens or the gain is 40%+, and leave early when the trend turns against the trade. It can only exit EARLIER than the old rules in a loss: the stop loss, expiry window, max-days and the stop-to-entry on the rest of a trim cannot be overridden, and with too little evidence (under 21 closes, no snapshot) it falls back to the old fixed rules. Every call carries its reasons into the journal.
 * Not changed: no default, risk limit, sizing cap, auth or broker change. Per-position size is the owner's `OPTPLAT_MAX_POSITION_PCT` in config.env (0.1 to 50, already supported, must not exceed `OPTPLAT_MAX_TOTAL_PREMIUM_PCT`); I did not change a default.
 * Verified: `python -m pytest -q` passes (6 new in `tests/test_exit_agent.py`, 1 in `tests/test_engine.py`). Not verified: real fills, or that it beats fixed exits (X6 registered; it cannot be replayed until trend features are stored per path point). No edge claimed. The thresholds (0.30 broken, 0.45 weak, 0.65 hold past target, 15% minimum trim, 40% big gain) are engineering choices, not fitted.
+
+## 2026-11-27: option lanes fill only at IBKR's verified quote for the one contract (PR: agent/2026-11-27-lane-verified-quotes)
+- Owner OK (2026-11-27, "Lets not worry about the Options alerter for now"): spend shared IBKR historical budget on per-contract checks.
+- On IBKR (`execution_veto`), lanes now choose a contract from the unverified chain, then call `execution_quote` for that one contract and
+  buy only at the verified ask, after re-checking bid > 0, `min_ask` and `max_spread_pct`; size is recomputed at the verified ask.
+  No verification (refused, failed, unverified, or more than `VERIFY_PER_STEP = 4` checks this pass) means no trade.
+- Exits: live unverified IBKR quotes (`decision_quotes_for`) are used to NOTICE an exit (as the main account does); the close happens only at a
+  verified bid. If it cannot be verified the position stays open and is retried next pass. Saved marks carry `"verified": false`.
+- Challenge: an attempt no longer ends while any of its closes failed (fixed a gap the change exposed); test fails before the fix.
+- `pick_contract` still refuses unverified IBKR / fallback chains by default (existing test kept); `verify_later=True` is only used by `_enter`.
+- Next-open preview shows such picks with `needs_ibkr_check` instead of blocking them.
+- Verified: `python -m pytest -q` (1011 passed), 9 new tests in `tests/test_lane_verified_quotes.py`.
+- Not verified: behaviour against the live shared IBKR service, how fast the shared historical budget is used in a busy open.

@@ -129,10 +129,13 @@ class ChallengeLane(OptionLane):
             if m is None:
                 out["errors"].append(f"{t['symbol']}: attempt {self._attempt['n']} should end ({outcome}) but there is no quote to close at; it stays open")
                 return False
+        all_closed = True
         for t in held:
             m = marks[t["open_payload"]["contract"]]
-            self._close(t, m[0], "challenge_end", now, out, {"underlying": None, "bid": m[0], "ask": m[1],
-                                                           "spread_pct": round((m[1] - m[0]) / m[1] * 100, 2) if m[1] > 0 else None})
+            all_closed &= self._close(t, m[0], "challenge_end", now, out, {"underlying": None, "bid": m[0], "ask": m[1],
+                                                                          "spread_pct": round((m[1] - m[0]) / m[1] * 100, 2) if m[1] > 0 else None})
+        if not all_closed:   # e.g. IBKR could not verify a bid: the attempt stays open and the rest close next pass
+            return False
         trades = self._attempt_trades()
         st = account_state(trades, self._attempt["start_equity"], {})
         closed = [t for t in trades if t["closed_at"] is not None]
