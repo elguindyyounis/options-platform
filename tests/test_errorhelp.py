@@ -109,3 +109,13 @@ def test_errors_api_needs_the_token_and_returns_the_report():
         rep = c.get("/api/errors", headers={"X-API-Token": token}).json()
     runner.stop()
     assert rep["cycle"]["items"] and "nothing here retries" in rep["note"]
+
+
+def test_a_spent_ibkr_bar_budget_is_named_and_points_at_platform_usage():
+    h = explain("data SPY: RuntimeError: IBKR failed: ServiceError: HTTP 503 Historical pacing budget exhausted; Yahoo fallback unavailable")
+    assert h["kind"] == "IBKR_BUDGET" and "platform_usage" in h["fix"]
+
+
+def test_a_held_bar_request_is_working_as_built():
+    h = explain("AMD: BudgetHeld: platform share of IBKR 5-minute bars used (12/12 per 10 min)")
+    assert h["kind"] == "BAR_SHARE_HELD" and h["who"] == DESIGN

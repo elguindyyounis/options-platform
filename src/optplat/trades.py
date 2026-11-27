@@ -10,6 +10,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Optional
 
+from . import trade_review
 from .models import Order, OrderState, Side
 from .orders import OrderManager
 
@@ -36,8 +37,14 @@ def _committee_for(index: dict[str, list[dict[str, Any]]], contract: str, before
     return best
 
 
-def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
+def build_trades(manager: OrderManager, limit: int = 300, fictional: Optional[bool] = None) -> dict[str, Any]:
     store = manager.store
+    paths: dict[str, list[dict[str, Any]]] = {}
+    if fictional is not None:
+        try:
+            paths = trade_review.index_points(store.shadow_all_points(fictional))
+        except Exception:  # noqa: BLE001 - the review falls back to UNKNOWN without a recorded path
+            paths = {}
     # list_orders is newest first by (created_at, insertion order). Reversing it gives oldest first and keeps the
     # recorded sequence for orders with the same timestamp, so an exit is never processed before its own entry.
     orders = [o for o in reversed(store.list_orders(limit=2000)) if o.state in FILLED_STATES and o.filled_qty > 0 and o.avg_fill_price]
@@ -98,10 +105,13 @@ def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
             "held_seconds": int(((held_to or None) - datetime.fromisoformat(t["entry_time"])).total_seconds()) if held_to else None,
             "exit_reason": (ed["payload"].get("trigger") or ed["payload"].get("reason") or ed["disposition"]) if ed else None,
             "entry_reason": en["payload"].get("rationale") if en else None,
+            # display only: where the entry ranked among that cycle's eligible candidates (journaled since 2026-11-27)
+            "entry_rank": {"rank": en["payload"].get("rank"), "of": en["payload"].get("of")} if en and en["payload"].get("rank") else None,
             "committee": None if committee is None else {k: committee["payload"].get(k) for k in
                                                           ("net_score", "quantity", "scale", "reasons", "verdicts", "trust")},
         })
         t.pop("exit_value", None)
+        t["review"] = trade_review.review(t, paths.get(t["contract"], []))
         out.append(t)
     out.sort(key=lambda x: x["entry_time"], reverse=True)
     closed = [t for t in out if t["status"] == "CLOSED"]
@@ -120,8 +130,8 @@ def build_trades(manager: OrderManager, limit: int = 300) -> dict[str, Any]:
     return {"summary": summary, "trades": out[: max(1, min(limit, 1000))]}
 
 
-def trade_detail(manager: OrderManager, trade_id: str) -> Optional[dict[str, Any]]:
-    found = next((t for t in build_trades(manager, 1000)["trades"] if t["id"] == trade_id), None)
+def trade_detail(manager: OrderManager, trade_id: str, fictional: Optional[bool] = None) -> Optional[dict[str, Any]]:
+    found = next((t for t in build_trades(manager, 1000, fictional)["trades"] if t["id"] == trade_id), None)
     if found is None:
         return None
     store = manager.store
@@ -129,4 +139,11 @@ def trade_detail(manager: OrderManager, trade_id: str) -> Optional[dict[str, Any
     for x in found["exit_orders"]:
         events += store.audit_events(x["order_id"])
     events.sort(key=lambda e: e["ts"])
-    return {**found, "audit": events}
+    # The IBKR paper mirror files its events by order key; collect them per order so the trade file can show the IBKR side.
+    mirror: list[dict[str, Any]] = []
+    for oid, role in [(trade_id, "entry")] + [(x["order_id"], "exit") for x in found["exit_orders"]]:
+        o = store.get_order(oid)
+        if o is not None:
+            mirror += [{**e, "role": role} for e in store.audit_for_key(o.intent.idempotency_key)]
+    mirror.sort(key=lambda e: e["ts"])
+    return {**found, "audit": events, "mirror": mirror}

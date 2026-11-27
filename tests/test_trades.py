@@ -148,3 +148,16 @@ def test_an_exit_with_the_same_timestamp_as_its_entry_is_still_matched():
         from optplat.trades import build_trades
 
         assert build_trades(manager)["trades"][0]["status"] == "CLOSED"
+
+
+def test_trade_detail_includes_the_ibkr_mirror_events_filed_by_order_key():
+    # The mirror audits by idempotency key with no order id; the trade file must still show them (and only its own).
+    manager = OrderManager(SimBroker(), Store(":memory:"))
+    engine = TradingEngine(manager, DemoDataProvider(), LiquidTrendStrategy(), default_config=EngineConfig())
+    with TestClient(create_app(manager, TOKEN, engine)) as c:
+        quote(c)
+        buy = order(c, "buy-0099-mirror", 1)
+        manager.store.audit("ibkr_mirror_submitted", None, {"idempotency_key": "buy-0099-mirror", "status": "Filled", "filled_qty": 1, "avg_fill_price": 2.01})
+        manager.store.audit("ibkr_mirror_submitted", None, {"idempotency_key": "buy-0099-mirror-other", "status": "Filled"})
+        d = c.get(f"/api/trades/{buy['id']}", headers=H).json()
+    assert [(e["kind"], e["role"], e["payload"]["avg_fill_price"]) for e in d["mirror"]] == [("ibkr_mirror_submitted", "entry", 2.01)]

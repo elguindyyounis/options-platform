@@ -185,6 +185,19 @@ def create_app(
     def list_orders(open_only: bool = False) -> list[dict[str, Any]]:
         return [o.to_dict() for o in manager.list(open_only=open_only)]
 
+    if engine is not None:
+        @app.post("/api/mirror/catch-up", dependencies=[Depends(auth)])
+        def mirror_catch_up() -> dict[str, Any]:
+            """Owner-triggered: sell at IBKR paper what this platform owns there but its simulated account no longer
+            holds. Needs a verified quote per contract; buys nothing."""
+            if manager.kill_switch_active():
+                raise HTTPException(status_code=409, detail="Kill switch is on")
+            catch = getattr(manager.broker, "catch_up", None)
+            verify = getattr(engine.provider, "execution_quote", None)
+            if catch is None or verify is None:
+                return {"result": "UNAVAILABLE", "detail": "needs the IBKR mirror and IBKR data"}
+            return {"result": "DONE", "sells": catch(verify, engine.clock())}
+
     @app.post("/api/mirror/probe", dependencies=[Depends(auth)])
     def mirror_probe() -> dict[str, Any]:
         """Owner-triggered: connect the IBKR paper adapter now and say where it stops. Places nothing."""
@@ -306,6 +319,12 @@ def create_app(
             from .journal import journal_summary
 
             return journal_summary(engine.store, engine.clock())
+
+        @app.get("/api/decider/compare", dependencies=[Depends(auth)])
+        def decider_compare(horizon_h: float = 24.0) -> dict[str, Any]:
+            from .decider import compare
+
+            return compare(engine.store, engine.clock(), engine.provider.fictional, max(1.0, min(horizon_h, 168.0)))
 
         @app.get("/api/equity", dependencies=[Depends(auth)])
         def equity(limit: int = 500) -> dict[str, Any]:
@@ -502,7 +521,7 @@ def create_app(
         def trades_list(limit: int = 300) -> dict[str, Any]:
             from .trades import build_trades
 
-            return {**build_trades(manager, limit), "fictional": engine.provider.fictional}
+            return {**build_trades(manager, limit, engine.provider.fictional), "fictional": engine.provider.fictional}
 
         @app.get("/api/alltrades", dependencies=[Depends(auth)])
         def all_trades() -> dict[str, Any]:
@@ -514,7 +533,7 @@ def create_app(
         def trades_one(trade_id: str) -> dict[str, Any]:
             from .trades import trade_detail
 
-            found = trade_detail(manager, trade_id)
+            found = trade_detail(manager, trade_id, engine.provider.fictional)
             if found is None:
                 raise HTTPException(status_code=404, detail="Trade not found")
             return found

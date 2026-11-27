@@ -111,7 +111,7 @@ class IBKRWithYahooFallback(MarketDataProvider):
                 return bars
             why = "IBKR returned no bars"
         except Exception as exc:  # noqa: BLE001
-            why = f"IBKR failed: {type(exc).__name__}"
+            why = f"IBKR failed: {type(exc).__name__}: {str(exc)[:80]}"
         yahoo = self._yahoo()
         if yahoo is None:
             return []
@@ -124,4 +124,10 @@ class IBKRWithYahooFallback(MarketDataProvider):
         h = dict(h) if isinstance(h, dict) else {"primary": h}
         h["yahoo_fallback"] = {"available": self._fallback_error is None, "error": self._fallback_error,
                                "counts": dict(self.fallback_counts), "last": self.last_fallback}
+        usage = getattr(self.primary, "usage", None)
+        if callable(usage):
+            try:
+                h["platform_usage"] = usage()
+            except Exception:  # noqa: BLE001 - display only
+                pass
         return h

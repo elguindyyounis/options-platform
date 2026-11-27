@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 from typing import Optional, Sequence
 import math
+import sys
+import threading
 from urllib.parse import urlencode
 from urllib.error import HTTPError
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
@@ -68,6 +70,41 @@ def request(resource: str, params=None, *, timeout=80):
     return json.loads(raw)
 
 
+USAGE_WINDOW_S = 600       # the service's historical budget window (30 bar requests per 10 minutes, all consumers)
+_KIND = {'snapshot': 'chain', 'execution-quote': 'verify', 'quotes': 'quotes'}
+_BUDGETED = ('chain', 'bars_daily', 'bars_5min')  # each can spend one historical request at the service on a cache miss
+_SKIP = ('optplat.ibkr_data', 'optplat.fallback_data')
+
+# 5-minute bars (measured 2026-11-27: about 75 of the platform's requests per 10 minutes, against a service budget of
+# 30 for every consumer together). A bar only changes once every 5 minutes, so each name is fetched at most once per
+# completed bar, and the platform keeps its new fetches inside a share of the budget. The core lane names come first;
+# other names use IBKR only while the share has room, and otherwise fall to the research fallback.
+BAR_S = 300
+BAR_SETTLE_S = 15          # a bar is complete a few seconds after its 5-minute boundary
+INTRADAY_SHARE = 12        # new 5-minute-bar fetches per USAGE_WINDOW_S: two bars for each core name
+INTRADAY_CORE = ("SPY", "QQQ", "IWM", "AAPL", "NVDA", "TSLA")   # shortterm.LANE_SYMBOLS (a test keeps them equal)
+
+
+class BudgetHeld(RuntimeError):
+    """Not sent: the platform's share of the shared bar budget is used. Nothing was asked of the service."""
+
+
+def bar_slot(t: datetime) -> int:
+    """Which completed 5-minute bar is the newest at time t."""
+    return int((t.timestamp() - BAR_SETTLE_S) // BAR_S)
+
+
+def _caller() -> str:
+    """The platform module that asked (engine, scanner, optionlanes, ...), found by walking up the stack."""
+    f = sys._getframe(2)
+    while f is not None:
+        mod = f.f_globals.get('__name__', '')
+        if mod.startswith('optplat.') and mod not in _SKIP:
+            return mod.split('.', 1)[1]
+        f = f.f_back
+    return 'other'
+
+
 class IBKRDataProvider(MarketDataProvider):
     name = 'ibkr-shared-research-only'
     # Experimental lanes must honor this independently of the main risk policy.
@@ -78,6 +115,44 @@ class IBKRDataProvider(MarketDataProvider):
         self._clock = clock
         self._daily: dict[str, tuple[date, datetime, list[Bar]]] = {}
         self._fetches: deque[datetime] = deque()
+        self._usage: deque[tuple[datetime, str, str, str]] = deque(maxlen=5000)  # (at, kind, caller, outcome)
+        self._usage_lock = threading.Lock()
+        self._intraday: dict[str, tuple[int, list[IntradayBar]]] = {}
+        self._intraday_fetches: deque[datetime] = deque()
+
+    def _call(self, resource: str, params=None, **kw):
+        """Every service request goes through here so the platform can see what it spends (display only)."""
+        kind = _KIND.get(resource) or ('bars_5min' if (params or {}).get('interval') == '5 mins' else 'bars_daily')
+        caller, outcome = _caller(), 'ok'
+        try:
+            return self._request(resource, params, **kw)
+        except Exception as exc:  # noqa: BLE001 - recorded, then raised unchanged
+            outcome = str(exc)[:80] if isinstance(exc, ServiceError) else type(exc).__name__
+            raise
+        finally:
+            with self._usage_lock:
+                self._usage.append((self._clock(), kind, caller, outcome))
+
+    def usage(self) -> dict:
+        """What this platform asked the shared service for in the last 10 minutes, by caller and kind.
+
+        Counts requests SENT. The service answers some from its own cache at no cost, so the budgeted total is an upper
+        bound on what the platform spent of the 30 bar requests per 10 minutes all consumers share."""
+        now = self._clock()
+        with self._usage_lock:
+            rows = [u for u in self._usage if (now - u[0]).total_seconds() <= USAGE_WINDOW_S]
+        by_caller: dict[str, dict[str, int]] = {}
+        refused: dict[str, int] = {}
+        for _at, kind, caller, outcome in rows:
+            c = by_caller.setdefault(caller, {})
+            c[kind] = c.get(kind, 0) + 1
+            if outcome != 'ok':
+                refused[outcome] = refused.get(outcome, 0) + 1
+        return {'window_s': USAGE_WINDOW_S, 'sent': len(rows),
+                'budgeted_sent': sum(1 for u in rows if u[1] in _BUDGETED),
+                'intraday_share': {'per_window': INTRADAY_SHARE, 'core': list(INTRADAY_CORE)},
+                'by_caller': by_caller, 'refused': refused,
+                'note': 'requests sent by this platform; cache hits at the service cost nothing, so this is an upper bound'}
 
     def health(self):
         try:
@@ -89,7 +164,7 @@ class IBKRDataProvider(MarketDataProvider):
         return self.snapshot_window(symbol, 7, 730, 4)
 
     def snapshot_window(self, symbol: str, min_dte: int, max_dte: int, max_expiries: int = 4) -> MarketSnapshot:
-        raw = self._request('snapshot', {'symbol': symbol, 'min_dte': min_dte,
+        raw = self._call('snapshot', {'symbol': symbol, 'min_dte': min_dte,
                                         'max_dte': max_dte, 'max_expiries': min(4, max_expiries)})
         rows = []
         times = []
@@ -128,7 +203,7 @@ class IBKRDataProvider(MarketDataProvider):
         historical budget, so the engine calls it only for an order it is about to send.
         """
         try:
-            row = self._request('execution-quote', {'contract': json.dumps(self._contract_json(contract))}, timeout=30)
+            row = self._call('execution-quote', {'contract': json.dumps(self._contract_json(contract))}, timeout=30)
             now = self._clock()
             at = datetime.fromisoformat(row['source_quote_at'])
             seen = datetime.fromisoformat(row['received_at'])
@@ -152,7 +227,7 @@ class IBKRDataProvider(MarketDataProvider):
         out: list[Quote] = []
         for i in range(0, len(contracts), 24):
             batch = list(contracts[i:i + 24])
-            raw = self._request('quotes', {'contracts': json.dumps([self._contract_json(c) for c in batch])})
+            raw = self._call('quotes', {'contracts': json.dumps([self._contract_json(c) for c in batch])})
             for c in batch:
                 row = next((r for r in raw.get('rows', []) if self._same(r, c)), None)
                 if (not row or row.get('status') != 'LIVE_UNVERIFIED' or row.get('market_data_type') != 1
@@ -194,7 +269,7 @@ class IBKRDataProvider(MarketDataProvider):
             self._fetches.append(now)
             try:
                 bars = [Bar(date.fromisoformat(b['timestamp'][:10]), b['close'], b['volume'])
-                        for b in self._request('history', {'symbol': s})['bars']]
+                        for b in self._call('history', {'symbol': s})['bars']]
             except Exception:  # noqa: BLE001 - this name is unknown this round; the others still count
                 continue
             self._daily[s] = (today, now, bars)
@@ -202,6 +277,26 @@ class IBKRDataProvider(MarketDataProvider):
         return out
 
     def intraday_bars(self, symbol: str) -> list[IntradayBar]:
-        raw = self._request('history', {'symbol': symbol, 'interval': '5 mins'})
-        return [IntradayBar(datetime.fromisoformat(b['timestamp']).astimezone(timezone.utc),
+        """Today's 5-minute bars, fetched at most once per completed bar and inside INTRADAY_SHARE (see above).
+
+        Raises BudgetHeld, without asking the service, when the share is used: the core names may use all of it, other
+        names only the first half, so the core names keep IBKR bars when the share is tight."""
+        now = self._clock()
+        slot = bar_slot(now)
+        hit = self._intraday.get(symbol)
+        if hit and hit[0] == slot:
+            return hit[1]
+        with self._usage_lock:
+            while self._intraday_fetches and (now - self._intraday_fetches[0]).total_seconds() > USAGE_WINDOW_S:
+                self._intraday_fetches.popleft()
+            used = len(self._intraday_fetches)
+            limit = INTRADAY_SHARE if symbol in INTRADAY_CORE else INTRADAY_SHARE // 2
+            if used >= limit:
+                self._usage.append((now, 'bars_5min_held', _caller(), 'held: platform share used'))
+                raise BudgetHeld(f'platform share of IBKR 5-minute bars used ({used}/{INTRADAY_SHARE} per 10 min)')
+            self._intraday_fetches.append(now)
+        raw = self._call('history', {'symbol': symbol, 'interval': '5 mins'})
+        bars = [IntradayBar(datetime.fromisoformat(b['timestamp']).astimezone(timezone.utc),
                             b['open'], b['high'], b['low'], b['close'], b['volume']) for b in raw['bars']]
+        self._intraday[symbol] = (slot, bars)
+        return bars

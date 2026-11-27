@@ -201,8 +201,10 @@ console.log(JSON.stringify({helped,halt,ordered,stable,cal,strat,riskLow,riskHig
     assert not any("stalled" in i["text"] for i in r["srvOk"])
 
     # explained errors (errorhelp.py): a one-off wait is a warning, an alert is bad, each says cause, fix and who acts
-    helped = [i for i in r["helped"] if i["text"].startswith("Error: ")]
+    # plain words lead (owner, 2026-11-27): the cause is the text, the raw error is folded away as `detail`
+    helped = [i for i in r["helped"] if i.get("kind") == "error"]
     assert [i["level"] for i in helped] == ["warn", "bad"]
+    assert all(i["detail"].startswith("Error: ") and not i["text"].startswith("Error: ") for i in helped)
     assert "Fix: Nothing if it clears." in helped[0]["text"] and "usually clears by itself; first time" in helped[0]["text"]
     assert "needs you; 4 cycles in a row" in helped[1]["text"]
     assert not any("The last cycle had" in i["text"] for i in r["helped"])

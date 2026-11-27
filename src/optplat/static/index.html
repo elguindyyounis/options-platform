@@ -424,17 +424,46 @@
   .navfold.has-current > summary { color:var(--fg); }
   .navfold a.nav { padding:7px 14px; font-size:13.5px; }
   @media (max-width:860px) {
-    .rail { width:auto; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); align-items:stretch; padding:0 2px env(safe-area-inset-bottom); gap:0; }
+    .rail { width:auto; display:grid; grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); align-items:stretch; padding:0 2px env(safe-area-inset-bottom); gap:0; }
     .rail .brand, .rail .navgroup { display:none; }
     .rail a.nav { flex-direction:column; justify-content:center; gap:0; padding:8px 2px; font-size:12px; border-radius:0; box-shadow:none; }
     .rail a.nav[aria-current="page"] { box-shadow:inset 0 3px 0 var(--series-1); }
     .navfold { border:0; margin:0; padding:0; position:static; }
-    .navfold > summary { height:100%; align-items:center; justify-content:center; padding:8px 2px; font-size:11px; letter-spacing:.02em; }
+    .navfold > summary { height:100%; align-items:center; justify-content:center; padding:8px 2px; font-size:10.5px; letter-spacing:0; }
+    .rail a.nav[data-page="nextopen"] { display:none; } /* linked from Today's plan on the Desk */
+    .rail #nav-system:not(:empty) { font-size:0; } .rail #nav-system:not(:empty)::before { content:"\25CF"; font-size:12px; }
     .navfold > summary::after { content:""; }
     .navfold[open] { position:static; }
     .navfold[open] > div { position:fixed; left:10px; right:10px; bottom:64px; z-index:30; display:grid; padding:6px; border:1px solid var(--line); border-radius:12px; background:var(--surface); box-shadow:0 -10px 30px rgba(0,0,0,.35); }
     .navfold[open] > div a.nav { flex-direction:row; justify-content:flex-start; padding:12px; font-size:14px; }
   }
+  .techdetail { margin-top:4px; font-size:12px; color:var(--mut); }
+  .techdetail summary { cursor:pointer; } .techdetail .mono { white-space:pre-wrap; word-break:break-word; margin-top:2px; }
+  /* ---- Today's plan and Rules in force (owner, 2026-11-27) ---- */
+  .plan-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:16px; align-items:start; }
+  .plan-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .plan-head { font-size:18px; font-weight:700; line-height:1.3; margin:6px 0 10px; }
+  .plan-rows { display:grid; grid-template-columns:130px minmax(0,1fr); gap:8px 14px; margin:0; font-size:13.5px; }
+  .plan-rows dt { font:600 11px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--mut); padding-top:3px; }
+  .plan-rows dd { margin:0; } .plan-rows dd .verdict { margin:0; padding:0; border:0; background:none; font-size:13.5px; }
+  .plan-rows dd.warn { color:var(--warn); } .plan-rows dd.loss { color:var(--loss); }
+  .pr-next { display:contents; } .pr-next:has(#ns-desk-line:empty) { display:none; }
+  .rulescard .plan-rows { margin-top:12px; }
+  .plan-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .wchip { display:inline-flex; gap:4px; align-items:baseline; padding:4px 9px; border:1px solid var(--line); border-radius:6px; font:500 12px var(--mono); color:var(--mut); }
+  .wchip b { color:var(--fg); } .wchip.gain { border-color:var(--gain); color:var(--gain); } .wchip.loss { border-color:var(--loss); color:var(--loss); } .wchip.warn { border-color:var(--warn); color:var(--warn); }
+  @media (max-width:860px) { .plan-grid { grid-template-columns:1fr; } .plan-rows { grid-template-columns:1fr; gap:2px; } .plan-rows dd { margin-bottom:8px; } }
+  /* trade file: every update, newest first */
+  .tl2 { list-style:none; margin:0; padding:0; display:grid; gap:0; }
+  .tl2 li { display:grid; grid-template-columns:118px 14px minmax(0,1fr); gap:0 10px; padding-bottom:12px; position:relative; }
+  .tl2 li time { color:var(--mut); font-size:12px; padding-top:1px; }
+  .tl2 .dot { position:relative; border-left:2px solid var(--line); margin-left:5px; }
+  .tl2 .dot::before { content:""; position:absolute; left:-6px; top:4px; width:10px; height:10px; border-radius:50%; background:var(--mut); }
+  .tl2 li:last-child .dot { border-left-color:transparent; }
+  .tl2 li.gain .dot::before { background:var(--gain); } .tl2 li.loss .dot::before { background:var(--loss); }
+  .tl2 li.info .dot::before { background:var(--series-1); } .tl2 li.warn .dot::before { background:var(--warn); }
+  .feed-day { font:600 11px var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--mut); padding:12px 0 4px; border-bottom:1px solid var(--line-soft); }
+  .feed-day:first-child { padding-top:2px; }
 </style>
 </head>
 <body>
@@ -502,12 +531,30 @@
                         <div class="vital"><div class="eb">Can I decide yet?</div><div id="vt-ev" class="vv num"></div><div class="evrow"><div id="vt-meter" class="meter"></div><span id="vt-ev-s" class="muted"></span></div></div>
           </div>
         </section>
-        <p id="regime-line" class="verdict" data-question="Why might a new put or call be held back right now?" hidden></p>
         <p id="exposure-line" class="verdict" data-question="How much do the open option trades move if the market moves?" hidden></p>
         <section id="needs" class="panel needs" aria-label="Needs you" data-question="What can only the owner fix or decide right now?" hidden>
           <div class="needs-head"><h2 class="sect">Needs you</h2><span id="needs-count" class="tag warn"></span></div>
           <div id="needs-list"></div>
         </section>
+        <div class="plan-grid">
+          <section class="panel plancard" aria-label="Today's plan" data-question="What will the platform do now, and why is each watchlist name bought, skipped or blocked?">
+            <div class="plan-top"><span class="eyebrow">Today's plan</span><span class="muted small">set by the rules, not a forecast</span></div>
+            <p id="plan-head" class="plan-head"></p>
+            <dl class="plan-rows">
+              <dt>Session</dt><dd id="plan-session"></dd>
+              <dt>Regime</dt><dd><p id="regime-line" class="verdict" data-question="Why might a new put or call be held back right now?" hidden></p></dd>
+              <dt>Agents</dt><dd id="plan-committee"></dd>
+              <div class="pr-next"><dt>Next open</dt><dd><p class="verdict" id="ns-desk-line" data-question="What happens at the next open?"></p></dd></div>
+            </dl>
+            <div class="eyebrow" style="margin-top:12px">Watchlist: what each name got last cycle</div>
+            <div id="plan-chips" class="plan-chips"></div>
+            <p id="plan-when" class="muted small"></p>
+          </section>
+          <section class="panel rulescard" aria-label="Rules in force" data-question="Which rules is the options account held to right now?">
+            <div class="plan-top"><span class="eyebrow">Rules in force</span><a class="linkbtn small" href="#/system">change in System</a></div>
+            <dl id="rules-rows" class="plan-rows"></dl>
+          </section>
+        </div>
         <div class="panel hero">
           <div class="hero-main">
             <div class="eyebrow" id="desk-label">Evidence: closed trades, options account</div>
@@ -528,7 +575,6 @@
             <div class="scroll" id="equity-table" hidden></div>
           </div>
         </div>
-        <p class="verdict" id="ns-desk-line" data-question="What happens at the next open?"></p>
         <div>
           <div class="sect-head"><h2 class="sect">Accounts and lanes</h2><span class="q">Every paper account and research lane side by side. Choose one to see its trades.</span></div>
           <div id="all-accounts" class="lane-grid"></div>

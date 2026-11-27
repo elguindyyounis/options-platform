@@ -406,9 +406,15 @@ class YahooDataProvider(MarketDataProvider):
 
     def _chain_rows(self, ticker: Any, symbol: str, expiry: date) -> list[ChainRow]:
         chain = ticker.option_chain(expiry.isoformat())
-        return rows_from_records(chain.calls.to_dict("records"), symbol, expiry, Right.CALL) + rows_from_records(
-            chain.puts.to_dict("records"), symbol, expiry, Right.PUT
-        )
+        # Yahoo sometimes answers with no chain (or no calls / puts table) instead of an error. That is "no rows", which the
+        # engine reports as an empty chain in plain words, not a crash ("'NoneType' object has no attribute 'to_dict'").
+        calls, puts = getattr(chain, "calls", None), getattr(chain, "puts", None)
+        out: list[ChainRow] = []
+        if calls is not None:
+            out += rows_from_records(calls.to_dict("records"), symbol, expiry, Right.CALL)
+        if puts is not None:
+            out += rows_from_records(puts.to_dict("records"), symbol, expiry, Right.PUT)
+        return out
 
     def snapshot(self, symbol: str) -> MarketSnapshot:
         return self._read(symbol, 14, 180, self._max)
