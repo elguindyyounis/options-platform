@@ -320,6 +320,12 @@ def create_app(
 
             return journal_summary(engine.store, engine.clock())
 
+        @app.get("/api/decider/compare", dependencies=[Depends(auth)])
+        def decider_compare(horizon_h: float = 24.0) -> dict[str, Any]:
+            from .decider import compare
+
+            return compare(engine.store, engine.clock(), engine.provider.fictional, max(1.0, min(horizon_h, 168.0)))
+
         @app.get("/api/equity", dependencies=[Depends(auth)])
         def equity(limit: int = 500) -> dict[str, Any]:
             from .evaluation import equity_summary
@@ -515,7 +521,7 @@ def create_app(
         def trades_list(limit: int = 300) -> dict[str, Any]:
             from .trades import build_trades
 
-            return {**build_trades(manager, limit), "fictional": engine.provider.fictional}
+            return {**build_trades(manager, limit, engine.provider.fictional), "fictional": engine.provider.fictional}
 
         @app.get("/api/alltrades", dependencies=[Depends(auth)])
         def all_trades() -> dict[str, Any]:
@@ -527,7 +533,7 @@ def create_app(
         def trades_one(trade_id: str) -> dict[str, Any]:
             from .trades import trade_detail
 
-            found = trade_detail(manager, trade_id)
+            found = trade_detail(manager, trade_id, engine.provider.fictional)
             if found is None:
                 raise HTTPException(status_code=404, detail="Trade not found")
             return found

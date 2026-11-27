@@ -19,7 +19,7 @@ from typing import Any, Callable, Optional
 from . import committee as cmt
 from .agents import Context
 from .broker.sim import SimBroker
-from . import exit_agent
+from . import decider, exit_agent
 from .exits import EXIT, TRIM, UNOBSERVABLE, ExitPolicy, evaluate_exit, exit_plan
 from .market_clock import NY, session_status, upcoming_closures
 from .events import EventCalendar
@@ -533,6 +533,11 @@ class TradingEngine:
                 continue
             votes[p.contract] = d
             self._journal(cmt.KIND, symbol, d.disposition, p.contract, p.limit_price, d.to_payload(weights, trust), snap)
+            try:  # D1 in shadow: the single decider answers the same question; it never changes an order or a size
+                d1 = decider.decide(ctx, d)
+                self._journal(decider.KIND, symbol, d1.disposition, p.contract, p.limit_price, d1.to_payload(d), snap)
+            except Exception:  # noqa: BLE001 - research only
+                pass
         return votes
 
     def maybe_shortterm(self) -> Optional[dict[str, Any]]:
