@@ -193,3 +193,26 @@ def describe(source: RegimeSource, *, data_source: str, fictional: bool) -> dict
         return {**base, "state": "unknown", "puts_allowed": True, "calls_allowed": True, "label": None, "reasons": [], "facts": {}}
     return {**base, "state": "known", "puts_allowed": not reg.block_puts, "calls_allowed": not reg.block_calls, "label": reg.label,
             "reasons": [reg.check("P")[1]] * reg.block_puts + [reg.check("C")[1]] * reg.block_calls, "facts": reg.facts}
+
+
+def held_back(store: Any, now: datetime, *, fictional: bool, hours: int = 24) -> dict[str, Any]:
+    """Display only: how many new entries the regime guard held back recently, from the decision journal's SKIPPED_REGIME lines.
+
+    The journal writes a candidate at most once an hour and at most a few per name per cycle, so these are lower bounds
+    ("at least"), never a full count of ideas. Only lines of the same data kind (demo or real) as the page are counted.
+    """
+    since = now - timedelta(hours=hours)
+    puts = calls = 0
+    last: Optional[str] = None
+    for d in store.list_decisions(kind="ENTRY", include_fictional=bool(fictional), limit=100_000):
+        if d["disposition"] != "SKIPPED_REGIME" or bool(d["fictional"]) != bool(fictional):
+            continue
+        if datetime.fromisoformat(d["ts"]) < since:
+            continue
+        right = str((d["payload"].get("contract") or {}).get("right", ""))[:1].upper()
+        if right == "P":
+            puts += 1
+        elif right == "C":
+            calls += 1
+        last = last or d["ts"]  # newest first
+    return {"hours": hours, "puts": puts, "calls": calls, "total": puts + calls, "latest": last, "lower_bound": True}

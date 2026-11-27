@@ -261,7 +261,11 @@ def create_app(
         def market_regime() -> dict[str, Any]:
             from .regime import describe
 
-            return describe(engine.regime, data_source=getattr(engine.provider, "name", "provider") + " daily bars (SPY)", fictional=engine.provider.fictional)
+            from .regime import held_back
+
+            out = describe(engine.regime, data_source=getattr(engine.provider, "name", "provider") + " daily bars (SPY)", fictional=engine.provider.fictional)
+            out["held_back"] = held_back(engine.store, engine.clock(), fictional=engine.provider.fictional)
+            return out
 
         @app.get("/api/exposure", dependencies=[Depends(auth)])
         def open_exposure_report() -> dict[str, Any]:

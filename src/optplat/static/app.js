@@ -329,17 +329,23 @@
   }
 
   // One line under the verdict band: is the market-regime guard holding back new puts or calls right now, and why (display only).
+  function heldBackText(h) {
+    if (!h) return "";
+    if (!h.total) return " Nothing recorded as held back in the last " + h.hours + " h.";
+    return " Held back in the last " + h.hours + " h: at least " + h.total + " new entr" + (h.total === 1 ? "y" : "ies") + " (" + h.puts + " put" + (h.puts === 1 ? "" : "s") + ", " + h.calls + " call" + (h.calls === 1 ? "" : "s") + "), so a quiet lane may be held back, not idle. The journal keeps few lines per name, so this is a minimum.";
+  }
   function regimeText(r) {
     if (!r) return { cls: "", text: "" };
     const fict = r.fictional ? " Fictional demo data." : "";
+    const hb = heldBackText(r.held_back);
     if (r.state === "off") return { cls: "warn", text: "Market regime guard is switched off: no new put or call is held back for the market's state." };
     if (r.state === "unknown") return { cls: "warn", text: "Market regime unknown (" + r.data_source + " not readable): nothing is blocked. An unknown reading never blocks a trade, so this is not an all-clear." + fict };
     const f = r.facts || {}, bits = [];
     if (f.day_pct !== undefined) bits.push("SPY " + (f.day_pct >= 0 ? "+" : "") + f.day_pct + "% today");
     if (f.rsi14 !== null && f.rsi14 !== undefined) bits.push("RSI " + f.rsi14);
     const label = String(r.label || "").replace(/_/g, " ");
-    if (r.puts_allowed && r.calls_allowed) return { cls: "ok", text: "Market regime: " + label + (bits.length ? " (" + bits.join(", ") + ")" : "") + ". New puts and calls are not held back by it. Thresholds are engineering choices, not an edge." + fict };
-    return { cls: "warn", text: (r.reasons || []).join(" ") + " Existing positions and exits are untouched. Thresholds are engineering choices, not an edge." + fict };
+    if (r.puts_allowed && r.calls_allowed) return { cls: "ok", text: "Market regime: " + label + (bits.length ? " (" + bits.join(", ") + ")" : "") + ". New puts and calls are not held back by it. Thresholds are engineering choices, not an edge." + hb + fict };
+    return { cls: "warn", text: (r.reasons || []).join(" ") + " Existing positions and exits are untouched." + hb + " Thresholds are engineering choices, not an edge." + fict };
   }
   window.optplatRegimeText = regimeText;
   function renderRegime(r) {
