@@ -119,3 +119,8 @@ def test_a_spent_ibkr_bar_budget_is_named_and_points_at_platform_usage():
 def test_a_held_bar_request_is_working_as_built():
     h = explain("AMD: BudgetHeld: platform share of IBKR 5-minute bars used (12/12 per 10 min)")
     assert h["kind"] == "BAR_SHARE_HELD" and h["who"] == DESIGN
+
+
+def test_a_held_research_request_is_working_as_built():
+    h = explain("data AMD: RuntimeError: IBKR failed: BudgetHeld: platform IBKR budget held for research (12/12 per 10 min)")
+    assert h["kind"] == "IBKR_TIER_HELD" and h["who"] == DESIGN

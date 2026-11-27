@@ -85,6 +85,22 @@ INTRADAY_SHARE = 12        # new 5-minute-bar fetches per USAGE_WINDOW_S: two ba
 INTRADAY_CORE = ("SPY", "QQQ", "IWM", "AAPL", "NVDA", "TSLA")   # shortterm.LANE_SYMBOLS (a test keeps them equal)
 
 
+# One platform budget for every request that can spend the service's 30 bar requests per 10 minutes (chains, daily and
+# 5-minute bars), with room kept for what decides trades. The main account (engine) may use all of it; the lanes and
+# their previews leave the last 6 to it; research (the scanner, the Lab) uses only the first 12. A held request is not
+# sent, and the research fallback answers it. 3 of the 30 are left for the paper-order worker's quote checks.
+PLATFORM_BUDGET = 27
+TIER_LIMITS = {"trade": PLATFORM_BUDGET, "lanes": 21, "research": 12}
+_LANE_CALLERS = ("optionlanes", "shortterm", "swing", "nextsession", "regime", "lane_hypotheses")
+_RESEARCH_CALLERS = ("scanner", "lab", "swing_replay")
+
+
+def tier_of(caller: str) -> str:
+    """trade, lanes or research, by the platform module that asked. Anything unlisted counts as trade (never held)."""
+    head = caller.split(".", 1)[0]
+    return "lanes" if head in _LANE_CALLERS else "research" if head in _RESEARCH_CALLERS else "trade"
+
+
 class BudgetHeld(RuntimeError):
     """Not sent: the platform's share of the shared bar budget is used. Nothing was asked of the service."""
 
@@ -119,11 +135,23 @@ class IBKRDataProvider(MarketDataProvider):
         self._usage_lock = threading.Lock()
         self._intraday: dict[str, tuple[int, list[IntradayBar]]] = {}
         self._intraday_fetches: deque[datetime] = deque()
+        self._budgeted: deque[datetime] = deque()  # every budgeted request this platform sent, for the tiers above
 
     def _call(self, resource: str, params=None, **kw):
         """Every service request goes through here so the platform can see what it spends (display only)."""
         kind = _KIND.get(resource) or ('bars_5min' if (params or {}).get('interval') == '5 mins' else 'bars_daily')
         caller, outcome = _caller(), 'ok'
+        if kind in _BUDGETED:
+            now = self._clock()
+            tier = tier_of(caller)
+            with self._usage_lock:
+                while self._budgeted and (now - self._budgeted[0]).total_seconds() > USAGE_WINDOW_S:
+                    self._budgeted.popleft()
+                used, limit = len(self._budgeted), TIER_LIMITS[tier]
+                if used >= limit:
+                    self._usage.append((now, f'{kind}_held', caller, f'held: {tier} share used'))
+                    raise BudgetHeld(f'platform IBKR budget held for {tier} ({used}/{limit} per 10 min)')
+                self._budgeted.append(now)
         try:
             return self._request(resource, params, **kw)
         except Exception as exc:  # noqa: BLE001 - recorded, then raised unchanged
@@ -151,6 +179,9 @@ class IBKRDataProvider(MarketDataProvider):
         return {'window_s': USAGE_WINDOW_S, 'sent': len(rows),
                 'budgeted_sent': sum(1 for u in rows if u[1] in _BUDGETED),
                 'intraday_share': {'per_window': INTRADAY_SHARE, 'core': list(INTRADAY_CORE)},
+                'tiers': {'limits': dict(TIER_LIMITS), 'budget': PLATFORM_BUDGET,
+                          'by_tier': {t: sum(n for c, kinds in by_caller.items() if tier_of(c) == t
+                                             for k, n in kinds.items() if k in _BUDGETED) for t in TIER_LIMITS}},
                 'by_caller': by_caller, 'refused': refused,
                 'note': 'requests sent by this platform; cache hits at the service cost nothing, so this is an upper bound'}
 
@@ -247,7 +278,7 @@ class IBKRDataProvider(MarketDataProvider):
     def daily_bars(self, symbols: Sequence[str], months: int = 2) -> dict[str, list[Bar]]:
         """Daily stock bars for the symbols the shared budget allows; the rest are left out (no data, no entry).
 
-        The service allows about 55 history requests per 10 minutes for every consumer together, and the scan
+        The service allows 30 bar requests per 10 minutes for every consumer together (IBKR's own limit is 60), and the scan
         universe is about 200 names, so this consumer caches each name's bars for DAILY_TTL_S (never past the New York
         day they were fetched) and starts at most DAILY_BUDGET new fetches per DAILY_WINDOW_S. One name failing does
         not fail the others. Index symbols such as ^VIX are not served by the service and are left out unasked.
