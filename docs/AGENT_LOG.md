@@ -3,6 +3,12 @@
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
 
+## 2026-11-27: next-session plan names unverified IBKR chains as the block (with the owner)
+
+* On IBKR data `pick_contract` refuses every unverified chain by design (owner decision pending on per-contract verification),
+  so the plan said "no contract met the expiry, spread and open-interest limits" for a different reason. It now says the IBKR
+  quote time is not verified. Wording only; 977 tests pass (1 new). Merged by the agent with the owner in the conversation.
+
 ## 2026-11-27: lanes and the scanner judge a chain against the clock when it arrives (with the owner)
 
 * At today's open (09:37 ET) both swing option lanes refused every chain as FUTURE_TIMESTAMP and bought nothing; the
