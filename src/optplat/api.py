@@ -45,6 +45,10 @@ class OrderBody(ContractBody):
     side: Side = Side.BUY_TO_OPEN
 
 
+class PipelineTestBody(ContractBody):
+    side: Side = Side.BUY_TO_OPEN
+
+
 class EngineConfigBody(BaseModel):
     watchlist: Optional[list[str]] = None
     auto_entries: Optional[bool] = None
@@ -543,6 +547,15 @@ def create_app(
                 return engine.set_config(body.model_dump(exclude_none=True)).to_dict()
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        @app.post("/api/paper/pipeline-test", dependencies=[Depends(auth)])
+        def pipeline_test(body: PipelineTestBody) -> dict[str, Any]:
+            try:
+                return engine.pipeline_test_order(body.to_contract(), body.side)
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except LiveTradingDisabled as exc:
+                raise HTTPException(status_code=403, detail=str(exc)) from exc
 
         @app.post("/api/engine/cycle", dependencies=[Depends(auth)])
         def engine_cycle() -> dict[str, Any]:

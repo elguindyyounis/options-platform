@@ -158,3 +158,36 @@ def test_verifications_are_capped_per_cycle():
     report = engine.run_cycle()  # a new cycle restores the budget
     assert report["quote_verifications"][0]["result"] == "NOT_VERIFIED"
     assert TradingEngine.MAX_QUOTE_VERIFICATIONS_PER_CYCLE == 3
+
+
+# ---- owner-triggered pipeline test (2026-11-27)
+def test_pipeline_test_buys_then_sells_one_contract_on_verified_quotes():
+    from optplat.models import Side
+    engine, broker, provider, Quote = build(lambda c: Quote(c, 4.90, 5.10, NOW, VERIFIED_SOURCE, timestamp_verified=True))
+    buy = engine.pipeline_test_order(C, Side.BUY_TO_OPEN)
+    assert buy["result"] == "FILLED" and buy["order"]["intent"]["quantity"] == 1
+    assert buy["order"]["intent"]["limit_price"] == 5.15 and len(broker.get_positions()) == 1
+    sell = engine.pipeline_test_order(C, Side.SELL_TO_CLOSE)
+    assert sell["result"] == "FILLED" and sell["order"]["intent"]["limit_price"] == 4.86 and broker.get_positions() == []
+
+
+def test_pipeline_test_never_trades_without_verification_or_past_the_kill_switch():
+    from optplat.models import Side
+    engine, broker, _, _ = build(lambda c: None)
+    assert engine.pipeline_test_order(C, Side.BUY_TO_OPEN)["result"] == "NOT_VERIFIED" and broker.get_positions() == []
+    engine2, broker2, _, Quote = build(lambda c: Quote(c, 4.90, 5.10, NOW, VERIFIED_SOURCE, timestamp_verified=True))
+    engine2.manager.set_kill_switch(True, "test")
+    assert engine2.pipeline_test_order(C, Side.BUY_TO_OPEN)["result"] == "RISK_REJECTED" and broker2.get_positions() == []
+
+
+def test_pipeline_test_needs_a_verifying_provider():
+    from optplat.models import Side
+    engine, _, _, _ = build(lambda c: None)
+    engine.provider = StaticDataProvider(engine.clock)
+    assert engine.pipeline_test_order(C, Side.BUY_TO_OPEN)["result"] == "UNAVAILABLE"
+
+
+def test_owner_test_settings_for_the_main_account():
+    from optplat import __main__ as entry
+    assert (entry.MAIN_MAX_SPREAD_PCT, entry.MAIN_MIN_DTE, entry.MAIN_MAX_DTE) == (25.0, 21, 200)
+    assert RiskPolicy().max_spread_pct_of_ask == 15.0 and LiquidTrendStrategy().max_spread_pct == 10.0  # defaults kept
