@@ -306,3 +306,18 @@ def test_never_sells_the_alerters_contracts():
         broker.submit_limit_order(make_intent("sell-3", qty=1, limit=1.0, side=Side.SELL_TO_CLOSE))
     assert [o.orderRef for o in ib.placed] == ["optplat:key-00000001", "optplat:sell-2"]
 
+
+@pytest.mark.parametrize("acct,ok", [("DU1234567", True), ("DUH123456", True), ("DUA1B2C3D", True),
+                                     ("U1234567", False), ("DF1234567", False), ("du1234567", False),
+                                     ("DU12", False), ("DU 123456", False), ("XDU1234567", False), ("", False)])
+def test_paper_account_ids(acct, ok):
+    assert ibkr.is_paper_account(acct) is ok
+
+
+def test_detects_a_paper_account_with_letters(monkeypatch):
+    monkeypatch.delenv("IBKR_PAPER_ACCOUNT")
+    ib = FakeIB(accounts=("DUH123456",))
+    broker = make(ib)
+    broker.submit_limit_order(make_intent(limit=2.50))
+    assert ib.placed[0].account == "DUH123456"
+

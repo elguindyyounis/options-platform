@@ -1240,3 +1240,7 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 * The probe still stopped at connect: the Options Alerter's TWS paper worker uses client id 95, the platform's default, so TWS refused the second connection. Default is now 71; the Alerter's ids (91, 94, 95, 96, 98) are refused. The paper account is shared, so platform orders carry `orderRef` `optplat:<key>`, only those count as ours, and a sell may not exceed what platform orders bought net of its sells (and what the account holds). Verified: pytest 962. Merged on the owner's standing instruction.
 
+## 2026-11-27 (Claude): paper account ids can have letters after DU
+
+* Live probe on the owner's Mac connected (client 71) and then refused the session: the paper account id has letters after `DU`. `is_paper_account` now accepts `DU` + 5-12 capital letters or digits (the Options Alerter found the same). Still refused: anything not starting with `DU` (live `U...`, `DF...`), lower case, too short, spaces. Verified: pytest. Merged on the owner's standing instruction.
+
