@@ -238,10 +238,16 @@ class Store:
             row = self._db.execute("SELECT payload FROM orders WHERE idem_key=?", (idem_key,)).fetchone()
         return Order.from_dict(json.loads(row["payload"])) if row else None
 
-    def list_orders(self, *, open_only: bool = False, limit: int = 200) -> list[Order]:
+    # The paper account's current start (account.py): orders and equity points before it belong to an earlier account.
+    # None means the account was never restarted, so everything counts. Set once at startup.
+    account_since: Optional[str] = None
+
+    def list_orders(self, *, open_only: bool = False, limit: int = 200, all_history: bool = False) -> list[Order]:
+        since = None if all_history else self.account_since
         with self._lock:
             rows = self._db.execute(
-                "SELECT payload FROM orders ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
+                "SELECT payload FROM orders" + (" WHERE created_at>=?" if since else "") + " ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                ((since, limit) if since else (limit,)),
             ).fetchall()
         orders = [Order.from_dict(json.loads(r["payload"])) for r in rows]
         if open_only:
@@ -361,10 +367,16 @@ class Store:
             )
             self._db.commit()
 
-    def list_equity(self, limit: int = 500, fictional: Optional[bool] = None) -> list[dict[str, Any]]:
-        """The newest `limit` points, returned oldest first. `fictional` keeps made-up and real curves apart."""
-        sql = "SELECT * FROM equity" + ("" if fictional is None else " WHERE fictional=?")
-        args: tuple[Any, ...] = () if fictional is None else (int(fictional),)
+    def list_equity(self, limit: int = 500, fictional: Optional[bool] = None, all_history: bool = False) -> list[dict[str, Any]]:
+        """The newest `limit` points, returned oldest first. `fictional` keeps made-up and real curves apart; points from
+        before the account's current start are left out unless `all_history`."""
+        where, args_l = [], []  # type: list[str], list[Any]
+        if fictional is not None:
+            where.append("fictional=?"); args_l.append(int(fictional))
+        if self.account_since and not all_history:
+            where.append("ts>=?"); args_l.append(self.account_since)
+        sql = "SELECT * FROM equity" + (" WHERE " + " AND ".join(where) if where else "")
+        args: tuple[Any, ...] = tuple(args_l)
         with self._lock:
             rows = self._db.execute(sql + " ORDER BY ts DESC, id DESC LIMIT ?", (*args, max(1, min(limit, 5000)))).fetchall()
         return [{"ts": r["ts"], "equity": r["equity"], "cash": r["cash"], "open_premium": r["open_premium"],

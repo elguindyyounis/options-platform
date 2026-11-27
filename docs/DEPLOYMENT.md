@@ -45,3 +45,16 @@ unloading it) and nothing loaded it again. Three changes stop that from happenin
 To stop the server on purpose and keep it stopped: `touch ~/Library/Application\ Support/OptionsPlatform/server-paused`,
 then `launchctl kill TERM gui/$(id -u)/com.optionsplatform.server`. Delete the file (or run the installer or
 `start-platform.command`) to resume. The kill switch on the System page is still the way to stop new trades.
+
+## Account size (2026-11-27)
+
+To run the paper options account at the size you plan to trade, add to `config.env` and restart the server:
+
+```
+OPTPLAT_PAPER_START_CASH=1000
+OPTPLAT_MAX_POSITION_PCT=35
+OPTPLAT_MAX_TOTAL_PREMIUM_PCT=70
+```
+
+A new size starts a new paper account from that moment (see `src/optplat/account.py`); earlier trades stay in the database
+and the export. Removing the lines and restarting starts another new account at $100,000.

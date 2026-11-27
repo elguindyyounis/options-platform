@@ -1,6 +1,7 @@
 """Run the local API:  python -m optplat"""
 from __future__ import annotations
 
+import json
 import os
 import re
 import secrets
@@ -19,6 +20,7 @@ from .engine import EngineConfig, Runner, TradingEngine
 from .marketdata import DemoDataProvider, YahooDataProvider
 from .orders import OrderManager
 from .risk import RiskPolicy
+from .models import utcnow
 from .store import Store
 from .strategy import FlowFollowStrategy, LiquidTrendStrategy
 
@@ -103,6 +105,11 @@ def main() -> None:
     elif len(token) < 16:
         sys.exit("OPTPLAT_API_TOKEN must be at least 16 characters (or leave it unset to get a generated one).")
 
+    from . import account as acct
+    try:
+        paper_cash = acct.start_cash(os.environ)
+    except ValueError as exc:
+        sys.exit(str(exc))
     which = os.environ.get("OPTPLAT_BROKER", "sim")
     if which == "sim" and os.environ.get("OPTPLAT_IBKR_MIRROR") == "1":
         # Owner decision 2026-11-26: the simulated account stays the record; its orders are copied to IBKR paper.
@@ -110,16 +117,16 @@ def main() -> None:
         from .broker.mirror import MirroredSimBroker
 
         try:
-            broker = MirroredSimBroker(IBKRPaperBroker())
+            broker = MirroredSimBroker(IBKRPaperBroker(), starting_cash=paper_cash)
             print("IBKR paper mirror ON: main-account orders are also sent to the IBKR paper account.", flush=True)
         except ValueError as exc:
             # A bad paper-only setting must never take the platform down: run without the mirror and say why.
-            broker = SimBroker()
+            broker = SimBroker(starting_cash=paper_cash)
             broker.mirror_disabled_reason = str(exc)
             print(f"IBKR paper mirror OFF: {exc}. Check IBKR_PAPER_ACCOUNT (DU + digits, or remove it to use "
                   "the one paper account TWS is logged into) and IBKR_PAPER_PORT (7497 or 4002) in config.env.", flush=True)
     elif which == "sim":
-        broker = SimBroker()
+        broker = SimBroker(starting_cash=paper_cash)
     elif which == "ibkr_paper":
         from .broker.ibkr import IBKRPaperBroker
 
@@ -147,9 +154,21 @@ def main() -> None:
     # Unofficial quotes carry no verified timestamp; the safe default rejects them. Allowing them is an
     # explicit, visible choice.
     allow_unverified = os.environ.get("OPTPLAT_ALLOW_UNVERIFIED_QUOTES") == "1" and data != "ibkr"
-    policy = RiskPolicy(require_verified_quote_time=not allow_unverified)
+    try:
+        policy = acct.risk_policy(os.environ, require_verified_quote_time=not allow_unverified)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    if policy.version != RiskPolicy().version:
+        print(f"Risk limits set by the owner: {policy.max_position_pct:g}% of equity per order, "
+              f"{policy.max_total_premium_pct:g}% open in total.", flush=True)
 
     store = Store(os.environ.get("OPTPLAT_DB", "optplat.db"))
+    if isinstance(broker, SimBroker):
+        # A new account size starts a new paper account; earlier orders stay in the database as history (account.py).
+        ep = acct.start_account(store, paper_cash, utcnow())
+        if ep and ep["started_now"]:
+            print(f"NEW PAPER ACCOUNT: ${ep['start_cash']:,.2f} from {ep['started_at']}. Earlier orders stay in the database as "
+                  f"history; {ep['open_positions_left']} open position(s) of the old account are not carried over.", flush=True)
     manager = OrderManager(broker, store, policy)
     if hasattr(broker, "attach_audit"):
         broker.attach_audit(store.audit)
