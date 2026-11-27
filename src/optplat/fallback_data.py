@@ -111,7 +111,7 @@ class IBKRWithYahooFallback(MarketDataProvider):
                 return bars
             why = "IBKR returned no bars"
         except Exception as exc:  # noqa: BLE001
-            why = f"IBKR failed: {type(exc).__name__}"
+            why = f"IBKR failed: {type(exc).__name__}: {str(exc)[:80]}"
         yahoo = self._yahoo()
         if yahoo is None:
             return []

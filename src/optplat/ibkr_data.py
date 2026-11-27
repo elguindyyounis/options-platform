@@ -75,6 +75,24 @@ _KIND = {'snapshot': 'chain', 'execution-quote': 'verify', 'quotes': 'quotes'}
 _BUDGETED = ('chain', 'bars_daily', 'bars_5min')  # each can spend one historical request at the service on a cache miss
 _SKIP = ('optplat.ibkr_data', 'optplat.fallback_data')
 
+# 5-minute bars (measured 2026-11-27: about 75 of the platform's requests per 10 minutes, against a service budget of
+# 30 for every consumer together). A bar only changes once every 5 minutes, so each name is fetched at most once per
+# completed bar, and the platform keeps its new fetches inside a share of the budget. The core lane names come first;
+# other names use IBKR only while the share has room, and otherwise fall to the research fallback.
+BAR_S = 300
+BAR_SETTLE_S = 15          # a bar is complete a few seconds after its 5-minute boundary
+INTRADAY_SHARE = 12        # new 5-minute-bar fetches per USAGE_WINDOW_S: two bars for each core name
+INTRADAY_CORE = ("SPY", "QQQ", "IWM", "AAPL", "NVDA", "TSLA")   # shortterm.LANE_SYMBOLS (a test keeps them equal)
+
+
+class BudgetHeld(RuntimeError):
+    """Not sent: the platform's share of the shared bar budget is used. Nothing was asked of the service."""
+
+
+def bar_slot(t: datetime) -> int:
+    """Which completed 5-minute bar is the newest at time t."""
+    return int((t.timestamp() - BAR_SETTLE_S) // BAR_S)
+
 
 def _caller() -> str:
     """The platform module that asked (engine, scanner, optionlanes, ...), found by walking up the stack."""
@@ -99,6 +117,8 @@ class IBKRDataProvider(MarketDataProvider):
         self._fetches: deque[datetime] = deque()
         self._usage: deque[tuple[datetime, str, str, str]] = deque(maxlen=5000)  # (at, kind, caller, outcome)
         self._usage_lock = threading.Lock()
+        self._intraday: dict[str, tuple[int, list[IntradayBar]]] = {}
+        self._intraday_fetches: deque[datetime] = deque()
 
     def _call(self, resource: str, params=None, **kw):
         """Every service request goes through here so the platform can see what it spends (display only)."""
@@ -130,6 +150,7 @@ class IBKRDataProvider(MarketDataProvider):
                 refused[outcome] = refused.get(outcome, 0) + 1
         return {'window_s': USAGE_WINDOW_S, 'sent': len(rows),
                 'budgeted_sent': sum(1 for u in rows if u[1] in _BUDGETED),
+                'intraday_share': {'per_window': INTRADAY_SHARE, 'core': list(INTRADAY_CORE)},
                 'by_caller': by_caller, 'refused': refused,
                 'note': 'requests sent by this platform; cache hits at the service cost nothing, so this is an upper bound'}
 
@@ -256,6 +277,26 @@ class IBKRDataProvider(MarketDataProvider):
         return out
 
     def intraday_bars(self, symbol: str) -> list[IntradayBar]:
+        """Today's 5-minute bars, fetched at most once per completed bar and inside INTRADAY_SHARE (see above).
+
+        Raises BudgetHeld, without asking the service, when the share is used: the core names may use all of it, other
+        names only the first half, so the core names keep IBKR bars when the share is tight."""
+        now = self._clock()
+        slot = bar_slot(now)
+        hit = self._intraday.get(symbol)
+        if hit and hit[0] == slot:
+            return hit[1]
+        with self._usage_lock:
+            while self._intraday_fetches and (now - self._intraday_fetches[0]).total_seconds() > USAGE_WINDOW_S:
+                self._intraday_fetches.popleft()
+            used = len(self._intraday_fetches)
+            limit = INTRADAY_SHARE if symbol in INTRADAY_CORE else INTRADAY_SHARE // 2
+            if used >= limit:
+                self._usage.append((now, 'bars_5min_held', _caller(), 'held: platform share used'))
+                raise BudgetHeld(f'platform share of IBKR 5-minute bars used ({used}/{INTRADAY_SHARE} per 10 min)')
+            self._intraday_fetches.append(now)
         raw = self._call('history', {'symbol': symbol, 'interval': '5 mins'})
-        return [IntradayBar(datetime.fromisoformat(b['timestamp']).astimezone(timezone.utc),
+        bars = [IntradayBar(datetime.fromisoformat(b['timestamp']).astimezone(timezone.utc),
                             b['open'], b['high'], b['low'], b['close'], b['volume']) for b in raw['bars']]
+        self._intraday[symbol] = (slot, bars)
+        return bars

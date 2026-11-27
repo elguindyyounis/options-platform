@@ -149,3 +149,68 @@ def test_usage_counts_what_this_platform_sent_by_caller_kind_and_refusal():
     assert p.usage()['sent'] == 0  # only the service's 10-minute window counts
     p.daily_bars(['CCC'])
     assert IBKRWithYahooFallback(p, lambda: None).health()['platform_usage']['sent'] == 1
+
+
+def _bar_transport(calls):
+    def transport(resource, params=None, **_kw):
+        calls.append(params['symbol'])
+        return {'bars': [{'timestamp': '2026-11-27T15:00:00+00:00', 'open': 1, 'high': 1, 'low': 1, 'close': 1, 'volume': 1}]}
+    return transport
+
+
+def test_five_minute_bars_are_fetched_once_per_completed_bar():
+    from optplat.ibkr_data import BAR_SETTLE_S
+    calls, now = [], [datetime(2026, 11, 27, 15, 1, tzinfo=timezone.utc)]
+    p = IBKRDataProvider(_bar_transport(calls), clock=lambda: now[0])
+    first = p.intraday_bars('SPY')
+    now[0] = datetime(2026, 11, 27, 15, 5, BAR_SETTLE_S - 1, tzinfo=timezone.utc)  # the 15:05 bar is not complete yet
+    assert p.intraday_bars('SPY') is first and calls == ['SPY']
+    now[0] = datetime(2026, 11, 27, 15, 5, BAR_SETTLE_S + 1, tzinfo=timezone.utc)
+    p.intraday_bars('SPY')
+    assert calls == ['SPY', 'SPY']
+
+
+def test_bar_fetches_stay_inside_the_platform_share_and_core_names_come_first():
+    from optplat.ibkr_data import INTRADAY_CORE, INTRADAY_SHARE, BudgetHeld
+    calls, now = [], [datetime(2026, 11, 27, 15, 1, tzinfo=timezone.utc)]
+    p = IBKRDataProvider(_bar_transport(calls), clock=lambda: now[0])
+    extras = [f'X{i}' for i in range(INTRADAY_SHARE)]
+    for s in extras[:INTRADAY_SHARE // 2]:
+        p.intraday_bars(s)
+    with pytest.raises(BudgetHeld):
+        p.intraday_bars(extras[-1])          # other names stop at half the share
+    for s in INTRADAY_CORE:                  # core names may use the rest of the share
+        p.intraday_bars(s)
+    n = len(calls)
+    now[0] += timedelta(seconds=300)        # the next bar: SPY's cached bars are out of date
+    with pytest.raises(BudgetHeld):
+        p.intraday_bars('SPY')               # the whole share is used
+    assert len(calls) == n == INTRADAY_SHARE  # a held request never reaches the service
+    u = p.usage()
+    assert u['by_caller']['other']['bars_5min_held'] == 2 and u['budgeted_sent'] == INTRADAY_SHARE
+    now[0] += timedelta(seconds=601)
+    p.intraday_bars('SPY')                   # the share frees with the service's 10-minute window
+    assert len(calls) == INTRADAY_SHARE + 1
+
+
+def test_core_bar_names_match_the_short_term_lane():
+    from optplat import shortterm
+    from optplat.ibkr_data import INTRADAY_CORE
+    assert tuple(INTRADAY_CORE) == tuple(shortterm.LANE_SYMBOLS)
+
+
+def test_a_held_bar_request_falls_to_the_research_fallback_and_says_why():
+    from optplat.fallback_data import IBKRWithYahooFallback
+    from optplat.ibkr_data import BudgetHeld
+
+    class Held(IBKRDataProvider):
+        def intraday_bars(self, symbol):
+            raise BudgetHeld('platform share of IBKR 5-minute bars used (12/12 per 10 min)')
+
+    class Y:
+        def intraday_bars(self, symbol):
+            return ['yahoo-bar']
+
+    w = IBKRWithYahooFallback(Held(lambda *a, **k: {}), Y, clock=lambda: NOW)
+    assert w.intraday_bars('AMD') == ['yahoo-bar']
+    assert 'platform share' in w.last_fallback['why']
