@@ -1219,3 +1219,11 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 * Owner: "I just want to make sure data flows properly and you can enter and exit fluidly"; approved loosening the main account's expiry window and spread limit to test today. `__main__` now builds the main strategy with 21-200 days and 25% spread, and the risk policy's spread limit at 25% (class defaults unchanged: 30-120 days, 10%/15%). Revert by removing `MAIN_*` in `__main__`.
 * `TradingEngine.pipeline_test_order` + `POST /api/paper/pipeline-test`: owner-triggered, ONE contract, verified IBKR quote required, normal risk policy and kill switch, usual limit offsets; feeds the IBKR mirror like any main-account order. Verified: pytest (948). Merged on the owner's standing instruction.
+
+## 2026-11-27 (Claude, owner request): error explainer and scheduled error check
+
+* Owner: an agent that reads the platform's errors and solves them. Live check of the Mac (build dc30bd9): NVDA `EMPTY_CHAIN (started with 0)` came from IBKR chain requests failing (bare `HTTPError` for all six names, so every chain came from Yahoo) and Yahoo also returning 0 NVDA rows. The "fills paused" pill is permanent on IBKR data: option lanes refuse every unverified chain and every mark, so they collect no evidence (backlog: blocked on the owner).
+* Built `errorhelp.py` (rules -> cause, fix, who acts, cycles in a row; unknown and code errors go to an agent), stored as `error_help` in each cycle report, shown on the Desk Act card, and `GET /api/errors` for cycle, lane and mirror errors. `ibkr_data.request` raises `ServiceError("HTTP <code> <reason>")` with the service's own fixed reason; the fallback keeps `last_chain_why` per symbol.
+* The scheduled error check (a Claude scheduled task) reads `/api/errors` on the Mac and opens PRs only for code bugs; it never changes settings, risk limits or the Alerter.
+* Verified: `python -m pytest -q` (11 new tests in `tests/test_errorhelp.py`, node check of the Act card lines). Not verified: the real IBKR service's refusal bodies on the Mac until the server picks up this build.
+* Merged by the agent under rule 6 (owner conversation).

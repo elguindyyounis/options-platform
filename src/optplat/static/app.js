@@ -2103,6 +2103,16 @@
 
   // "At a glance": plain-words reading of safety, money and what needs the owner. Pure function of API data.
   // Each item is {level: "ok"|"warn"|"bad", text}. Unknown or missing data is reported as unknown, never as fine.
+  // One explained error (engine errorhelp.py): what happened, the fix, who acts and how long it has been going on.
+  const WHO_TEXT = { wait: "usually clears by itself", you: "needs you", agent: "the error check will look at it",
+    alerter: "the shared IBKR data service (Alerter)", decision: "working as built; changing it is your call" };
+  function errorLine(h) {
+    const n = Number(h.repeats) || 0;
+    const when = n > 1 ? n + " cycles in a row" : (n === 1 ? "first time" : "");
+    return "Error: " + String(h.error || "") + ". " + String(h.cause || "") + " Fix: " + String(h.fix || "") +
+      " (" + (WHO_TEXT[h.who] || "unknown") + (when ? "; " + when : "") + ")";
+  }
+
   function buildGlance(h, st, pf, res, pol, nowMs) {
     const out = [];
     const add = (level, text) => out.push({ level, text });
@@ -2141,6 +2151,7 @@
     } else if (pf) add("warn", "Money at risk unknown: account equity or open premium is missing.");
     const c = st.last_cycle;
     if (!c) add("warn", "No cycle has run yet, so there is no recent activity to show.");
+    else if (Array.isArray(c.error_help) && c.error_help.length) c.error_help.forEach((h) => add(h.alert ? "bad" : "warn", errorLine(h)));
     else if (c.errors && c.errors.length) add("bad", "The last cycle had " + c.errors.length + " error(s): " + c.errors.join("; "));
     else add("ok", "Last cycle ran without errors (" + c.entries.length + " entry decision(s), " + c.exits.length + " exit decision(s)).");
     if (st.runner && st.runner.running && st.runner.consecutive_failures > 0)

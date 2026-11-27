@@ -25,6 +25,7 @@ from .events import EventCalendar
 from .regime import spy_source
 from .dataquality import MAX_FUTURE_SKEW_S, check_snapshot, frozen_issue, quote_fingerprint
 from .diagnostics import clock_status
+from .errorhelp import explain_cycle
 from .liquidity import size_vs_liquidity
 from .flow import CAVEATS as FLOW_CAVEATS, related_themes, scan_flow
 from .gex import ASSUMPTIONS as GEX_ASSUMPTIONS, net_gex
@@ -349,9 +350,20 @@ class TradingEngine:
             except Exception:  # noqa: BLE001 - a missing chart point must never affect a cycle
                 pass
         self._guard(report, "outcome_history", lambda: self._remember_outcomes(report))
+        self._guard(report, "error_help", lambda: self._explain_errors(report))
         self.store.set_state("last_cycle", json.dumps(report, default=str))
         self.store.audit("engine_cycle", None, {"exits": len(report["exits"]), "entries": len(report["entries"])})
         return report
+
+    def _explain_errors(self, report: dict[str, Any]) -> None:
+        """Cause, fix, who acts and cycles-in-a-row for each error (display only; see errorhelp)."""
+        sources: dict[str, str] = {}
+        for sym, why in dict(getattr(self.provider, "last_chain_why", {}) or {}).items():
+            sources[sym] = str(why)
+        for sym, src in (report.get("rejected_sources") or {}).items():
+            sources[sym] = f"data from {src}" + (f"; {sources[sym]}" if sym in sources else "")
+        previous = (self.last_cycle() or {}).get("error_help")
+        report["error_help"] = explain_cycle(report.get("errors") or [], previous if isinstance(previous, list) else None, sources)
 
     def _purge_recordings(self, report: dict[str, Any]) -> None:
         try:
@@ -457,6 +469,7 @@ class TradingEngine:
         if result.rejected:
             reason = next(i for i in issues if i.severity == "reject")
             report["errors"].append(f"data {snap.symbol}: rejected ({reason.kind}: {reason.detail})")
+            report.setdefault("rejected_sources", {})[snap.symbol] = snap.source
         return result.snapshot
 
     def _record(self, snap: MarketSnapshot, report: dict[str, Any]) -> None:

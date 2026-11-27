@@ -36,6 +36,7 @@ class IBKRWithYahooFallback(MarketDataProvider):
         self.name = f"{primary.name}+yahoo-fallback"
         self.fallback_counts: dict[str, int] = {"snapshot": 0, "daily_bars": 0, "intraday_bars": 0}
         self.last_fallback: Optional[dict[str, Any]] = None
+        self.last_chain_why: dict[str, str] = {}  # per symbol: why the newest chain did not come from IBKR
 
     # ---- the order path: IBKR only, never Yahoo
     def quotes_for(self, contracts: Sequence[OptionContract]) -> list[Quote]:
@@ -64,10 +65,12 @@ class IBKRWithYahooFallback(MarketDataProvider):
         try:
             snap = call(self.primary)
             if snap.rows:
+                self.last_chain_why.pop(symbol, None)
                 return snap
             why: str = "IBKR returned no usable quotes"
         except Exception as exc:  # noqa: BLE001
-            snap, why = None, f"IBKR failed: {type(exc).__name__}"
+            snap, why = None, f"IBKR failed: {type(exc).__name__}: {str(exc)[:80]}"
+        self.last_chain_why[symbol] = why
         yahoo = self._yahoo()
         if yahoo is None:
             if snap is not None:
