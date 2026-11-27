@@ -114,11 +114,12 @@ def test_equity_points_come_back_in_time_order_even_if_inserted_out_of_order():
 def test_every_nav_link_has_a_page_with_a_question(client):
     html = client[0].get("/").text
     pages = re.findall(r'<a class="nav" href="#/([a-z]+)" data-page="([a-z]+)"', html)
-    # Top bar (2026-11-27): four daily tabs up front, then the Research and Market menus. Same twelve pages.
+    # Side rail v3 (2026-11-27): four daily pages up front, then the Research and Market groups. Same twelve pages.
     assert [p for p, _ in pages] == ["desk", "trades", "lanes", "system", "research", "agents", "options", "swing", "shortterm", "tracker", "market", "context"]
-    tabs = html[html.index('<nav class="tabs"'):html.index("</nav>", html.index('<nav class="tabs"'))]
-    assert re.findall(r'data-page="([a-z]+)"', tabs) == ["desk", "trades", "lanes", "system"]
-    menus = re.findall(r'<details class="navmenu" id="menu-([a-z]+)">\s*<summary>([A-Za-z]+)</summary>', html)
+    rail = html[html.index('<nav class="rail"'):html.index("</nav>", html.index('<nav class="rail"'))]
+    daily = rail[:rail.index("<details")]
+    assert re.findall(r'data-page="([a-z]+)"', daily) == ["desk", "trades", "lanes", "system"]
+    menus = re.findall(r'<details class="navfold" id="menu-([a-z]+)">\s*<summary>([A-Za-z]+)</summary>', html)
     assert menus == [("research", "Research"), ("market", "Market")]
     for route, page in pages:
         assert route == page

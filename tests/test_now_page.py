@@ -105,6 +105,13 @@ console.log(JSON.stringify({
     W.optplatNavStatus({runner:{running:true},config:{}},{kill_switch:true},null,null),
     W.optplatNavStatus({runner:{running:false},config:{auto_entries:false,auto_exits:false}},{kill_switch:false},null,null),
   ],
+  path:W.optplatLanePath([
+    {source:'a',status:'CLOSED',pnl:10,closed_at:'2026-11-02T15:00:00Z',label:'X'},
+    {source:'a',status:'CLOSED',pnl:-4,closed_at:'2026-11-01T15:00:00Z',label:'Y'},
+    {source:'a',status:'OPEN',pnl:99,closed_at:null,label:'Z'},
+    {source:'a',status:'CLOSED',pnl:null,closed_at:'2026-11-03T15:00:00Z',label:'no result'},
+    {source:'b',status:'CLOSED',pnl:50,closed_at:'2026-11-01T16:00:00Z',label:'other lane'},
+  ],'a'),
   why:[W.optplatWhy({payload:{rank:1,of:6,score:96.15}}),W.optplatWhy({payload:{score:88.6}}),W.optplatWhy({payload:{rank:1,of:1,risk_failures:['too wide']}}),W.optplatWhy({payload:{rank:3,of:9,score:50}})],
 }));
 """
@@ -282,3 +289,7 @@ def test_top_bar_tabs_show_live_status(out):
     assert stopped["system"] == "loop stopped" and stopped["lanes"] == "1 ready" and stopped["trades"] == ""
     assert stalled["system"] == "loop stalled" and killed["system"] == "kill switch on"
     assert idle["system"] == ""  # stopped on purpose with nothing automatic switched on is not an alert
+
+
+def test_lane_path_is_the_running_result_of_closed_trades_in_closing_order(out):
+    assert [(p["label"], p["v"]) for p in out["path"]] == [("Y", -4), ("X", 6)]  # open, unpriced and other lanes left out

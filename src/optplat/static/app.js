@@ -122,10 +122,14 @@
     document.querySelectorAll("a.nav").forEach((a) => {
       if (a.getAttribute("data-page") === page) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
-    // A menu whose page is open is marked, and every menu closes once a page is chosen.
-    document.querySelectorAll("details.navmenu").forEach((m) => {
-      m.classList.toggle("has-current", !!m.querySelector('a.nav[data-page="' + page + '"]'));
-      m.open = false;
+    // A rail group holding the open page is marked and opened; otherwise it stays as the owner left it. On a phone the
+    // groups are pop-up sheets, so they close once a page is chosen.
+    document.querySelectorAll("details.navfold").forEach((m) => {
+      const here = !!m.querySelector('a.nav[data-page="' + page + '"]');
+      m.classList.toggle("has-current", here);
+      if (phone.matches) m.open = false;
+      else if (here) m.open = true;
+      else { try { m.open = localStorage.getItem("optplat.fold." + m.id) === "1"; } catch (e) { /* storage blocked */ } }
     });
     document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", lanes: "Lanes", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Lab", system: "System" })[page] + " - " : "") + "options-platform";
   }
@@ -268,9 +272,7 @@
   function renderNavStatus(ns) {
     $("nav-trades").textContent = ns.trades;
     $("nav-lanes").textContent = ns.lanes;
-    const dot = $("nav-system");
-    dot.hidden = !ns.system;
-    dot.title = ns.system; dot.setAttribute("aria-label", ns.system || "system fine");
+    $("nav-system").textContent = ns.system;
   }
 
   function renderStrip(health, status, portfolio) {
@@ -408,7 +410,7 @@
     kids(t, [
       kpi(String(report.open.length), "Open positions", money(a.open_premium) + " at cost"),
       kpi(report.win_rate_pct === null ? "n/a" : report.win_rate_pct + "%", "Winners", report.closed_trades ? "of closed trades" : "no closed trades"),
-      kpi(sm.current_drawdown_pct === null ? "n/a" : "-" + sm.current_drawdown_pct + "%", "Below its peak", "worst -" + (sm.max_drawdown_pct || 0) + "%"),
+      kpi(sm.current_drawdown_pct === null ? "n/a" : sm.current_drawdown_pct > 0 ? "-" + sm.current_drawdown_pct + "%" : "At its peak", "Below its peak", sm.max_drawdown_pct > 0 ? "worst -" + sm.max_drawdown_pct + "%" : "never below it"),
       kpi(money(a.equity) + (a.carried_at_cost > 0 ? " (estimate)" : ""), "Paper balance", "cash " + money(a.cash) + (a.carried_at_cost > 0 ? "; " + a.carried_at_cost + " open position(s) have no bid and are counted at cost, so a loss on them is not in this number" : report.closed_trades ? "" : "; untouched"), "dim"),
     ]);
     $("sample").textContent = report.caveat;
@@ -426,6 +428,31 @@
     if (r.open_complete === false) return span(prefix + sgn(r.open_pnl) + " (partial, " + r.open_unmarked + " unmarked)", "muted");
     return span(prefix + arrow(r.open_pnl) + sgn(r.open_pnl), tone(r.open_pnl));
   }
+  // Cumulative realized profit and loss of one lane, one point per closed trade in closing order (after fees, simulated).
+  // Pure function, exposed for tests. Trades without a close time or a result are left out, never guessed.
+  function lanePath(trades, source) {
+    const done = (trades || []).filter((t) => (!source || t.source === source) && t.status === "CLOSED" && t.pnl !== null && t.pnl !== undefined && t.closed_at)
+      .sort((a, b) => String(a.closed_at).localeCompare(String(b.closed_at)));
+    let run = 0;
+    return done.map((t) => { run += t.pnl; return { t: t.closed_at, v: Math.round(run * 100) / 100, label: t.label, pnl: t.pnl }; });
+  }
+  // A small line of a lane's cumulative result with a zero line. Its own scale; the caller labels the numbers.
+  // Under 10 closed trades the line is drawn muted and dashed: a shape on a handful of trades is noise.
+  function laneChart(host, pts, opts) {
+    const o = opts || {}, w = o.w || 240, h = o.h || 44, pad = o.axes ? 4 : 2;
+    host.replaceChildren();
+    if (pts.length < 2) { host.appendChild(el("div", pts.length ? "1 closed trade: no line yet" : "No closed trades yet", "muted small")); return; }
+    const vs = pts.map((p) => p.v).concat([0]), lo = Math.min.apply(null, vs), hi = Math.max.apply(null, vs), span = hi - lo || 1;
+    const X = (i) => pad + i / (pts.length - 1) * (w - 2 * pad), Y = (v) => pad + (hi - v) / span * (h - 2 * pad);
+    const root = svg("svg", { viewBox: "0 0 " + w + " " + h, role: "img", "aria-label": (o.name || "Lane") + ": cumulative result " + sgn(pts[pts.length - 1].v) + " over " + pts.length + " closed trades" });
+    root.appendChild(svg("line", { x1: 0, x2: w, y1: Y(0), y2: Y(0), class: "spark-zero" }));
+    root.appendChild(svg("polyline", { points: pts.map((p, i) => X(i).toFixed(1) + "," + Y(p.v).toFixed(1)).join(" "), class: "spark-line" + (o.thin ? " thin" : "") }));
+    if (o.axes) pts.forEach((p, i) => { const c = svg("circle", { cx: X(i), cy: Y(p.v), r: 5, class: "spark-hit" }); c.appendChild(svg("title", {}, fmtTime(p.t) + ": " + p.label + " " + sgn(p.pnl) + ", running " + sgn(p.v))); root.appendChild(c); });
+    const end = pts[pts.length - 1];
+    root.appendChild(svg("circle", { cx: X(pts.length - 1), cy: Y(end.v), r: 3, class: "spark-end" }));
+    host.appendChild(root);
+  }
+
   function renderAccounts(data) {
     const host = $("all-accounts"), note = $("all-accounts-note");
     if (!data) { empty(host, "Could not load the lanes", "Trades from every lane appear here once the page can reach /api/alltrades."); note.textContent = ""; return; }
@@ -459,6 +486,11 @@
         kidsList.push(ev);
       }
       kidsList.push(big, open);
+      if (!r.total_row) {
+        const sp = el("div", null, "lc-spark"), pts = lanePath(data.trades, r.source);
+        laneChart(sp, pts, { name: r.label, thin: evidenceLevel(r.closed) === 1 });
+        kidsList.push(sp);
+      }
       if (!r.total_row) {
         // A small bar: the share of the largest lane's size, split into closed (solid) and open (faded) results.
         const bar = el("div", null, "lc-bar");
@@ -555,7 +587,7 @@
     const c = {};
     (list || []).forEach((d) => { const v = decisionVerdict(d).id; c[v] = (c[v] || 0) + 1; });
     const names = { taken: "taken", exit: "exits placed", blocked: "blocked", skipped: "skipped", opinion: "opinion only", pending: "in progress", other: "other" };
-    const parts = Object.keys(names).filter((k) => c[k]).map((k) => c[k] + " " + names[k]);
+    const parts = Object.keys(names).filter((k) => c[k]).map((k) => c[k] + " " + (k === "exit" && c[k] === 1 ? "exit placed" : names[k]));
     return parts.length ? "Latest " + list.length + ": " + parts.join(", ") + "." : "";
   }
   // Filter groups for the feed. "Orders placed" is the only group that is a paper order; opinions never count as one.
@@ -2308,6 +2340,23 @@
     tbl.appendChild(tb); host.appendChild(tbl);
     host.appendChild(el("p", "\u2713 pass · \u2715 fail · \u2026 waiting for data · \u2014 does not apply. Every check is read from stored data; none is a judgement call.", "muted legend"));
     S.readyLanes = rows.filter((x, n) => ready[n].ready).map((x) => x.label);
+    // One chart per lane, each on its own scale (lanes trade very different sizes), labelled with its numbers.
+    const mult = $("ln-multiples");
+    mult.replaceChildren();
+    rows.forEach((x) => {
+      const pts = lanePath(all, x.source), card = el("div", null, "mult"), head = el("div", null, "mult-head"), lvl = evidenceLevel(x.closed);
+      kids(head, [el("b", x.label), el("span", EVIDENCE_WORDS[lvl] + " · " + x.closed + " closed", "tag " + (lvl === 3 ? "info" : "warn"))]);
+      const box = el("div", null, "mult-chart");
+      laneChart(box, pts, { name: x.label, w: 320, h: 110, axes: true, thin: lvl === 1 });
+      const foot = el("div", null, "mult-foot muted");
+      if (pts.length) {
+        const vals = pts.map((p) => p.v);
+        kids(foot, [span("now " + sgn(pts[pts.length - 1].v), tone(pts[pts.length - 1].v)), span(" · high " + sgn(Math.max.apply(null, vals)) + " · low " + sgn(Math.min.apply(null, vals))),
+          span(" · " + fmtTime(pts[0].t) + " to " + fmtTime(pts[pts.length - 1].t))]);
+      }
+      kids(card, [head, box, foot]);
+      mult.appendChild(card);
+    });
     // exposure
     const xb = $("ln-exposure");
     xb.replaceChildren();
@@ -2502,16 +2551,23 @@
   $("trade-search").addEventListener("input", (ev) => { S.query = ev.target.value; renderTrades(); });
   $("btn-drawer-close").addEventListener("click", closeTrade);
   $("scrim").addEventListener("click", closeTrade);
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { closeTrade(); document.querySelectorAll("details.navmenu[open]").forEach((m) => { m.open = false; }); } trapFocus(ev); });
-  document.addEventListener("click", (ev) => {
-    document.querySelectorAll("details.navmenu[open]").forEach((m) => { if (!m.contains(ev.target)) m.open = false; });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { closeTrade(); if (phone.matches) document.querySelectorAll("details.navfold[open]").forEach((m) => { m.open = false; }); } trapFocus(ev); });
+  // Rail groups remember whether the owner left them open (desktop). On a phone they are pop-up sheets: one at a time,
+  // closed by a tap outside.
+  document.querySelectorAll("details.navfold").forEach((m) => {
+    m.addEventListener("toggle", () => { if (phone.matches && m.open) document.querySelectorAll("details.navfold[open]").forEach((o) => { if (o !== m) o.open = false; }); });
+    // only a click by the owner is remembered, not the page opening the group it is on
+    m.querySelector("summary").addEventListener("click", () => setTimeout(() => {
+      if (!phone.matches) { try { localStorage.setItem("optplat.fold." + m.id, m.open ? "1" : "0"); } catch (e) { /* storage blocked */ } }
+    }, 0));
   });
-  document.querySelectorAll("details.navmenu").forEach((m) => m.addEventListener("toggle", () => {
-    if (m.open) document.querySelectorAll("details.navmenu[open]").forEach((o) => { if (o !== m) o.open = false; }); // one menu at a time
-  }));
+  document.addEventListener("click", (ev) => {
+    if (phone.matches) document.querySelectorAll("details.navfold[open]").forEach((m) => { if (!m.contains(ev.target)) m.open = false; });
+  });
   const onBreak = () => { if (S.trades && route() === "trades") renderTrades(); if (route() === "shortterm") loadShortterm().catch(() => {}); if (route() === "swing") loadSwing().catch(() => {}); if (route() === "options" && S.opt) renderOptions(); };
   if (phone.addEventListener) phone.addEventListener("change", onBreak); else if (phone.addListener) phone.addListener(onBreak);
-  window.addEventListener("hashchange", () => { if (takeTokenFromUrl()) { refresh(); return; } showPage(); if (S.connected && route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); if (S.connected) loadPage().catch((e) => { $("updated").textContent = "Error: " + e.message; }); });
+  let lastRoute = route();
+  window.addEventListener("hashchange", () => { if (takeTokenFromUrl()) { refresh(); return; } const now = route(); if (now !== lastRoute) { window.scrollTo(0, 0); lastRoute = now; } showPage(); if (S.connected && route() === "desk" && !$("equity-chart").hidden) drawEquity($("equity-chart"), S.lastPoints); if (S.connected) loadPage().catch((e) => { $("updated").textContent = "Error: " + e.message; }); });
 
   let resizeTimer = null;
   window.addEventListener("resize", () => {
@@ -2524,7 +2580,7 @@
   window.optplatDecisionFilter = filterDecisions;
   window.optplatTally = decisionTally;
   window.optplatSystem = systemReadiness; window.optplatLabGate = labGate; window.optplatLaneVerdict = laneVerdict; window.optplatNowState = nowState; window.optplatEvidence = evidenceLevel; window.optplatExposure = exposure; window.optplatDigest = digestText;
-  window.optplatEvidenceGap = evidenceGap; window.optplatNeedAction = needAction; window.optplatDisagreement = disagreement; window.optplatWhy = whyOf; window.optplatReadiness = laneReadiness; window.optplatNavStatus = navStatus; window.optplatMirrorCells = mirrorCells; window.optplatMirrorLine = mirrorLine;
+  window.optplatEvidenceGap = evidenceGap; window.optplatNeedAction = needAction; window.optplatDisagreement = disagreement; window.optplatWhy = whyOf; window.optplatReadiness = laneReadiness; window.optplatNavStatus = navStatus; window.optplatLanePath = lanePath; window.optplatMirrorCells = mirrorCells; window.optplatMirrorLine = mirrorLine;
   window.optplatGlance = buildGlance; // exposed so tests can run it under node
   S.since = lastSeen(); // the previous look, kept for this whole visit so the digest does not reset itself every refresh
   window.addEventListener("pagehide", markSeen);
