@@ -464,6 +464,9 @@
   .tl2 li.info .dot::before { background:var(--series-1); } .tl2 li.warn .dot::before { background:var(--warn); }
   .feed-day { font:600 11px var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--mut); padding:12px 0 4px; border-bottom:1px solid var(--line-soft); }
   .feed-day:first-child { padding-top:2px; }
+  .spark-label { font:500 10px var(--mono); fill:var(--mut); }
+  .lc-cap { font-size:12.5px; } .lc-cap .gain { color:var(--gain); } .lc-cap .loss { color:var(--loss); }
+  .mult-cap { font-size:13px; } .mult-cap .gain { color:var(--gain); } .mult-cap .loss { color:var(--loss); }
 </style>
 </head>
 <body>
@@ -625,7 +628,7 @@
         <div class="panel" style="padding:0;overflow:hidden"><div class="scroll" id="ln-board"></div></div>
         <div class="panel">
           <h2>Results over time, per lane</h2>
-          <p class="q">Cumulative result after fees, one point per closed trade. Each chart has its own scale because lanes trade very different sizes; compare the numbers under each, not the heights. Dashed lines have under 10 closed trades. Hover a point for the trade.</p>
+          <p class="q">Each lane's balance from the capital it works with, after fees, one point per closed trade. All charts share one scale in % of that capital, so a taller line really did better for its size. Only the options account and the 10x challenge have a real starting balance; for the other lanes the capital is the most they can have at risk at once (size per trade × most open). Dashed lines have under 10 closed trades. Hover a point for the trade.</p>
           <div id="ln-multiples" class="multiples"></div>
         </div>
         <div class="deskcols">

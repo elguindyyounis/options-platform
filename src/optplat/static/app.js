@@ -633,20 +633,52 @@
   }
   // A small line of a lane's cumulative result with a zero line. Its own scale; the caller labels the numbers.
   // Under 10 closed trades the line is drawn muted and dashed: a shape on a handful of trades is noise.
-  function laneChart(host, pts, opts) {
-    const o = opts || {}, w = o.w || 240, h = o.h || 44, pad = o.axes ? 4 : 2;
+  // The balance of one lane from its capital (owner, 2026-11-28): the line starts at the capital (dashed "start" line) and
+  // moves with each closed trade. With `base` (the capital) the values are drawn as % of it, so several lanes can share one
+  // % scale (`lo`/`hi`) and their heights compare; without a capital it falls back to dollars on its own scale.
+  const money0 = (v) => money(v).replace(/\.00$/, "");
+  function lanePct(pts, base) {
+    return base ? pts.map((p) => ({ ...p, pct: Math.round(p.v / base * 10000) / 100 })) : pts.map((p) => ({ ...p, pct: null }));
+  }
+  function laneChart(host, ptsIn, opts) {
+    const o = opts || {}, w = o.w || 240, h = o.h || 44, pad = o.axes ? 4 : 2, base = o.base || 0;
     host.replaceChildren();
-    if (pts.length < 2) { host.appendChild(el("div", pts.length ? "1 closed trade: no line yet" : "No closed trades yet", "muted small")); return; }
-    const vs = pts.map((p) => p.v).concat([0]), lo = Math.min.apply(null, vs), hi = Math.max.apply(null, vs), span = hi - lo || 1;
+    if (!ptsIn.length) { host.appendChild(el("div", "No closed trades yet", "muted small")); return; }
+    // start at the capital: a point before the first close
+    const pts = [{ t: null, v: 0, label: "start", pnl: 0 }].concat(ptsIn);
+    const val = (p) => (base ? p.v / base * 100 : p.v);
+    const vs = pts.map(val).concat([0]);
+    const lo = o.lo !== undefined ? Math.min(o.lo, Math.min.apply(null, vs)) : Math.min.apply(null, vs);
+    const hi = o.hi !== undefined ? Math.max(o.hi, Math.max.apply(null, vs)) : Math.max.apply(null, vs), span = hi - lo || 1;
     const X = (i) => pad + i / (pts.length - 1) * (w - 2 * pad), Y = (v) => pad + (hi - v) / span * (h - 2 * pad);
-    const root = svg("svg", { viewBox: "0 0 " + w + " " + h, role: "img", "aria-label": (o.name || "Lane") + ": cumulative result " + sgn(pts[pts.length - 1].v) + " over " + pts.length + " closed trades" });
+    const last = pts[pts.length - 1];
+    const label = base ? (o.name || "Lane") + ": " + money(base + last.v) + " from " + money(base) + " (" + (last.v >= 0 ? "+" : "") + (last.v / base * 100).toFixed(1) + "%) over " + ptsIn.length + " closed trades"
+      : (o.name || "Lane") + ": cumulative result " + sgn(last.v) + " over " + ptsIn.length + " closed trades";
+    const root = svg("svg", { viewBox: "0 0 " + w + " " + h, role: "img", "aria-label": label });
     root.appendChild(svg("line", { x1: 0, x2: w, y1: Y(0), y2: Y(0), class: "spark-zero" }));
-    root.appendChild(svg("polyline", { points: pts.map((p, i) => X(i).toFixed(1) + "," + Y(p.v).toFixed(1)).join(" "), class: "spark-line" + (o.thin ? " thin" : "") }));
-    if (o.axes) pts.forEach((p, i) => { const c = svg("circle", { cx: X(i), cy: Y(p.v), r: 5, class: "spark-hit" }); c.appendChild(svg("title", {}, fmtTime(p.t) + ": " + p.label + " " + sgn(p.pnl) + ", running " + sgn(p.v))); root.appendChild(c); });
-    const end = pts[pts.length - 1];
-    root.appendChild(svg("circle", { cx: X(pts.length - 1), cy: Y(end.v), r: 3, class: "spark-end" }));
+    if (o.axes) {
+      const t = svg("text", { x: pad + 2, y: Y(0) - 4, class: "spark-label" }, base ? "start " + money0(base) : "0");
+      root.appendChild(t);
+    }
+    root.appendChild(svg("polyline", { points: pts.map((p, i) => X(i).toFixed(1) + "," + Y(val(p)).toFixed(1)).join(" "), class: "spark-line" + (o.thin ? " thin" : "") }));
+    if (o.axes) pts.forEach((p, i) => {
+      if (!p.t) return;
+      const c = svg("circle", { cx: X(i), cy: Y(val(p)), r: 5, class: "spark-hit" });
+      c.appendChild(svg("title", {}, fmtTime(p.t) + ": " + p.label + " " + sgn(p.pnl) + (base ? ", balance " + money(base + p.v) + " (" + (p.v >= 0 ? "+" : "") + (p.v / base * 100).toFixed(1) + "%)" : ", running " + sgn(p.v))));
+      root.appendChild(c);
+    });
+    root.appendChild(svg("circle", { cx: X(pts.length - 1), cy: Y(val(last)), r: 3, class: "spark-end" }));
     host.appendChild(root);
   }
+  // "Capital $75,000 · +33.9% on it": the result read against the capital behind it. Pure; exposed for tests.
+  function capitalLine(src) {
+    const c = src && src.capital;
+    if (!c || !c.amount) return null;
+    const pct = src.return_pct;
+    return { head: "Capital " + money0(c.amount) + (pct === null || pct === undefined ? "" : " · " + (pct >= 0 ? "+" : "") + pct.toFixed(1) + "% on it"),
+      basis: c.basis === "balance" ? "starting balance" : "most at risk at once", text: c.text, tone: pct > 0 ? "gain" : pct < 0 ? "loss" : "" };
+  }
+  window.optplatCapitalLine = capitalLine; window.optplatLanePct = lanePct;
 
   function renderAccounts(data) {
     const host = $("all-accounts"), note = $("all-accounts-note");
@@ -682,8 +714,10 @@
       }
       kidsList.push(big, open);
       if (!r.total_row) {
+        const cl = capitalLine(r);
+        if (cl) { const c = el("div", null, "lc-cap"); kids(c, [el("span", cl.head, cl.tone), el("span", " " + cl.basis, "muted")]); c.title = cl.text; kidsList.push(c); }
         const sp = el("div", null, "lc-spark"), pts = lanePath(data.trades, r.source);
-        laneChart(sp, pts, { name: r.label, thin: evidenceLevel(r.closed) === 1 });
+        laneChart(sp, pts, { name: r.label, thin: evidenceLevel(r.closed) === 1, base: r.capital && r.capital.amount });
         kidsList.push(sp);
       }
       if (!r.total_row) {
@@ -2622,28 +2656,40 @@
       tr.appendChild(evTd);
       r.checks.forEach((k) => tr.appendChild(el("td", CHECK_MARK[k.state] + k.text, "ck " + k.state)));
       const resTd = el("td", null, "r");
-      kids(resTd, [span(arrow(x.realized_pnl) + sgn(x.realized_pnl), "num " + (r.gap.level === 1 ? "muted" : tone(x.realized_pnl))), el("div", r.gap.level === 1 ? "not judgeable" : verdicts[n].text, "muted small")]);
+      const cl = capitalLine(x);
+      kids(resTd, [span(arrow(x.realized_pnl) + sgn(x.realized_pnl), "num " + (r.gap.level === 1 ? "muted" : tone(x.realized_pnl))),
+        cl && x.return_pct !== null && x.return_pct !== undefined ? el("div", (x.return_pct >= 0 ? "+" : "") + x.return_pct.toFixed(1) + "% of " + money0(x.capital.amount), "small " + (r.gap.level === 1 ? "muted" : tone(x.return_pct))) : el("span"),
+        el("div", r.gap.level === 1 ? "not judgeable" : verdicts[n].text, "muted small")]);
       tr.appendChild(resTd);
       tb.appendChild(tr);
     });
     tbl.appendChild(tb); host.appendChild(tbl);
     host.appendChild(el("p", "\u2713 pass · \u2715 fail · \u2026 waiting for data · \u2014 does not apply. Every check is read from stored data; none is a judgement call.", "muted legend"));
     S.readyLanes = rows.filter((x, n) => ready[n].ready).map((x) => x.label);
-    // One chart per lane, each on its own scale (lanes trade very different sizes), labelled with its numbers.
+    // One chart per lane, each starting at its capital and drawn as % of it on ONE shared scale, so heights compare across
+    // lanes of very different sizes. The capital and how it is worked out sit above each chart.
     const mult = $("ln-multiples");
     mult.replaceChildren();
-    rows.forEach((x) => {
-      const pts = lanePath(all, x.source), card = el("div", null, "mult"), head = el("div", null, "mult-head"), lvl = evidenceLevel(x.closed);
+    const paths = rows.map((x) => lanePath(all, x.source));
+    let plo = 0, phi = 0;
+    rows.forEach((x, n) => { const cap = x.capital && x.capital.amount; if (cap) paths[n].forEach((p) => { plo = Math.min(plo, p.v / cap * 100); phi = Math.max(phi, p.v / cap * 100); }); });
+    rows.forEach((x, n) => {
+      const pts = paths[n], card = el("div", null, "mult"), head = el("div", null, "mult-head"), lvl = evidenceLevel(x.closed), cap = x.capital && x.capital.amount;
       kids(head, [el("b", x.label), el("span", EVIDENCE_WORDS[lvl] + " · " + x.closed + " closed", "tag " + (lvl === 3 ? "info" : "warn"))]);
+      const capRow = el("div", null, "mult-cap");
+      if (cap) {
+        const nowBal = cap + (pts.length ? pts[pts.length - 1].v : 0), pct = pts.length ? pts[pts.length - 1].v / cap * 100 : 0;
+        kids(capRow, [el("span", "Started with " + money0(cap)), el("span", " → " + money0(Math.round(nowBal)) + " (" + (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%)", tone(pct)), el("div", x.capital.text, "muted small")]);
+      } else capRow.appendChild(el("span", "No capital recorded for this lane; drawn in dollars on its own scale.", "muted small"));
       const box = el("div", null, "mult-chart");
-      laneChart(box, pts, { name: x.label, w: 320, h: 110, axes: true, thin: lvl === 1 });
+      laneChart(box, pts, { name: x.label, w: 320, h: 110, axes: true, thin: lvl === 1, base: cap, lo: cap ? plo : undefined, hi: cap ? phi : undefined });
       const foot = el("div", null, "mult-foot muted");
-      if (pts.length) {
-        const vals = pts.map((p) => p.v);
-        kids(foot, [span("now " + sgn(pts[pts.length - 1].v), tone(pts[pts.length - 1].v)), span(" · high " + sgn(Math.max.apply(null, vals)) + " · low " + sgn(Math.min.apply(null, vals))),
+      if (pts.length && cap) {
+        const pcts = pts.map((p) => p.v / cap * 100);
+        kids(foot, [span("best " + (Math.max(0, ...pcts) >= 0 ? "+" : "") + Math.max(0, ...pcts).toFixed(1) + "% · worst " + Math.min(0, ...pcts).toFixed(1) + "%"),
           span(" · " + fmtTime(pts[0].t) + " to " + fmtTime(pts[pts.length - 1].t))]);
       }
-      kids(card, [head, box, foot]);
+      kids(card, [head, capRow, box, foot]);
       mult.appendChild(card);
     });
     // exposure
