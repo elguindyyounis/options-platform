@@ -52,4 +52,6 @@ rollback() {
 git merge --ff-only --quiet "$NEW"
 if ! "$APP/.venv/bin/python" -m pip install --quiet -e "$SPEC" || ! "$APP/.venv/bin/python" -m compileall -q src; then rollback; exit 1; fi
 echo "updated $OLD -> $NEW; restarting"
-launchctl kickstart -k "gui/$(id -u)/$LABEL" || echo "restart failed; launchd will start the new build on next login"
+launchctl kickstart -k "gui/$(id -u)/$LABEL" \
+  || launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/$LABEL.plist" \
+  || echo "restart failed; the watchdog retries every 5 minutes"

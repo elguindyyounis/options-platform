@@ -1,6 +1,6 @@
 #!/bin/bash
-# One-time setup of the managed Mac install: a checkout of `stable`, a venv, and two LaunchAgents
-# (the server, and an hourly update check). Re-running it is safe. Needs python 3.10+, git, and git access to the repo.
+# One-time setup of the managed Mac install: a checkout of `stable`, a venv, and LaunchAgents (the server, an hourly
+# update check, the nightly export and a 5-minute watchdog that keeps the server loaded and answering). Re-running it is safe. Needs python 3.10+, git, and git access to the repo.
 #   bash deploy/install_mac.sh [repo-url]
 set -euo pipefail
 REPO="${1:-https://github.com/elguindyyounis/options-platform.git}"
@@ -23,6 +23,16 @@ if [ ! -f "$DATA/config.env" ]; then
 fi
 chmod 600 "$DATA/config.env"
 # Keep earlier paper history: stop the server if it runs, then COPY the best earlier optplat.db into the data folder (see deploy/migrate_db.py).
+# If anything below fails after the server was stopped, start it again on the way out, so a half-finished install never
+# leaves the dashboard down (2026-11-27: that is how the server went missing once).
+reload_server() {
+  local p="$AGENTS/com.optionsplatform.server.plist"
+  if [ -f "$p" ] && ! launchctl print "gui/$(id -u)/com.optionsplatform.server" >/dev/null 2>&1; then
+    echo "Install stopped early; starting the server again so the dashboard stays up."
+    launchctl bootstrap "gui/$(id -u)" "$p" 2>/dev/null || true
+  fi
+}
+trap reload_server EXIT
 launchctl bootout "gui/$(id -u)/com.optionsplatform.server" 2>/dev/null || true
 "$APP/.venv/bin/python" "$APP/deploy/migrate_db.py" "$DATA" "$HOME/Downloads" "$HOME/Documents" "$HOME/Desktop" "$HOME" 2>&1 | sed 's/^/History: /' || true
 write_plist() {  # label, then the program arguments, then extra keys
@@ -35,10 +45,12 @@ write_plist() {  # label, then the program arguments, then extra keys
 write_plist com.optionsplatform.server '<key>KeepAlive</key><true/>' /bin/bash "$APP/deploy/server-wrapper.sh"
 write_plist com.optionsplatform.autoupdate '<key>StartInterval</key><integer>3600</integer>' /bin/bash "$APP/deploy/update.sh"
 write_plist com.optionsplatform.export '<key>StartCalendarInterval</key><dict><key>Hour</key><integer>21</integer><key>Minute</key><integer>15</integer></dict>' /bin/bash "$APP/deploy/export_push.sh"
-for l in com.optionsplatform.server com.optionsplatform.autoupdate com.optionsplatform.export; do
+write_plist com.optionsplatform.watchdog '<key>StartInterval</key><integer>300</integer>' /bin/bash "$APP/deploy/watchdog.sh"
+for l in com.optionsplatform.server com.optionsplatform.autoupdate com.optionsplatform.export com.optionsplatform.watchdog; do
   launchctl bootout "gui/$(id -u)/$l" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$AGENTS/$l.plist"
 done
+rm -f "$DATA/server-paused"  # installing means the owner wants it running
 echo "Installed. Dashboard: http://127.0.0.1:8800  (token is in: $DATA/config.env)"
 # One-click link that carries the token in the URL fragment (never sent to the server). Opening it once connects that browser for good.
 TOKEN="$(sed -n 's/^OPTPLAT_API_TOKEN=//p' "$DATA/config.env" | head -n1)"

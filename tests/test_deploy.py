@@ -92,3 +92,64 @@ def test_the_updater_installs_the_ibkr_extra_only_when_the_owner_switched_it_on(
                              capture_output=True, text=True, check=True).stdout.strip()
         assert out == want, (config, out)
 
+
+
+# ---- watchdog (2026-11-27): the server once stayed down because its LaunchAgent was unloaded and nothing reloaded it.
+def _watchdog(tmp_path, *, loaded, healthy, plist=True, paused=False, updating=False):
+    import subprocess
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    data, agents, calls = tmp_path / "data", tmp_path / "agents", tmp_path / "calls"
+    data.mkdir(); agents.mkdir()
+    if plist:
+        (agents / "com.optionsplatform.server.plist").write_text("<plist/>")
+    if paused:
+        (data / "server-paused").write_text("")
+    if updating:
+        (data / "update.lock").mkdir()
+    fake_lc = tmp_path / "launchctl"
+    fake_lc.write_text(f'#!/bin/bash\necho "$@" >>"{calls}"\n[ "$1" = print ] && exit {0 if loaded else 113}\nexit 0\n')
+    fake_curl = tmp_path / "curl"
+    fake_curl.write_text(f"#!/bin/bash\nexit {0 if healthy else 7}\n")
+    fake_lc.chmod(0o755); fake_curl.chmod(0o755)
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "OPTPLAT_DATA_DIR": str(data), "OPTPLAT_AGENTS_DIR": str(agents),
+           "OPTPLAT_LAUNCHCTL": str(fake_lc), "OPTPLAT_CURL": str(fake_curl), "OPTPLAT_WATCHDOG_WAIT_S": "0"}
+    script = Path(deploy.ROOT) / "deploy" / "watchdog.sh"
+    subprocess.run(["bash", str(script)], env=env, check=True, timeout=30)
+    made = calls.read_text().splitlines() if calls.exists() else []
+    log = (data / "watchdog.log").read_text() if (data / "watchdog.log").exists() else ""
+    return [c for c in made if not c.startswith("print")], log
+
+
+def test_watchdog_reloads_a_server_that_is_not_loaded(tmp_path):
+    made, log = _watchdog(tmp_path, loaded=False, healthy=False)
+    assert len(made) == 1 and made[0].startswith("bootstrap gui/") and made[0].endswith("com.optionsplatform.server.plist")
+    assert "loaded it again" in log
+
+
+def test_watchdog_restarts_a_loaded_server_that_stopped_answering(tmp_path):
+    made, log = _watchdog(tmp_path, loaded=True, healthy=False)
+    assert made == [m for m in made if m.startswith("kickstart -k gui/")] and len(made) == 1
+    assert made[0].endswith("/com.optionsplatform.server") and "restarting it" in log
+
+
+def test_watchdog_leaves_a_healthy_server_alone(tmp_path):
+    made, log = _watchdog(tmp_path, loaded=True, healthy=True)
+    assert made == [] and log == ""
+
+
+def test_watchdog_respects_a_deliberate_pause_and_a_running_update(tmp_path):
+    assert _watchdog(tmp_path / "a", loaded=False, healthy=False, paused=True)[0] == []
+    assert _watchdog(tmp_path / "b", loaded=False, healthy=False, updating=True)[0] == []
+
+
+def test_watchdog_without_an_install_only_says_so(tmp_path):
+    made, log = _watchdog(tmp_path, loaded=False, healthy=False, plist=False)
+    assert made == [] and "install_mac.sh" in log
+
+
+def test_installer_adds_the_watchdog_and_never_leaves_the_server_unloaded():
+    text = (Path(deploy.ROOT) / "deploy" / "install_mac.sh").read_text()
+    assert "com.optionsplatform.watchdog" in text and "deploy/watchdog.sh" in text and "<integer>300</integer>" in text
+    assert text.index("trap reload_server EXIT") < text.index('launchctl bootout "gui/$(id -u)/com.optionsplatform.server"')
+    launcher = (Path(deploy.ROOT) / "start-platform.command").read_text()
+    assert launcher.index("com.optionsplatform.server.plist") < launcher.index(".venv/bin/python -m optplat")
