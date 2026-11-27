@@ -3,6 +3,21 @@
 Append-only. One entry per agent run: date, what changed, what was verified, what was not.
 
 
+## 2026-11-27: "Next open" page with certainty tiers and planned vs taken (with the owner)
+
+* The owner asked whether the planned trades are 100% and whether the plan has to sit on the Desk. Neither: each plan line now
+  has a tier (Will sell: fixed by the bar or calendar; Likely sell: premium stop/target, depends on the opening bid; Likely buy:
+  within the lane's first 3 tries with a contract picked; Possible buy: no usable contract yet or below the cut; Won't trade:
+  blocked), each buy carries its rank in the lane's own try order, and the plan moved to its own daily tab "Next open". The Desk
+  keeps one line linking to it.
+* Each refresh also keeps the plan under its session date. `GET /api/next-session/review` compares every started session's plan
+  with the lane trades opened or closed that New York day (taken or not, same contract or not, trades taken without a plan) and
+  sums hit rates by tier, so the owner can see over time how far to trust the preview.
+* Nav test updated for the deliberate new page (13 pages); no test weakened. 944 tests pass (8 new). Preview and review only:
+  no order, limit, default, broker path or auth touched.
+* Not verified before merge: real sessions (the first review needs today's open).
+* Merged by the agent with the owner in the conversation (rule 6 owner decision 2026-11-27).
+
 ## 2026-11-27: next-session plan on the Desk (with the owner)
 
 * The owner asked how to know what the platform will trade after a weekend, a holiday or overnight. New `nextsession.py`:
