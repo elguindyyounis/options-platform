@@ -101,6 +101,11 @@ Existing items, in order:
 
 ## Blocked on a human
 
+* **Option lanes on IBKR data (found 2026-11-27).** `pick_contract` refuses every unverified IBKR or fallback chain and
+  `_marks` returns nothing under `execution_veto`, so no lane can open, price or exit a trade on `OPTPLAT_DATA=ibkr`.
+  Proposed (no loosening): verify the one chosen contract with `execution_quote` at entry and for marks. Spends the
+  Alerter's shared historical budget, so it waits for the owner's OK.
+
 * **Validating any signal.** `VALIDATED_SIGNALS` in `signals.py` is empty. Adding a name is the owner's
   decision, after `study_signal` and a pre-registered experiment support it.
 
@@ -135,6 +140,12 @@ Existing items, in order:
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-27: error explainer (owner request): `errorhelp.py` gives each cycle and lane error a cause, a fix, who acts
+  (wait / you / agent / Alerter / decision) and cycles in a row; the Desk Act card shows it, `GET /api/errors` returns
+  cycle, lane and IBKR-mirror errors explained for the scheduled error check. IBKR service refusals now keep their
+  status and reason (`HTTP 503 SNAPSHOT_DEADLINE`, not a bare `HTTPError`), and the fallback remembers per symbol why a
+  chain left IBKR. Display only.
 
 * 2026-11-27: next-session plan (Desk card, API): what the swing lanes would buy and sell at the next open, built after each close (`nextsession.py`).
 

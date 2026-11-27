@@ -169,7 +169,8 @@ const strat=g({mode:'PAPER'},{config:{},strategy:{name:'flow-otm',version:'1.0'}
 const cal=g({mode:'PAPER'},{config:{},market:{open:false,reason:'x',upcoming:[{date:'2026-11-26',kind:'closed'},{date:'2026-11-27',kind:'early_close'}]}},{kill_switch:false},null,null,now);
 const ordered=window.optplatGlanceOrder(bad).map(i=>i.level);const stable=window.optplatGlanceOrder([{level:'ok',text:'a'},{level:'warn',text:'b'},{level:'ok',text:'c'},{level:'bad',text:'d'},{level:'warn',text:'e'}]).map(i=>i.text);
 const halt=g({mode:'PAPER'},{config:{auto_entries:true,auto_exits:true}},{kill_switch:false},null,null,now);
-console.log(JSON.stringify({halt,ordered,stable,cal,strat,riskLow,riskHigh,riskMissing,bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
+const helped=g({mode:'PAPER'},{config:{},last_cycle:{errors:['data NVDA: rejected (EMPTY_CHAIN: x)'],entries:[],exits:[],error_help:[{error:'data NVDA: rejected (EMPTY_CHAIN: x)',cause:'No source gave a usable option quote for NVDA.',fix:'Nothing if it clears.',who:'wait',repeats:1,alert:false},{error:'data SPY: rejected (FUTURE_TIMESTAMP: y)',cause:'Clock behind.',fix:'Set time automatically.',who:'you',repeats:4,alert:true}]}},{kill_switch:false},null,null,now);
+console.log(JSON.stringify({helped,halt,ordered,stable,cal,strat,riskLow,riskHigh,riskMissing,bad,none,stale,fresh,srvStalled,srvFail,srvOk}));
 """
     out = subprocess.run([node, "-e", harness, str(root / "app.js")], capture_output=True, text=True, check=True).stdout
     r = json.loads(out)
@@ -198,6 +199,13 @@ console.log(JSON.stringify({halt,ordered,stable,cal,strat,riskLow,riskHigh,riskM
     assert any("reports the loop as stalled" in i["text"] and i["level"] == "warn" for i in r["srvStalled"])
     assert any("failed 3 cycle(s) in a row" in i["text"] and i["level"] == "bad" for i in r["srvFail"])
     assert not any("stalled" in i["text"] for i in r["srvOk"])
+
+    # explained errors (errorhelp.py): a one-off wait is a warning, an alert is bad, each says cause, fix and who acts
+    helped = [i for i in r["helped"] if i["text"].startswith("Error: ")]
+    assert [i["level"] for i in helped] == ["warn", "bad"]
+    assert "Fix: Nothing if it clears." in helped[0]["text"] and "usually clears by itself; first time" in helped[0]["text"]
+    assert "needs you; 4 cycles in a row" in helped[1]["text"]
+    assert not any("The last cycle had" in i["text"] for i in r["helped"])
     # no daily loss halt exists: say so when automatic entries are on, and only then
     assert any("no daily loss halt" in i["text"] and i["level"] == "warn" for i in r["halt"])
     assert not any("daily loss halt" in i["text"] for i in r["srvOk"])

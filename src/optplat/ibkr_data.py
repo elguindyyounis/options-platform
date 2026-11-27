@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 import math
 from urllib.parse import urlencode
+from urllib.error import HTTPError
 from urllib.request import Request, build_opener, ProxyHandler, HTTPRedirectHandler
 
 from .marketdata import Bar, ChainRow, IntradayBar, MarketDataProvider, MarketSnapshot
@@ -24,6 +25,21 @@ DAILY_TTL_S = 6 * 3600
 VERIFIED_MAX_AGE_S = 5.0   # the service's own limit for its cross-checked bid/ask
 VERIFIED_SOURCE = 'ibkr-paper-verified'
 TOKEN_PATH = Path.home() / 'Library/Application Support/OptionsMarketData/token'
+
+
+class ServiceError(RuntimeError):
+    """The shared service refused a request. Its text is the HTTP status and the service's own fixed reason string."""
+
+
+def service_error(exc: HTTPError) -> ServiceError:
+    reason = ''
+    try:
+        body = json.loads(exc.read(2000) or b'{}')
+        reason = str(body.get('reason') or body.get('error') or '')
+    except Exception:  # noqa: BLE001 - an unreadable body still reports its status
+        pass
+    reason = ''.join(ch for ch in reason[:80] if ch.isprintable())
+    return ServiceError(f'HTTP {exc.code}' + (f' {reason}' if reason else ''))
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -41,8 +57,12 @@ def request(resource: str, params=None, *, timeout=80):
     if params:
         url += '?'+urlencode(params)
     req = Request(url, headers={'Authorization': 'Bearer '+token})
-    with build_opener(ProxyHandler({}), NoRedirect()).open(req, timeout=timeout) as response:
-        raw = response.read(4000001)
+    try:
+        with build_opener(ProxyHandler({}), NoRedirect()).open(req, timeout=timeout) as response:
+            raw = response.read(4000001)
+    except HTTPError as exc:
+        # Without the status and reason every refusal read as a bare "HTTPError" and could not be diagnosed.
+        raise service_error(exc) from None
     if len(raw) > 4000000:
         raise RuntimeError('Market-data response exceeds limit')
     return json.loads(raw)

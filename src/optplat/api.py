@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import re
 from datetime import date
@@ -461,6 +462,23 @@ def create_app(
         @app.get("/api/optlanes", dependencies=[Depends(auth)])
         def optlanes_report() -> dict[str, Any]:
             return {**engine.option_lanes.reports(engine.clock()), "enabled": engine.config().option_lanes_enabled}
+
+        @app.get("/api/errors", dependencies=[Depends(auth)])
+        def errors_report() -> dict[str, Any]:
+            from .errorhelp import error_report
+            from .optionlanes import ALL_PARAMS
+            lanes = []
+            for p in ALL_PARAMS:
+                raw = engine.store.get_state(f"optlane_last_result:{p.lane}", "")
+                try:
+                    lanes.append((p.lane, p.label, json.loads(raw) if raw else None))
+                except ValueError:
+                    lanes.append((p.lane, p.label, {"errors": ["stored lane result unreadable"]}))
+            try:
+                mirror = (manager.broker.healthcheck() or {}).get("ibkr_mirror")
+            except Exception:  # noqa: BLE001 - a broker without a status still gets its errors explained
+                mirror = None
+            return error_report(engine.last_cycle(), lanes, mirror if isinstance(mirror, dict) else None)
 
         @app.get("/api/challenge", dependencies=[Depends(auth)])
         def challenge_report() -> dict[str, Any]:
