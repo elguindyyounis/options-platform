@@ -2,7 +2,7 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
   const phone = window.matchMedia("(max-width:860px)");
-  const PAGES = ["desk", "trades", "lanes", "options", "swing", "shortterm", "market", "context", "tracker", "agents", "research", "system"];
+  const PAGES = ["desk", "nextopen", "trades", "lanes", "options", "swing", "shortterm", "market", "context", "tracker", "agents", "research", "system"];
   // The token is kept in this browser's local storage for this address (127.0.0.1 only), so a new tab, a refresh or a restart of
   // the browser stays connected. It is never sent anywhere except as the API header. An older session-only copy is moved over.
   const TOKEN_KEY = "optplat_token";
@@ -131,7 +131,7 @@
       else if (here) m.open = true;
       else { try { m.open = localStorage.getItem("optplat.fold." + m.id) === "1"; } catch (e) { /* storage blocked */ } }
     });
-    document.title = (S.connected ? ({ desk: "Desk", trades: "Trades", lanes: "Lanes", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Lab", system: "System" })[page] + " - " : "") + "options-platform";
+    document.title = (S.connected ? ({ desk: "Desk", nextopen: "Next open", trades: "Trades", lanes: "Lanes", options: "Options lanes", swing: "Swing", shortterm: "Short-term", market: "Market", context: "Context", tracker: "Tracker", agents: "Agents", research: "Lab", system: "System" })[page] + " - " : "") + "options-platform";
   }
 
   // ---------------------------------------------------------------- equity chart (unchanged behaviour)
@@ -388,51 +388,87 @@
     const words = { stop: "premium stop", target: "profit target", expiry_near: "within 2 days of expiry", trend_break: "trend broke", time: "holding time reached" };
     return words[x.reason] || x.reason || "";
   }
-  function renderNextSession(plan) {
-    const rows = $("ns-rows"), more = $("ns-more");
-    rows.replaceChildren(); more.replaceChildren();
-    $("ns-note").textContent = "";
-    if (!plan || !plan.next_session) {
-      $("ns-when").textContent = ""; $("ns-summary").textContent = "No next session in the calendar table yet."; return;
-    }
+  const TIER_LABEL = { WILL_SELL: "Will sell", LIKELY_SELL: "Likely sell", LIKELY_BUY: "Likely buy", POSSIBLE_BUY: "Possible buy", WONT: "Won't trade" };
+  const TIER_WHY = {
+    WILL_SELL: "Fixed by the daily bar or the calendar. Happens once the contract has a bid.",
+    LIKELY_SELL: "A premium stop or target: depends on the opening bid.",
+    LIKELY_BUY: "Within the lane's first tries, contract already picked. Fresh quotes can still change the price, size or contract, or refuse it.",
+    POSSIBLE_BUY: "No usable contract yet, or after the lane's first tries: bought only if quotes are usable at the open and earlier picks fail.",
+  };
+  function nsWhen(plan) {
     const s = plan.next_session, opens = new Date(s.opens_at);
     const day = new Date(s.date + "T12:00:00Z").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
-    $("ns-title").textContent = "Next session: " + day;
-    $("ns-when").textContent = "Opens 9:30 New York (" + opens.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) + " your time)" +
-      (s.early_close ? ", closes early at 1:00 pm" : "") + (s.closed_days_before && s.closed_days_before.length ? ". Closed before it: " + s.closed_days_before.join(", ") : "");
-    if (plan.status === "NOT_BUILT") {
-      $("ns-summary").textContent = "Not worked out yet: it is built about 20 minutes after each close, or press Recalculate."; return;
+    return { day, text: "Opens 9:30 New York (" + opens.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }) + " your time)" +
+      (s.early_close ? ", closes early at 1:00 pm" : "") + (s.closed_days_before && s.closed_days_before.length ? ". Closed before it: " + s.closed_days_before.join(", ") : "") };
+  }
+  function renderNextDesk(plan) {
+    const line = $("ns-desk-line");
+    line.replaceChildren();
+    if (!plan || !plan.next_session || plan.status === "NOT_BUILT") { line.textContent = ""; $("nav-nextopen").textContent = ""; return; }
+    const t = plan.tiers || {}, sells = (t.WILL_SELL || 0) + (t.LIKELY_SELL || 0);
+    const link = el("a", "Next open", "linkbtn"); link.href = "#/nextopen";
+    kids(line, [span(nsWhen(plan).day + ": " + (t.LIKELY_BUY || 0) + " likely buy" + (t.LIKELY_BUY === 1 ? "" : "s") + ", " + (t.POSSIBLE_BUY || 0) + " possible, " + sells + " sell" + (sells === 1 ? "" : "s") + ". "), link]);
+    $("nav-nextopen").textContent = (t.LIKELY_BUY || sells) ? (t.LIKELY_BUY || 0) + "+" + sells : "";
+  }
+  function nsLine(tier, label, text, below) {
+    return kids(el("div", null, "decision" + (below ? " muted" : "")), [span(TIER_LABEL[tier], "tag " + ({ WILL_SELL: "loss", LIKELY_SELL: "warn", LIKELY_BUY: "gain", POSSIBLE_BUY: "info" })[tier]), span(" " + label + ": " + text)]);
+  }
+  function renderNextOpen(plan, rev) {
+    const rows = $("ns-rows"), more = $("ns-more"), revBox = $("ns-review");
+    rows.replaceChildren(); more.replaceChildren(); revBox.replaceChildren();
+    $("ns-note").textContent = ""; $("ns-hit").textContent = "";
+    if (!plan || !plan.next_session) { $("ns-when").textContent = ""; $("ns-summary").textContent = "No next session in the calendar table yet."; }
+    else {
+      const w = nsWhen(plan);
+      $("ns-title").textContent = "Next open: " + w.day; $("ns-when").textContent = w.text;
+      if (plan.status === "NOT_BUILT") $("ns-summary").textContent = "Not worked out yet: it is built about 20 minutes after each close, or press Recalculate.";
+      else {
+        const t = plan.tiers || {};
+        $("ns-summary").textContent = "Will sell " + (t.WILL_SELL || 0) + ", likely sell " + (t.LIKELY_SELL || 0) + ", likely buy " + (t.LIKELY_BUY || 0) + ", possible buy " + (t.POSSIBLE_BUY || 0) +
+          ". Nothing here is 100%: the lanes re-check everything with fresh quotes at the open.";
+        const lanes = plan.lanes || [];
+        ["WILL_SELL", "LIKELY_SELL", "LIKELY_BUY", "POSSIBLE_BUY"].forEach((tier) => {
+          const items = [];
+          lanes.forEach((l) => {
+            (l.sells || []).filter((x) => x.tier === tier).forEach((x) => items.push(nsLine(tier, l.label, nsContract(x) + " × " + x.quantity + " · " + nsSellWhy(x) +
+              (x.last_bid != null ? " (last bid " + x.last_bid + ", paid " + x.entry + ")" : "") + (x.note ? " · " + x.note : ""))));
+            const queue = (l.buys || []).concat(l.queued || []).filter((x) => x.tier === tier).sort((a, b) => (a.rank || 0) - (b.rank || 0));
+            queue.forEach((x) => items.push(nsLine(tier, l.label, (x.rank ? "#" + x.rank + " " : "") +
+              (x.contract ? nsContract(x) + " × " + x.quantity + (x.premium_usd != null ? " · about $" + Math.round(x.premium_usd).toLocaleString() + " at the last ask " + x.ask + " (spread " + x.spread_pct + "%)" : "") +
+                (x.notional_usd != null ? " · about $" + Math.round(x.notional_usd).toLocaleString() : "")
+                : x.symbol + " " + (x.right === "P" ? "put" : "call") + " · contract picked at the open (no usable quotes now: " + x.why_no_contract_yet + ")") +
+              " · signal from the " + x.signal_bar + " close" + (x.below_cut ? " · below the cut: only if an earlier pick fails" : ""), x.below_cut)));
+          });
+          if (!items.length) return;
+          rows.appendChild(el("h3", TIER_LABEL[tier], "sub"));
+          rows.appendChild(el("p", TIER_WHY[tier], "muted small"));
+          items.forEach((i) => rows.appendChild(i));
+        });
+        if (!rows.childNodes.length) rows.appendChild(el("p", "No swing buys or sells planned. Short-term lanes still decide during the session.", "muted"));
+        lanes.forEach((l) => (l.errors || []).forEach((e) => rows.appendChild(kids(el("div", null, "decision"), [span("NO DATA", "tag warn"), span(" " + l.label + ": " + e)]))));
+        lanes.forEach((l) => (l.blocked || []).forEach((x) => more.appendChild(el("p", "Won't trade · " + l.label + ": " + x.symbol + " " + (x.right === "P" ? "put" : x.right === "C" ? "call" : "shares") + ", " + x.reason))));
+        lanes.forEach((l) => (l.holds || []).forEach((x) => more.appendChild(el("p", "Holding · " + l.label + ": " + nsContract(x) +
+          (x.stop_bid != null ? ", sells if the bid reaches " + x.stop_bid + " (stop) or " + x.target_bid + " (target)" : "") + (x.bar_limit != null ? ", day " + x.bars_held + " of " + x.bar_limit : "")))));
+        (plan.decided_in_session || []).forEach((x) => more.appendChild(el("p", "Decided during the session · " + x.label + ": " + x.when)));
+        $("ns-note").textContent = "Worked out " + new Date(plan.built_at).toLocaleString() + ". " + (plan.note || "") + (plan.fictional ? " Demo data: fictional." : "") + " Nothing is ordered from this page.";
+      }
     }
-    const lanes = plan.lanes || [], c = plan.counts || { buys: 0, queued: 0, sells: 0, blocked: 0 };
-    const nq = c.queued || 0, plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
-    $("ns-summary").textContent = (c.buys || nq || c.sells)
-      ? "Would buy " + c.buys + (nq ? " now, plus " + plural(nq, "signal") + " queued for the open" : "") + ", would sell " + c.sells +
-        (c.blocked ? " · " + plural(c.blocked, "signal") + " blocked" : "") + ". Each swing lane opens at most 3 per bar."
-      : "No swing buys or sells planned" + (c.blocked ? " (" + plural(c.blocked, "signal") + " blocked)" : "") + ". Short-term lanes still decide during the session.";
-    lanes.forEach((l) => {
-      (l.sells || []).forEach((x) => rows.appendChild(kids(el("div", null, "decision"), [
-        span("SELL", "tag loss"), span(" " + l.label + ": " + nsContract(x) + " × " + x.quantity + " · " + nsSellWhy(x) +
-          (x.last_bid != null ? " (last bid " + x.last_bid + ", paid " + x.entry + ")" : "") + (x.note ? " · " + x.note : ""))])));
-      (l.buys || []).forEach((x) => rows.appendChild(kids(el("div", null, "decision"), [
-        span("BUY", "tag gain"), span(" " + l.label + ": " + nsContract(x) + " × " + x.quantity +
-          (x.premium_usd != null ? " · about $" + Math.round(x.premium_usd).toLocaleString() + " at the last ask " + x.ask + " (spread " + x.spread_pct + "%)" : "") +
-          (x.notional_usd != null ? " · about $" + Math.round(x.notional_usd).toLocaleString() : "") +
-          " · signal from the " + x.signal_bar + " close" +
-          (x.size_vs_volume_pct != null && x.size_vs_volume_pct > 10 ? " · size is " + x.size_vs_volume_pct + "% of the day's volume" : ""))])));
-      (l.queued || []).forEach((x) => rows.appendChild(kids(el("div", null, "decision"), [
-        span("QUEUED", "tag info"), span(" " + l.label + ": " + x.symbol + " " + (x.right === "P" ? "put" : "call") +
-          " · signal from the " + x.signal_bar + " close · contract picked at the open (no usable quotes now: " + x.why_no_contract_yet + ")")])));
-      (l.errors || []).forEach((e) => rows.appendChild(kids(el("div", null, "decision"), [span("NO DATA", "tag warn"), span(" " + l.label + ": " + e)])));
-    });
-    lanes.forEach((l) => {
-      (l.blocked || []).forEach((x) => more.appendChild(el("p", "Blocked · " + l.label + ": " + x.symbol + " " + (x.right === "P" ? "put" : x.right === "C" ? "call" : "shares") + ", " + x.reason)));
-      (l.holds || []).forEach((x) => more.appendChild(el("p", "Holding · " + l.label + ": " + nsContract(x) +
-        (x.stop_bid != null ? ", sells if the bid reaches " + x.stop_bid + " (stop) or " + x.target_bid + " (target)" : "") +
-        (x.bar_limit != null ? ", day " + x.bars_held + " of " + x.bar_limit : ""))));
-    });
-    (plan.decided_in_session || []).forEach((x) => more.appendChild(el("p", "Decided during the session · " + x.label + ": " + x.when)));
-    $("ns-note").textContent = "Worked out " + new Date(plan.built_at).toLocaleString() + ". " + (plan.note || "") +
-      (plan.fictional ? " Demo data: fictional." : "") + " Nothing is ordered from this preview.";
+    if (!rev || !rev.sessions) { $("ns-hit").textContent = "No finished session with a plan yet. After the next open each line here shows whether it happened."; return; }
+    const bt = rev.by_tier, frac = (k) => bt[k].planned ? bt[k].taken + " of " + bt[k].planned : "none planned";
+    $("ns-hit").textContent = "Over " + rev.sessions + " session" + (rev.sessions === 1 ? "" : "s") + ": likely buys taken " + frac("LIKELY_BUY") + ", possible buys " + frac("POSSIBLE_BUY") +
+      ", will-sells " + frac("WILL_SELL") + ", likely sells " + frac("LIKELY_SELL") + "; " + rev.unplanned + " trade" + (rev.unplanned === 1 ? "" : "s") + " taken without a plan." +
+      (rev.sessions < 10 ? " Too few sessions to judge the preview yet." : "");
+    const last = rev.latest;
+    if (!last) return;
+    revBox.appendChild(el("p", "Session " + last.date + ":", "muted"));
+    last.lines.forEach((r) => revBox.appendChild(kids(el("div", null, "decision"), [span(r.taken ? "HAPPENED" : "DID NOT", "tag " + (r.taken ? "gain" : "")),
+      span(" " + TIER_LABEL[r.tier] + " · " + r.label + ": " + r.symbol + (r.side === "SELL" ? " sell (" + nsSellWhy({ reason: r.planned_reason }) + ")" : " " + (r.right === "P" ? "put" : r.right === "C" ? "call" : "shares")) +
+        (r.taken && r.taken_contract && r.planned_contract && r.taken_contract !== r.planned_contract ? " · different contract at the open: " + r.taken_contract : ""))])));
+    last.unplanned.forEach((u) => revBox.appendChild(kids(el("div", null, "decision"), [span("UNPLANNED", "tag warn"), span(" " + u.label + ": " + u.symbol + (u.contract ? " " + u.contract : ""))])));
+  }
+  async function loadNextOpen() {
+    const [plan, rev] = await Promise.all([api("/api/next-session").catch(() => null), api("/api/next-session/review").catch(() => null)]);
+    renderNextOpen(plan, rev);
   }
 
   function renderDesk(portfolio, report, eq, status) {
@@ -1898,6 +1934,7 @@
   async function loadPage() {
     const page = route();
     if (page === "trades") await loadTrades();
+    else if (page === "nextopen") await loadNextOpen();
     else if (page === "options") await loadOptions();
     else if (page === "swing") await loadSwing();
     else if (page === "shortterm") await loadShortterm();
@@ -2522,7 +2559,7 @@
       const mirror = await api("/api/mirror").catch(() => null);
       S.mirror = mirror;
       api("/api/regime").then(renderRegime).catch(() => renderRegime(null));
-      api("/api/next-session").then(renderNextSession).catch(() => renderNextSession(null));
+      api("/api/next-session").then(renderNextDesk).catch(() => renderNextDesk(null));
       api("/api/exposure").then(renderExposure).catch(() => renderExposure(null));
       S.connected = true; S.core = { status, report };
       checkForNewBuild(health.build_id);
@@ -2606,7 +2643,7 @@
   $("btn-sw-step").addEventListener("click", () => act(async () => { await api("/api/swing/step", { method: "POST" }); }));
   $("btn-ns-refresh").addEventListener("click", async () => {
     $("ns-summary").textContent = "Working it out from the latest daily bars and quotes";
-    try { renderNextSession(await api("/api/next-session/refresh", { method: "POST" })); } catch (e) { $("ns-summary").textContent = "Could not work it out: " + e.message; }
+    try { await api("/api/next-session/refresh", { method: "POST" }); await loadNextOpen(); } catch (e) { $("ns-summary").textContent = "Could not work it out: " + e.message; }
   });
   $("btn-st-step").addEventListener("click", () => act(async () => { await api("/api/shortterm/step", { method: "POST" }); }));
   $("btn-scan").addEventListener("click", () => act(async () => {

@@ -147,11 +147,12 @@ def test_api_needs_the_token_and_reports_not_built_first(client):
     assert c.get("/api/next-session", headers=H).json()["version"] == ns.VERSION
 
 
-def test_the_desk_shows_the_plan_without_assigning_html(client):
+def test_the_plan_has_its_own_page_and_one_line_on_the_desk_without_assigning_html(client):
     c, _ = client
     html, js = c.get("/").text, c.get("/static/app.js").text
-    assert 'id="next-session"' in html and 'data-question="What will the lanes buy and sell at the next open?"' in html
-    assert '"/api/next-session"' in js and "Nothing is ordered from this preview." in js and "innerHTML" not in js
+    assert 'id="view-nextopen"' in html and 'id="ns-desk-line"' in html and 'id="next-session"' not in html
+    assert '"/api/next-session/review"' in js and "Nothing is ordered from this page." in js and "innerHTML" not in js
+    assert "Nothing here is 100%" in js
 
 
 def test_off_hours_chain_problems_queue_the_signal_for_the_open_instead_of_blocking_it():
@@ -178,3 +179,66 @@ def test_the_chain_read_cap_is_named_as_such():
     plan = ns._swing_option_lane(lane2, now, session)
     assert len(plan["queued"]) == ol.MAX_CHAIN_READS_PER_STEP
     assert all("option-chain reads" in b["reason"] for b in plan["blocked"]) and len(plan["blocked"]) == 12 - ol.MAX_CHAIN_READS_PER_STEP
+
+
+# ------------------------------------------------------------ certainty tiers and planned vs taken
+def plan_with(**lane):
+    base = {"lane": "swing-options-aggr", "label": "Swing options, aggressive", "max_entries": 3,
+            "buys": [], "queued": [], "sells": [], "blocked": [], "holds": []}
+    return ns.add_tiers({"lanes": [{**base, **lane}]})
+
+
+def test_tiers_follow_what_the_open_can_still_change():
+    p = plan_with(sells=[{"symbol": "A", "reason": "time"}, {"symbol": "B", "reason": "stop"}],
+                  buys=[{"symbol": "C", "rank": 1}, {"symbol": "D", "rank": 4}],
+                  queued=[{"symbol": "E", "rank": 2}], blocked=[{"symbol": "F", "reason": "x"}])
+    lane = p["lanes"][0]
+    assert [x["tier"] for x in lane["sells"]] == ["WILL_SELL", "LIKELY_SELL"]
+    assert [(x["tier"], x["below_cut"]) for x in lane["buys"]] == [("LIKELY_BUY", False), ("POSSIBLE_BUY", True)]
+    assert lane["queued"][0]["tier"] == "POSSIBLE_BUY" and not lane["queued"][0]["below_cut"]
+    assert lane["blocked"][0]["tier"] == "WONT"
+    assert p["tiers"] == {"WILL_SELL": 1, "LIKELY_SELL": 1, "LIKELY_BUY": 1, "POSSIBLE_BUY": 2, "WONT": 1}
+
+
+def test_share_lane_exits_are_fixed_by_the_bar():
+    p = ns.add_tiers({"lanes": [{"lane": "swing-pullback", "sells": [{"symbol": "A", "reason": "stop"}], "buys": [], "queued": [], "blocked": []}]})
+    assert p["lanes"][0]["sells"][0]["tier"] == "WILL_SELL"
+
+
+def test_preview_ranks_follow_the_lanes_try_order():
+    lane, prov, store, box, now, session = lane_and_session()
+    plan = ns._swing_option_lane(lane, now, session)
+    assert plan["buys"][0]["rank"] == 1 and plan["max_entries"] == ol.MAX_ENTRIES_PER_STEP
+
+
+def test_review_matches_the_saved_plan_against_what_the_lane_did():
+    data, now = uptrend()
+    lane, prov, store, box = make(replace(ol.SWING_AGGR, symbols=("AAPL",), budget_usd=20000.0), daily=data, now=now)
+    session = ns.next_session(now)
+    plan = ns.add_tiers({"next_session": session, "built_at": now.isoformat(), "lanes": [ns._swing_option_lane(lane, now, session)]})
+    store.set_state(f"{ns.STATE_KEY}:{session['date']}", json.dumps(plan))
+    store.set_state(f"{ns.STATE_KEY}:index", json.dumps([session["date"]]))
+    opens = datetime.fromisoformat(session["opens_at"])
+    assert ns.review_history(store, True, opens - timedelta(minutes=5))["sessions"] == 0     # not started yet
+    box[0] = opens + timedelta(minutes=30)
+    lane.feed._cache.clear()
+    lane.step(force=True)
+    hist = ns.review_history(store, True, opens + timedelta(hours=3))
+    assert hist["sessions"] == 1 and hist["by_tier"]["LIKELY_BUY"] == {"planned": 1, "taken": 1} and hist["unplanned"] == 0
+    line = hist["latest"]["lines"][0]
+    assert line["taken"] and line["taken_contract"] == line["planned_contract"]
+
+
+def test_review_without_a_plan_says_so():
+    assert ns.review(Store(":memory:"), True, "2026-11-30")["status"] == "NO_PLAN"
+
+
+def test_refresh_keeps_one_plan_per_session_for_the_review(client):
+    c, engine = client
+    engine.set_config({"option_lanes_enabled": True})
+    engine.clock = lambda: ny(2026, 11, 27, 18)
+    ns.refresh(engine)
+    assert json.loads(engine.store.get_state(f"{ns.STATE_KEY}:index")) == ["2026-11-30"]
+    assert json.loads(engine.store.get_state(f"{ns.STATE_KEY}:2026-11-30"))["tiers"] is not None
+    assert c.get("/api/next-session/review", headers=H).json()["sessions"] == 0
+    assert c.get("/api/next-session/review").status_code == 401

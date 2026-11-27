@@ -436,6 +436,11 @@ def create_app(
             return nextsession.saved(engine.store) or {"status": "NOT_BUILT", "places_orders": False,
                                                        "next_session": nextsession.next_session(engine.clock())}
 
+        @app.get("/api/next-session/review", dependencies=[Depends(auth)])
+        def next_session_review() -> dict[str, Any]:
+            from . import nextsession
+            return nextsession.review_history(engine.store, engine.provider.fictional, engine.clock())
+
         @app.post("/api/next-session/refresh", dependencies=[Depends(auth)])
         def next_session_refresh() -> dict[str, Any]:
             from . import nextsession

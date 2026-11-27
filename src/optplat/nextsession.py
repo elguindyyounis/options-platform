@@ -166,6 +166,7 @@ def _swing_option_lane(lane: ol.OptionLane, now: datetime, session: dict[str, An
             block(why or "market-regime guard")
             continue
         reads_done += 1
+        base["rank"] = reads_done                       # the order the lane will try it at the open
         try:
             chk = check_snapshot(lane.feed.window(sym, p.dte_min, p.dte_max, 3), now, max_age_s=PREVIEW_MAX_QUOTE_AGE_S)
             why_not = None if chk.snapshot is not None else (chk.issues[-1].kind if chk.issues else "unknown")
@@ -282,6 +283,103 @@ def build_plan(engine: Any, now: Optional[datetime] = None) -> dict[str, Any]:
     return plan
 
 
+SELL_BY_RULE = ("time", "expiry_near", "trend_break")   # fixed by the bar or the calendar, not by the opening bid
+TIER_TEXT = {"WILL_SELL": "Will sell", "LIKELY_SELL": "Likely sell", "LIKELY_BUY": "Likely buy",
+             "POSSIBLE_BUY": "Possible buy", "WONT": "Won't trade"}
+
+
+def add_tiers(plan: dict[str, Any]) -> dict[str, Any]:
+    """How sure each line is. Sells fixed by the bar or the calendar WILL happen once there is a bid; a premium stop or
+    target depends on the opening bid. A buy within the lane's first N tries with a contract already picked is LIKELY;
+    one without a usable contract yet, or after the first N, is only POSSIBLE. Blocked signals WON'T trade."""
+    tally = {k: 0 for k in TIER_TEXT}
+    for lane in plan.get("lanes", []):
+        cap = lane.get("max_entries")
+        for x in lane.get("sells", []):
+            # share-lane exits are judged on the daily close, so they are fixed by the bar too
+            x["tier"] = "WILL_SELL" if x.get("reason") in SELL_BY_RULE or lane.get("lane") == sw_mod.LANE else "LIKELY_SELL"
+        for x in lane.get("buys", []):
+            x["tier"] = "LIKELY_BUY" if cap is None or x.get("rank", 1) <= cap else "POSSIBLE_BUY"
+        for x in lane.get("queued", []):
+            x["tier"] = "POSSIBLE_BUY"
+            x["below_cut"] = cap is not None and x.get("rank", 1) > cap
+        for x in lane.get("buys", []):
+            x["below_cut"] = cap is not None and x.get("rank", 1) > cap
+        for x in lane.get("blocked", []):
+            x["tier"] = "WONT"
+        for k in ("sells", "buys", "queued", "blocked"):
+            for x in lane.get(k, []):
+                tally[x["tier"]] += 1
+    plan["tiers"] = tally
+    return plan
+
+
+def _ny_day(stamp: Optional[str]) -> Optional[str]:
+    if not stamp:
+        return None
+    try:
+        return datetime.fromisoformat(str(stamp)).astimezone(NY).date().isoformat()
+    except ValueError:
+        return None
+
+
+def review(store: Any, fictional: bool, session_date: str) -> dict[str, Any]:
+    """Planned versus taken for one session: did each planned line happen, and what was taken without a plan."""
+    try:
+        plan = json.loads(store.get_state(f"{STATE_KEY}:{session_date}", "") or "{}")
+    except ValueError:
+        plan = {}
+    if not plan:
+        return {"date": session_date, "status": "NO_PLAN"}
+    lines: list[dict[str, Any]] = []
+    unplanned: list[dict[str, Any]] = []
+    for lane in plan.get("lanes", []):
+        trades = store.lane_trades(lane["lane"], fictional, 2000)
+        opened = [t for t in trades if _ny_day(t["opened_at"]) == session_date]
+        closed = [t for t in trades if _ny_day(t.get("closed_at")) == session_date]
+        used: set[int] = set()
+        for x in lane.get("buys", []) + lane.get("queued", []):
+            hit = next((t for t in opened if t["id"] not in used and t["symbol"] == x["symbol"]
+                        and (x["right"] == "SHARES" or (t["open_payload"] or {}).get("right") == x["right"])), None)
+            if hit:
+                used.add(hit["id"])
+            lines.append({"lane": lane["lane"], "label": lane.get("label"), "side": "BUY", "symbol": x["symbol"], "right": x["right"],
+                          "tier": x.get("tier"), "rank": x.get("rank"), "planned_contract": x.get("contract"),
+                          "taken": bool(hit), "taken_contract": (hit["open_payload"] or {}).get("contract") if hit else None,
+                          "taken_at": hit["opened_at"] if hit else None})
+        for x in lane.get("sells", []):
+            hit = next((t for t in closed if t["symbol"] == x["symbol"] and (x.get("contract") is None
+                        or (t["open_payload"] or {}).get("contract") == x.get("contract"))), None)
+            lines.append({"lane": lane["lane"], "label": lane.get("label"), "side": "SELL", "symbol": x["symbol"], "right": x.get("right"),
+                          "tier": x.get("tier"), "planned_reason": x.get("reason"), "taken": bool(hit),
+                          "taken_reason": hit.get("close_reason") if hit else None, "taken_at": hit.get("closed_at") if hit else None})
+        unplanned += [{"lane": lane["lane"], "label": lane.get("label"), "symbol": t["symbol"],
+                       "contract": (t["open_payload"] or {}).get("contract"), "opened_at": t["opened_at"]}
+                      for t in opened if t["id"] not in used]
+
+    def rate(tier: str) -> dict[str, int]:
+        rows = [r for r in lines if r["tier"] == tier]
+        return {"planned": len(rows), "taken": sum(r["taken"] for r in rows)}
+    return {"date": session_date, "status": "REVIEWED", "plan_built_at": plan.get("built_at"), "lines": lines,
+            "unplanned": unplanned, "by_tier": {t: rate(t) for t in ("WILL_SELL", "LIKELY_SELL", "LIKELY_BUY", "POSSIBLE_BUY")}}
+
+
+def review_history(store: Any, fictional: bool, now: datetime, limit: int = 20) -> dict[str, Any]:
+    """Hit rate by tier over every session that has started and had a plan."""
+    try:
+        dates = json.loads(store.get_state(f"{STATE_KEY}:index", "") or "[]")
+    except ValueError:
+        dates = []
+    today = now.astimezone(NY)
+    started = [d for d in dates if d < today.date().isoformat() or (d == today.date().isoformat() and today.time() >= OPEN)]
+    sessions = [review(store, fictional, d) for d in sorted(started)[-limit:]]
+    sessions = [s for s in sessions if s["status"] == "REVIEWED"]
+    totals = {t: {"planned": sum(s["by_tier"][t]["planned"] for s in sessions), "taken": sum(s["by_tier"][t]["taken"] for s in sessions)}
+              for t in ("WILL_SELL", "LIKELY_SELL", "LIKELY_BUY", "POSSIBLE_BUY")}
+    return {"sessions": len(sessions), "by_tier": totals, "unplanned": sum(len(s["unplanned"]) for s in sessions),
+            "latest": sessions[-1] if sessions else None}
+
+
 def due(engine: Any, now: datetime) -> bool:
     """Build once per closed period: after a close (plus a margin for the final bar) and before the next open."""
     if session_status(now)[0]:
@@ -303,8 +401,17 @@ def due(engine: Any, now: datetime) -> bool:
 
 
 def refresh(engine: Any, now: Optional[datetime] = None) -> dict[str, Any]:
-    plan = build_plan(engine, now)
-    engine.store.set_state(STATE_KEY, json.dumps(plan, default=str))
+    plan = add_tiers(build_plan(engine, now))
+    raw = json.dumps(plan, default=str)
+    engine.store.set_state(STATE_KEY, raw)
+    day = (plan.get("next_session") or {}).get("date")
+    if day:                                             # one plan per session, kept to check it against what happened
+        engine.store.set_state(f"{STATE_KEY}:{day}", raw)
+        try:
+            index = json.loads(engine.store.get_state(f"{STATE_KEY}:index", "") or "[]")
+        except ValueError:
+            index = []
+        engine.store.set_state(f"{STATE_KEY}:index", json.dumps(sorted(set(index) | {day})[-60:]))
     return plan
 
 

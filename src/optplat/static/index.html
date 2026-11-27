@@ -443,6 +443,7 @@
     <a class="brand" href="#/desk"><b>options-platform</b><small>Paper only. No live orders exist in this app.</small></a>
     <div class="navgroup" aria-hidden="true">Daily</div>
     <a class="nav" href="#/desk" data-page="desk"><span>Desk</span><span id="nav-needs" class="badge" hidden></span></a>
+    <a class="nav" href="#/nextopen" data-page="nextopen"><span>Next open</span><span id="nav-nextopen" class="navstat"></span></a>
     <a class="nav" href="#/trades" data-page="trades"><span>Trades</span><span id="nav-trades" class="navstat"></span></a>
     <a class="nav" href="#/lanes" data-page="lanes"><span>Lanes</span><span id="nav-lanes" class="navstat"></span></a>
     <a class="nav" href="#/system" data-page="system"><span>System</span><span id="nav-system" class="navstat alert"></span></a>
@@ -527,14 +528,7 @@
             <div class="scroll" id="equity-table" hidden></div>
           </div>
         </div>
-        <section class="panel" id="next-session" aria-label="Next session" data-question="What will the lanes buy and sell at the next open?">
-          <div class="sect-head"><h2 class="sect" id="ns-title">Next session</h2><span id="ns-when" class="q"></span>
-            <button class="linkbtn" id="btn-ns-refresh" type="button">Recalculate</button></div>
-          <p id="ns-summary"></p>
-          <div id="ns-rows"></div>
-          <details><summary id="ns-more-summary">Blocked signals, positions held, lanes decided during the session</summary><div id="ns-more"></div></details>
-          <p id="ns-note" class="muted small"></p>
-        </section>
+        <p class="verdict" id="ns-desk-line" data-question="What happens at the next open?"></p>
         <div>
           <div class="sect-head"><h2 class="sect">Accounts and lanes</h2><span class="q">Every paper account and research lane side by side. Choose one to see its trades.</span></div>
           <div id="all-accounts" class="lane-grid"></div>
@@ -601,6 +595,19 @@
         </div>
       </section>
 
+      <section id="view-nextopen" data-page="nextopen" data-question="What will the lanes buy and sell at the next open, how sure is each, and did the last plan happen?" hidden>
+        <div class="sect-head"><h2 class="sect" id="ns-title">Next open</h2><span id="ns-when" class="q"></span>
+          <button class="linkbtn" id="btn-ns-refresh" type="button">Recalculate</button></div>
+        <p id="ns-summary" class="verdict"></p>
+        <div class="panel" style="padding:4px 16px"><div id="ns-rows"></div></div>
+        <details class="panel"><summary id="ns-more-summary">Won't trade, and lanes that only decide during the session</summary><div id="ns-more"></div></details>
+        <div class="panel">
+          <h3 class="sub">Last plan vs what happened</h3>
+          <p id="ns-hit" class="muted"></p>
+          <div id="ns-review"></div>
+        </div>
+        <p id="ns-note" class="muted small"></p>
+      </section>
       <section id="view-trades" data-page="trades" data-question="What did the platform trade, in options or shares, in which lane, and how did each trade end?" hidden>
         <div>
           <h1>Trades</h1>
