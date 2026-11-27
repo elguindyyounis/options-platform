@@ -269,6 +269,17 @@ class IBKRPaperBroker(BrokerAdapter):
                 return t
         return None
 
+    def owned_positions(self) -> list[Position]:
+        """Long option positions in the paper account that THIS platform's own orders bought (never the Alerter's)."""
+        out = []
+        with self._lock:
+            for pos in self.get_positions():
+                ours = self._our_net(self._qualified(pos.contract).conId)
+                qty = min(pos.quantity, ours)
+                if qty > 0:
+                    out.append(Position(pos.contract, qty, pos.avg_cost))
+        return out
+
     def _our_net(self, con_id: Any) -> int:
         """Contracts this platform bought minus those it sold or is selling, for one listing (its own orders only)."""
         ib = self._session()

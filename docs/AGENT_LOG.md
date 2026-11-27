@@ -1291,3 +1291,7 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 
 * The Mac showed chains falling back to Yahoo with `HTTP 503 Historical pacing budget exhausted`: the Alerter's service allows 30 bar requests per 10 minutes for all consumers (execution quotes may use up to 54). Before cutting anything, measure: `IBKRDataProvider` now records every request it sends (kind: chain, bars_daily, bars_5min, verify, quotes; the calling platform module; refusal reason) and `/api/health` `market_data.platform_usage` shows the last 10 minutes. errorhelp names the budget error (`IBKR_BUDGET`).
 * Verified: `python -m pytest -q` (new usage test; errorhelp test). Display only. Merged by the agent under rule 6 (owner conversation).
+
+## 2026-11-27 (Claude): mirror catch-up
+
+* First full round trip through IBKR paper worked (buy 6.09, sell 6.02). One contract was left at IBKR from the earlier buy whose mirrored sell was refused before #108. `POST /api/mirror/catch-up` sells at IBKR what this platform's own orders bought there beyond what the simulator holds; each sell needs a verified quote and is limited to bid - 1%; it never buys, never touches the Alerter's positions, and is refused with the kill switch on. `IBKRPaperBroker.owned_positions()` gives the platform's share. Verified: pytest 1009. Merged on the owner's standing instruction.

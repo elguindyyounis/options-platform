@@ -155,6 +155,36 @@ class MirroredSimBroker(SimBroker):
                                                    "avg_fill_price": s.avg_fill_price}, s.status)
             self._track(key, s.status, s.filled_qty)
 
+    def catch_up(self, verified_quote: Callable[[Any], Any], now: datetime) -> list[dict[str, Any]]:
+        """Sell at IBKR what this platform owns there but the simulator (the account of record) no longer holds, e.g.
+        after a mirrored sell failed. Each sell needs a verified quote and is limited to bid - 1%. Buys nothing."""
+        from ..models import OrderIntent, Side
+        from ..pricing import sell_limit_for
+
+        sim = {p.contract: p.quantity for p in self.get_positions()}
+        results = []
+        for pos in self.mirror.owned_positions():
+            excess = pos.quantity - sim.get(pos.contract, 0)
+            if excess <= 0:
+                continue
+            row: dict[str, Any] = {"contract": pos.contract.occ_symbol.strip(), "quantity": excess}
+            quote = verified_quote(pos.contract)
+            if quote is None or not quote.bid > 0:
+                row["result"] = "NOT_VERIFIED"
+                results.append(row)
+                continue
+            intent = OrderIntent(f"catchup-{pos.contract.occ_symbol.replace(' ', '')}-{int(now.timestamp())}"[:64],
+                                 "mirror-catch-up", pos.contract, excess, sell_limit_for(quote.bid),
+                                 note="sell IBKR paper holding the simulator no longer has", side=Side.SELL_TO_CLOSE)
+            try:
+                s = self.mirror.submit_limit_order(intent)
+                row.update(result=s.status, filled_qty=s.filled_qty, limit_price=intent.limit_price)
+            except Exception as exc:  # noqa: BLE001
+                row.update(result="ERROR", error=type(exc).__name__, detail=str(exc)[:160])
+            self._record("ibkr_mirror_catch_up", row, row["result"])
+            results.append(row)
+        return results
+
     def _record(self, kind: str, payload: dict[str, Any], state: str) -> None:
         self.last_mirror = {"state": state, "at": datetime.now(timezone.utc).isoformat(), "kind": kind}
         try:

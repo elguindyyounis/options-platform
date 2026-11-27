@@ -185,6 +185,19 @@ def create_app(
     def list_orders(open_only: bool = False) -> list[dict[str, Any]]:
         return [o.to_dict() for o in manager.list(open_only=open_only)]
 
+    if engine is not None:
+        @app.post("/api/mirror/catch-up", dependencies=[Depends(auth)])
+        def mirror_catch_up() -> dict[str, Any]:
+            """Owner-triggered: sell at IBKR paper what this platform owns there but its simulated account no longer
+            holds. Needs a verified quote per contract; buys nothing."""
+            if manager.kill_switch_active():
+                raise HTTPException(status_code=409, detail="Kill switch is on")
+            catch = getattr(manager.broker, "catch_up", None)
+            verify = getattr(engine.provider, "execution_quote", None)
+            if catch is None or verify is None:
+                return {"result": "UNAVAILABLE", "detail": "needs the IBKR mirror and IBKR data"}
+            return {"result": "DONE", "sells": catch(verify, engine.clock())}
+
     @app.post("/api/mirror/probe", dependencies=[Depends(auth)])
     def mirror_probe() -> dict[str, Any]:
         """Owner-triggered: connect the IBKR paper adapter now and say where it stops. Places nothing."""
