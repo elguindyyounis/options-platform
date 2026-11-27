@@ -536,3 +536,14 @@ def test_partial_exit_sells_half_once_then_stops_to_entry_on_the_rest():
     assert left.quantity == pos.quantity - pos.quantity // 2 and manager.is_trimmed(pos.contract)
     again = engine.run_cycle()["exits"][0]  # same price next cycle: held, not trimmed again
     assert again["action"] == "HOLD"
+
+
+def test_exit_agent_is_off_by_default_and_when_on_uses_the_snapshot_trend():
+    assert EngineConfig().exit_agent is False
+    engine, manager, broker, provider, _ = build(auto_entries=True, exit_agent=True)
+    engine.run_cycle()
+    cost = broker.get_positions()[0].avg_cost
+    provider.set_snapshot(snapshot(bid=round(cost * 1.5, 2), ask=round(cost * 1.5, 2) + 0.1))
+    item = engine.run_cycle()["exits"][0]
+    assert item["action"] == "HOLD" and "hold evidence" in item["reason"]  # +50% in a rising market: kept past the 40% target, with its reasons
+    assert len(broker.get_positions()) == 1
