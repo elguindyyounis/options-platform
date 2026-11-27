@@ -141,6 +141,10 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-28: one platform budget for IBKR bar-costing requests (27 of the service's 30 per 10 minutes) with priority:
+  the main account may use all of it, lanes and previews 21, research (scanner, Lab) 12. Held requests are not sent and
+  use the research fallback. Measured before (#109): scanner 45 of about 104 per 10 minutes.
+
 * 2026-11-27: platform share of IBKR 5-minute bars: measured on the Mac (#109) as most of the platform's bar
   requests (19 of 27 in the first minutes; about 75 per 10 minutes against a 30-per-10-minute budget for all consumers).
   Each name is now fetched once per completed bar, inside 12 new fetches per 10 minutes; the short-term lane's six

@@ -25,6 +25,9 @@ _CODE_AT = re.compile(r"\[(?P<file>[\w.]+\.py):(?P<line>\d+) in (?P<fn>\w+)\]")
 
 # (kind, pattern, owner, cause, fix). First match wins. {sym} and {detail} are filled from the match.
 _RULES: tuple[tuple[str, re.Pattern[str], str, str, str], ...] = (
+    ("IBKR_TIER_HELD", re.compile(r"platform IBKR budget held for"), DESIGN,
+     "The platform held back a research or lane request so the main account keeps first claim on the IBKR budget.",
+     "Working as built: that request used the research fallback; it uses IBKR again once the 10-minute window frees."),
     ("BAR_SHARE_HELD", re.compile(r"platform share of IBKR 5-minute bars used"), DESIGN,
      "The platform held back a 5-minute-bar request to stay inside its share of the shared IBKR budget.",
      "Working as built: the core names keep IBKR bars; other names use the research fallback until the share frees."),

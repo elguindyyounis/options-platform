@@ -1,7 +1,7 @@
 """Synthetic protocol fixtures only; no live connection or performance claim."""
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -214,3 +214,37 @@ def test_a_held_bar_request_falls_to_the_research_fallback_and_says_why():
     w = IBKRWithYahooFallback(Held(lambda *a, **k: {}), Y, clock=lambda: NOW)
     assert w.intraday_bars('AMD') == ['yahoo-bar']
     assert 'platform share' in w.last_fallback['why']
+
+
+def test_the_main_account_keeps_first_claim_on_the_platform_budget():
+    from optplat.ibkr_data import PLATFORM_BUDGET, TIER_LIMITS, BudgetHeld, tier_of
+    assert (tier_of('engine'), tier_of('optionlanes'), tier_of('scanner'), tier_of('broker.mirror'), tier_of('other')) == \
+        ('trade', 'lanes', 'research', 'trade', 'trade')
+    assert TIER_LIMITS['research'] < TIER_LIMITS['lanes'] < TIER_LIMITS['trade'] == PLATFORM_BUDGET <= 30
+    calls, now = [], [datetime(2026, 11, 27, 15, 1, tzinfo=timezone.utc)]
+
+    def transport(resource, params=None, **_kw):
+        calls.append(resource)
+        return {'bars': []}
+
+    p = IBKRDataProvider(transport, clock=lambda: now[0])
+    sent = {}
+    for tier, n in (('research', TIER_LIMITS['research']), ('lanes', TIER_LIMITS['lanes'] - TIER_LIMITS['research']),
+                    ('trade', PLATFORM_BUDGET - TIER_LIMITS['lanes'])):
+        for i in range(n):
+            with patch('optplat.ibkr_data._caller', return_value={'research': 'scanner', 'lanes': 'swing', 'trade': 'engine'}[tier]):
+                p._call('history', {'symbol': f'{tier}{i}'})
+        sent[tier] = n
+        for blocked in ('research', 'lanes', 'trade')[:('research', 'lanes', 'trade').index(tier) + 1]:
+            with patch('optplat.ibkr_data._caller', return_value={'research': 'scanner', 'lanes': 'swing', 'trade': 'engine'}[blocked]):
+                with pytest.raises(BudgetHeld):
+                    p._call('history', {'symbol': 'X'})
+    assert len(calls) == PLATFORM_BUDGET           # held requests never reach the service
+    with patch('optplat.ibkr_data._caller', return_value='scanner'):
+        p._call('quotes', {'contracts': '[]'})       # exact-contract quotes do not spend the bar budget
+    tiers = p.usage()['tiers']['by_tier']
+    assert tiers == {'trade': PLATFORM_BUDGET - TIER_LIMITS['lanes'], 'lanes': TIER_LIMITS['lanes'] - TIER_LIMITS['research'],
+                     'research': TIER_LIMITS['research']}
+    now[0] += timedelta(seconds=601)
+    with patch('optplat.ibkr_data._caller', return_value='scanner'):
+        p._call('history', {'symbol': 'again'})      # the window frees
