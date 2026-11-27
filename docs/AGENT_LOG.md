@@ -1235,3 +1235,8 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 ## 2026-11-27 (Claude): IBKR mirror connect timeout, retries, probe
 
 * First live mirrored order (owner's pipeline test, 1 SPY call) failed with `TimeoutError`: ib_async's startup sync (positions, orders, completed orders, account updates, then executions; each up to the connect timeout) outlasted the adapter's 20 s call limit, so the adapter gave up as the connection finished. Connect now gets 15 s per startup request and 75 s overall (> 3x). The mirror retries an unknown outcome twice (10 s, 30 s) by the same orderRef (idempotent), records each attempt with the stage it reached, and never retries a rejection. `POST /api/mirror/probe` connects now and reports `failed_at` and a detail with account ids masked; it places nothing. Verified: pytest 952. Not verified: live TWS (next step). Merged on the owner's standing instruction.
+
+## 2026-11-27 (Claude): own IBKR client id; never touch the Alerter's orders
+
+* The probe still stopped at connect: the Options Alerter's TWS paper worker uses client id 95, the platform's default, so TWS refused the second connection. Default is now 71; the Alerter's ids (91, 94, 95, 96, 98) are refused. The paper account is shared, so platform orders carry `orderRef` `optplat:<key>`, only those count as ours, and a sell may not exceed what platform orders bought net of its sells (and what the account holds). Verified: pytest 962. Merged on the owner's standing instruction.
+

@@ -151,7 +151,7 @@ def test_orders_are_day_limit_on_the_paper_account_tagged_with_the_key():
     ib = FakeIB()
     make(ib).submit_limit_order(make_intent(limit=2.509))
     o = ib.placed[0]
-    assert (o.orderType, o.tif, o.account, o.orderRef, o.outsideRth) == ("LMT", "DAY", ACCOUNT, "key-00000001", False)
+    assert (o.orderType, o.tif, o.account, o.orderRef, o.outsideRth) == ("LMT", "DAY", ACCOUNT, "optplat:key-00000001", False)
     assert o.lmtPrice == 2.50  # a buy never rounds above the approved limit
     assert ib.connect_kwargs["port"] == 7497 and ib.connect_kwargs["clientId"] == ibkr.DEFAULT_CLIENT_ID
 
@@ -184,7 +184,7 @@ def test_working_sells_count_against_what_can_be_sold():
 def test_finds_an_order_from_an_earlier_session_in_completed_orders():
     ib = FakeIB()
     old = SimpleNamespace(contract=SimpleNamespace(conId=777),
-                          order=SimpleNamespace(account=ACCOUNT, orderRef="key-00000001", totalQuantity=4, action="BUY"),
+                          order=SimpleNamespace(account=ACCOUNT, orderRef="optplat:key-00000001", totalQuantity=4, action="BUY"),
                           orderStatus=SimpleNamespace(status="Filled", filled=4, avgFillPrice=2.0))
     ib.completed.append(old)
     old.order.account = ""  # IBKR may leave it blank on completed orders from an earlier session
@@ -218,7 +218,7 @@ def test_quotes_are_never_marked_verified_and_delayed_data_is_refused():
 def test_other_accounts_orders_are_invisible():
     ib = FakeIB()
     ib._trades.append(SimpleNamespace(contract=SimpleNamespace(conId=777),
-                                      order=SimpleNamespace(account="DU9999999", orderRef="key-x", totalQuantity=1, action="BUY"),
+                                      order=SimpleNamespace(account="DU9999999", orderRef="optplat:key-x", totalQuantity=1, action="BUY"),
                                       orderStatus=SimpleNamespace(status="Submitted", filled=0, avgFillPrice=0.0)))
     broker = make(ib)
     assert broker.get_open_orders() == [] and broker.find_order_by_client_id("key-x") is None
@@ -265,4 +265,44 @@ def test_health_detail_hides_account_ids():
         raise ConnectionError("account DU1234567 refused")
     ib.connectAsync = boom
     assert "DU1234567" not in make(ib).healthcheck()["detail"]
+
+
+# ---- the paper account is shared with the Options Alerter (2026-11-27)
+@pytest.mark.parametrize("cid", sorted(ibkr.ALERTER_CLIENT_IDS))
+def test_refuses_the_alerters_client_ids(monkeypatch, cid):
+    monkeypatch.setenv("IBKR_ORDER_CLIENT_ID", str(cid))
+    with pytest.raises(ValueError):
+        ibkr.IBKRPaperBroker(ib=FakeIB(), api=FakeApi, runner=run_inline)
+
+
+def test_default_client_id_is_not_the_alerters():
+    assert ibkr.DEFAULT_CLIENT_ID not in ibkr.ALERTER_CLIENT_IDS and make().client_id == ibkr.DEFAULT_CLIENT_ID
+
+
+def alerter_trade(ref="alerter-abc", action="BUY", qty=5, status="Filled"):
+    return SimpleNamespace(contract=SimpleNamespace(conId=777),
+                           order=SimpleNamespace(account=ACCOUNT, orderRef=ref, totalQuantity=qty, action=action, clientId=95),
+                           orderStatus=SimpleNamespace(status=status, filled=qty if status == "Filled" else 0, avgFillPrice=2.0))
+
+
+def test_alerter_orders_are_never_ours():
+    ib = FakeIB()
+    ib._trades.append(alerter_trade(status="Submitted"))
+    ib.completed.append(alerter_trade())
+    broker = make(ib)
+    assert broker.get_open_orders() == [] and broker.find_order_by_client_id("alerter-abc") is None
+
+
+def test_never_sells_the_alerters_contracts():
+    ib = FakeIB()
+    ib.held[777] = [5, 200.0]                    # the account holds 5 that the Alerter bought
+    ib.completed.append(alerter_trade())
+    broker = make(ib)
+    with pytest.raises(BrokerRejected):
+        broker.submit_limit_order(make_intent("sell-1", qty=1, limit=1.0, side=Side.SELL_TO_CLOSE))
+    broker.submit_limit_order(make_intent(qty=2, limit=2.50))   # now this platform owns 2 of the 7
+    broker.submit_limit_order(make_intent("sell-2", qty=2, limit=1.0, side=Side.SELL_TO_CLOSE))
+    with pytest.raises(BrokerRejected):
+        broker.submit_limit_order(make_intent("sell-3", qty=1, limit=1.0, side=Side.SELL_TO_CLOSE))
+    assert [o.orderRef for o in ib.placed] == ["optplat:key-00000001", "optplat:sell-2"]
 
