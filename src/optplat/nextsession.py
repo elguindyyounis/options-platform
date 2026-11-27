@@ -177,7 +177,12 @@ def _swing_option_lane(lane: ol.OptionLane, now: datetime, session: dict[str, An
             # Off-hours chains are often stale or empty; the lane reads them again at the open. Queued, not refused.
             out["queued"].append({**base, "earnings_state": state, "why_no_contract_yet": why_not})
             continue
-        row = ol.pick_contract(chk.snapshot, Right(right), sess_open, p)
+        snapx = chk.snapshot
+        if snapx.source.startswith(("ibkr", "yahoo-fallback")) and not snapx.timestamp_verified:
+            # pick_contract refuses these by design; say so instead of blaming the lane's quote limits
+            block("IBKR quote time not verified: lanes do not open on unverified IBKR chains (owner decision pending)")
+            continue
+        row = ol.pick_contract(snapx, Right(right), sess_open, p)
         if row is None:
             block("no contract met the expiry, spread and open-interest limits on the last quotes")
             continue

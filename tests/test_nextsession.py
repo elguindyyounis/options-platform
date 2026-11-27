@@ -242,3 +242,14 @@ def test_refresh_keeps_one_plan_per_session_for_the_review(client):
     assert json.loads(engine.store.get_state(f"{ns.STATE_KEY}:2026-11-30"))["tiers"] is not None
     assert c.get("/api/next-session/review", headers=H).json()["sessions"] == 0
     assert c.get("/api/next-session/review").status_code == 401
+
+
+def test_unverified_ibkr_chains_are_named_as_the_reason():
+    lane, prov, store, box, now, session = lane_and_session()
+    base = prov.snapshot_window
+
+    def ibkr(symbol, *a, **k):
+        return replace(base(symbol, *a, **k), source="ibkr-shared-research-only", timestamp_verified=False)
+    prov.snapshot_window = ibkr
+    plan = ns._swing_option_lane(lane, now, session)
+    assert plan["buys"] == [] and "not verified" in plan["blocked"][0]["reason"]
