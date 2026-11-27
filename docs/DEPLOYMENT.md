@@ -62,3 +62,10 @@ and the export. Removing the lines and restarting starts another new account at 
 ## Turning on the private data export (one time)
 
 Scheduled research runs run in the cloud and cannot see the Mac's database. The nightly export (installed by `install_mac.sh`, 21:15) sends a secret-free copy to a PRIVATE repo, but only once `OPTPLAT_EXPORT_REPO` is set. On the Mac, after `gh auth login`, run `bash ~/options-platform/deploy/setup_export.sh` (or `bash deploy/setup_export.sh owner/name` for another repo name). It creates the private repo, writes the setting and runs one export. Then give the scheduled task access to that repo. The script refuses a repo that is not private.
+
+## config.env lines reach the server (2026-11-28)
+
+`deploy/server-wrapper.sh` used to load `config.env` without exporting it, so only lines written as `export KEY=value`
+reached the server; a plain `KEY=value` (the installer's token line, `OPTPLAT_PAPER_START_CASH`, `OPTPLAT_MAX_POSITION_PCT`,
+`OPTPLAT_MAX_TOTAL_PREMIUM_PCT`) stayed a shell variable. The wrapper now loads it with `set -a`, so both forms work. Effect on
+the owner's Mac: the sizes in config.env now apply, and a changed `OPTPLAT_PAPER_START_CASH` starts a new paper account (account.py).

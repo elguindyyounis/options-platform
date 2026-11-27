@@ -1336,3 +1336,10 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Found: the page only reloaded for a new build when the owner refreshed during an update. When the hourly updater installed a build while the page was open, the page kept running old code while its label showed the new build id. Now the page reloads itself when the server's build differs from the one it loaded with; with unsaved settings or an open trade file it says a new version is installed and waits.
 * Polish: watchlist chips say "not checked" when entries are paused (the reason is in the headline and footnote); a single candidate reads "the only eligible candidate".
 * Verified: `python -m pytest -q` passes (node tests for the reload decision and the wording).
+
+## 2026-11-28 (Claude, owner: "you fix it"): plain config.env lines never reached the server
+
+* The owner's screenshot showed `OPTPLAT_MAX_POSITION_PCT=35`, `OPTPLAT_MAX_TOTAL_PREMIUM_PCT=70` and `OPTPLAT_PAPER_START_CASH=1000` as plain lines, and `/api/portfolio` rejected the token read from the same file. Cause (read from `deploy/server-wrapper.sh`, `__main__.py`, `account.py`): the wrapper sourced config.env without `set -a`, and Python never reads the file, so only `export` lines (IBKR switches) took effect. The server was almost certainly running the code defaults (1% per order, $100,000) with a one-off token. Not confirmed on the Mac.
+* Fix: `set -a` around the load. New test runs the real wrapper with a stub python and checks plain and exported lines both arrive; it fails on the old wrapper.
+* Effect the owner was told and asked for ("you fix it"): the owner's own sizes (35% per order, 70% total) and the $1,000 account apply after the update; `account.py` starts a new paper account, earlier orders stay in the database, open positions of the old account are not carried over. No code default or risk limit changed; these are the owner's config values.
+* Verified: `python -m pytest -q` passes. Not verified: on the Mac (the updater was never run from here); merged by the agent per the 2026-11-27 owner decision.

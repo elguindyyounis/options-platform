@@ -4,7 +4,9 @@ set -euo pipefail
 umask 077
 DATA="$HOME/Library/Application Support/OptionsPlatform"
 APP="$HOME/Applications/OptionsPlatform"
-[ -f "$DATA/config.env" ] && . "$DATA/config.env"   # user-owned, chmod 600: OPTPLAT_API_TOKEN and optional switches
+# user-owned, chmod 600: OPTPLAT_API_TOKEN and optional switches. `set -a` exports every assignment, so a plain
+# KEY=value line reaches the server exactly like an `export KEY=value` line (before 2026-11-28 only exported lines did).
+if [ -f "$DATA/config.env" ]; then set -a; . "$DATA/config.env"; set +a; fi
 export OPTPLAT_MANAGED=1
 export OPTPLAT_DB="$DATA/optplat.db"
 export OPTPLAT_DATA="${OPTPLAT_DATA:-yahoo}"
