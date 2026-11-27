@@ -305,3 +305,23 @@ def test_unknown_regime_leaves_fields_absent_never_guessed():
         assert shadow.observe(s, snap([row()]), D0, T0, True, regime=src)["followed"] == 1  # a bad reading never stops the follow
         f = s.shadow_all_follows(True)[0]
         assert not any(k.startswith("regime_") for k in f)
+
+
+def test_points_carry_the_underlyings_recent_closes_for_x6():
+    s = Store(":memory:")
+    r = row()
+    closes = tuple(float(90 + i) for i in range(30))
+    mk = lambda now: MarketSnapshot("AAA", 100.0, closes, (r,), now, "t", True, True)
+    shadow.observe(s, mk(T0), D0, T0, True)
+    shadow.observe(s, mk(T0 + timedelta(hours=1)), D0, T0 + timedelta(hours=1), True)
+    pts = s.shadow_all_points(True)
+    assert pts and pts[0]["closes"] == list(closes[-shadow.POINT_CLOSES:]) and len(pts[0]["closes"]) == 21
+
+
+def test_point_without_closes_has_no_closes_field():
+    s = Store(":memory:")
+    r = row()
+    mk = lambda now: MarketSnapshot("AAA", 100.0, (), (r,), now, "t", True, True)
+    shadow.observe(s, mk(T0), D0, T0, True)
+    shadow.observe(s, mk(T0 + timedelta(hours=1)), D0, T0 + timedelta(hours=1), True)
+    assert "closes" not in s.shadow_all_points(True)[0]

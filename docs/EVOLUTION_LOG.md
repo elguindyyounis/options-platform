@@ -22,3 +22,4 @@ One line per run. Columns: date, followed candidates, trading days of shadow boo
 | 2026-11-26 | 35 local shadow follows; 0 shadow points | not established | 0 / 0 | none (read-only IBKR data consumer; fills vetoed until verified BBO time) |
 | 2026-11-26 (Claude) | unknown (data repo not attached) | unknown | 2 registered (SW1, ST1), 0 resolved | none |
 | 2026-11-27 | unknown (data repo not attached) | unknown | 0 / 0 | none (scanner now records the regime reading per shadow follow, for R1) |
+| 2026-11-28 | unknown (data repo not attached) | unknown | 0 / 0 | none (shadow points now store the underlying's 21 daily closes, so X6 can be replayed) |
