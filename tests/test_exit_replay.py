@@ -150,3 +150,47 @@ def test_x5_rules_are_in_the_grid_and_the_baseline_is_unchanged():
     names = [x.name for x in xr.grid_rules()]
     assert sum(n.startswith("X5") for n in names) == 2
     assert all(x.trim_at_pct is None for x in xr.grid_rules() if not x.name.startswith("X5"))
+
+
+# ---- X6: the exit agent replayed over recorded paths ----
+RISING = [100 + i for i in range(21)]     # steady uptrend: supports a call
+FALLING = [120 - i for i in range(21)]    # downtrend: the call's reason is gone
+
+
+def afollow(**kw):
+    return {**follow(**kw), "right": "C", "strike": 100.0}
+
+
+def cpt(age, bid, closes, **kw):
+    return {**pt(age, bid, **kw), "closes": closes}
+
+
+def arun(points, f=None):
+    return xr.replay_agent([f or afollow()], points, TODAY)[0]
+
+
+def test_x6_needs_closes_on_every_usable_point_and_never_falls_back_to_the_fixed_rules():
+    r = arun([cpt(1, 2.0, RISING), pt(2, 2.0)])  # second point is an old point without closes
+    assert not r["resolved"] and r["reason"] == "no_closes"
+
+
+def test_x6_exits_when_the_trend_turns_against_the_trade_at_the_bid():
+    r = arun([cpt(1, 2.1, FALLING)])
+    assert r["resolved"] and r["reason"] == "agent_thesis_broken" and round(r["ret"], 4) == 0.05
+    assert r["ret_stressed"] < r["ret"]
+
+
+def test_x6_holds_past_the_old_take_profit_while_the_trend_holds_but_keeps_the_stop_floor():
+    assert arun([cpt(1, 3.0, RISING)])["resolved"] is False  # +50% with a supportive trend: baseline sells, the agent holds on (or trims)
+    assert xr.replay(BASELINE, [afollow()], [pt(1, 3.0)], TODAY)[0]["reason"] == "take_profit"
+    assert arun([cpt(1, 1.3, RISING)])["reason"] == "stop_loss"  # floor the agent cannot override
+
+
+def test_x6_trim_then_stop_to_entry_blends_halves():
+    r = arun([cpt(1, 3.2, RISING), cpt(2, 2.0, RISING)])  # +60% trims half, then back to entry
+    assert r["reason"] == "stop_to_entry" and round(r["ret"], 4) == 0.3
+
+
+def test_x6_report_key_present_on_empty_store():
+    store = Store(":memory:")
+    assert xr.report(store, True, TODAY)["x6"]["resolved"] == 0

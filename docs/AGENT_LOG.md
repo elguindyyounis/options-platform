@@ -1372,3 +1372,9 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * `OptionLane.max_ask` defaults to None, so the other lanes and the frozen baseline (fingerprint unchanged; `Params` untouched) behave as before.
 * Wiring: `OptionLanes.small` steps after the challenge; `/api/alltrades` rows and `lane_capital` ($1,000, basis balance); `/api/exposure`; `GET /api/small-account` (token-checked).
 * Verified: `python -m pytest -q` (10 new tests in `tests/test_small_account.py`); on demo chains it skipped the dearer at-the-money calls and bought 3 contracts at $0.30. Not verified: real chains, IBKR verification of cheap contracts, the Mac. Not done: a registered hypothesis (owner decision, see Backlog); a dedicated panel (it appears in the existing lists once it trades). Merged by the agent under rule 6 as #122.
+
+## 2026-11-29 (scheduled improvement run): X6 exit-agent replay
+* Plan item: Phase 1 replay harness, extended. Helps hypothesis X6 (exit agent vs fixed 40/30). `exit_replay.replay_agent` replays `exit_agent.decide` over each recorded bid path using the closes stored on each point (X6_QUANTITY 2 so a trim is possible; halves blended 50/50; entry at ask, exit at bid, stressed variant). Paths with any usable point lacking closes are unresolved (`no_closes`); the agent's fall-back to fixed rules is never used. `exit_replay.report` now returns `x6` with the paired comparison against the baseline. Pass criteria written into docs/EVOLUTION_PLAN.md before any result.
+* Merged `origin/main` (7 commits) into `agent/integration` first; no conflicts.
+* Data repo `options-platform-data` was not attached (no add_repo tool in this session), so no real results were read and nothing about edges is claimed. Phase 1 gate status: unknown.
+* Verified: `python -m pytest -q` (1069 passed; 5 new X6 tests). Not verified: real data, the Mac. Merge result: see PR.
