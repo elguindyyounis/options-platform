@@ -85,3 +85,12 @@ def test_cli_logs_and_rejects(tmp_path, capsys):
     base = ["--db", db, "--symbol", "NBIS", "--expiry", "2026-12-24", "--strike", "150", "--price", "3.9", "--source", "buddybear", "--day", "2026-11-19"]
     assert callouts.main(base + ["--size", "Medium"]) == 0 and "logged" in capsys.readouterr().out
     assert callouts.main(base + ["--size", "Huge"]) == 2
+
+
+def test_trades_in_the_other_data_mode_are_counted_not_lost():
+    s = Store(":memory:")
+    now = datetime(2026, 11, 19, 15, tzinfo=timezone.utc)
+    s.lane_open("swing-pullback", "UNH", now, 400.0, 2, False, {})
+    s.lane_open("swing-pullback", "AAA", now, 10.0, 2, True, {})
+    assert s.lane_trades_in_other_mode(True) == 1 and s.lane_trades_in_other_mode(False) == 1
+    assert len(s.lane_trades("swing-pullback", True)) == 1  # the hidden ones are still stored

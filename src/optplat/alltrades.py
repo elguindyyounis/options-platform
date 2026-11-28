@@ -143,7 +143,7 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
         cap = (s["capital"] or {}).get("amount")
         s["return_pct"] = round(s["realized_pnl"] / cap * 100, 2) if cap else None
     return {
-        "fictional": fictional, "as_of": now.isoformat(), "trades": rows,
+        "fictional": fictional, "as_of": now.isoformat(), "trades": rows, "hidden_other_mode": store.lane_trades_in_other_mode(fictional),
         "summary": {"all": summarise(rows), "options": summarise([r for r in rows if r["instrument"] == "options"]),
                     "shares": summarise([r for r in rows if r["instrument"] == "shares"])},
         "sources": list(sources.values()),

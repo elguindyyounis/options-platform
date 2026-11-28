@@ -1151,6 +1151,10 @@
     $("trade-lede").textContent = all.length
       ? all.length + " simulated trade" + (all.length === 1 ? "" : "s") + ". Pick a lane above, filter, or sort any column. " + data.caveat
       : "Nothing has traded yet. The options account needs automatic entries switched on in Controls; the lanes and the challenge need the options lanes switched on.";
+    if (data.hidden_other_mode > 0) {
+      $("trade-lede").textContent += " This database also holds " + data.hidden_other_mode + " lane trade" + (data.hidden_other_mode === 1 ? "" : "s") + " recorded on " +
+        (data.fictional ? "REAL market data" : "FICTIONAL demo data") + ", which " + (data.fictional ? "are hidden while the platform runs on fictional demo data. Start it on real data (the installed version does) to see them." : "are hidden while the platform runs on real data.") + " Nothing was deleted.";
+    }
     const f = $("trade-summary");
     f.replaceChildren();
     kids(f, [

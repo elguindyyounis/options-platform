@@ -949,6 +949,12 @@ Append-only. One entry per agent run: date, what changed, what was verified, wha
 * Not done: the alerter's JSON reports and `state.db` use a different layout and are not imported into the platform. A restore from the private data repository is not built.
 * Verified: pytest (4 new in `tests/test_migrate_db.py`: most-orders wins, existing history kept, empty parked, unreadable ignored). Not verified: macOS, folder-permission prompts for Downloads/Documents/Desktop, the owner's real files.
 
+## 2026-11-20 (interactive): "no previous trades" after install
+
+* Owner sent their database (optplat.db, zipped). It is intact and opens with current code: 6 orders (all FILLED), 39 lane trades (all recorded on REAL data), 276 equity points, 11 to 19 Nov. It showed nothing because (a) the dashboard only shows lane trades matching its own data mode, and the default hand-started mode is FICTIONAL demo, where all 39 are hidden, and/or (b) the installer's search did not copy the file (macOS may block the search of Downloads). Which one happened on the Mac is unknown.
+* Changed: the Trades page now says how many lane trades sit in the other data mode and that nothing was deleted (`hidden_other_mode`); `Restore-History.command` (double-click, file picker, accepts the zip) with `deploy/restore_db.py` copies a chosen database into the installed platform, parks the previous one as `optplat.db.before-restore-<time>` and restarts the server.
+* Mistake to record: I told the owner to run the installer without warning that history lives in a different file and would start empty. The migration in PR #48 was the first fix; this is the second.
+* Verified: pytest; restore run on the owner's real file into a temp folder, then the server on it in demo mode reports 39 hidden real-data trades. Not verified: macOS, the picker dialog, restarting the launchd server, the dashboard on real data (Yahoo unreachable from the cloud).
 
 ## 2026-11-20: filter for the "Taken or skipped, and why" feed (daily challenger, UX-5)
 
