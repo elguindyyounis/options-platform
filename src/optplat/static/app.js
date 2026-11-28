@@ -366,6 +366,23 @@
     return { cls: "warn", text: (r.reasons || []).join(" ") + " Existing positions and exits are untouched." + hb + " Thresholds are engineering choices, not an edge." + fict };
   }
   window.optplatRegimeText = regimeText;
+  // Trades page strip: entries looked at but not taken, by reason (display only; a minimum, since the journal dedupes).
+  function notTakenText(n) {
+    if (!n) return { cls: "", text: "" };
+    const fict = n.fictional ? " Fictional demo data." : "";
+    if (!n.total) return { cls: "", text: "Nothing recorded as looked at and not taken in the last " + n.hours + " h. A lane with no new trades may simply have had no candidate." + fict };
+    const bits = (n.reasons || []).map((r) => r.count + " " + r.reason);
+    return { cls: "warn", text: "Not taken in the last " + n.hours + " h: at least " + n.total + " (" + bits.join("; ") + "). A quiet lane may be held back, not idle. The journal keeps few lines per name, so these are minimums." + fict };
+  }
+  window.optplatNotTakenText = notTakenText;
+  function renderNotTaken(n) {
+    const p = $("trade-nottaken");
+    if (!p) return;
+    const v = notTakenText(n);
+    p.hidden = !v.text;
+    p.className = "verdict " + v.cls;
+    p.textContent = v.text;
+  }
   // ---- Today's plan and Rules in force (owner, 2026-11-27, from the TWI 2.0 video): what the platform will do and the
   // rules it is held to, on the Desk, before any result. Pure functions of API data, exposed for tests; nothing here acts.
   const FILLED_LIKE = ["FILLED", "SUBMITTED", "WORKING", "PARTIALLY_FILLED", "PENDING", "ACCEPTED"];
@@ -2790,6 +2807,7 @@
       const mirror = await api("/api/mirror").catch(() => null);
       S.mirror = mirror;
       api("/api/regime").then(renderRegime).catch(() => renderRegime(null));
+      api("/api/not-taken").then(renderNotTaken).catch(() => renderNotTaken(null));
       api("/api/next-session").then(renderNextDesk).catch(() => renderNextDesk(null));
       api("/api/exposure").then(renderExposure).catch(() => renderExposure(null));
       S.connected = true; S.core = { status, report };
