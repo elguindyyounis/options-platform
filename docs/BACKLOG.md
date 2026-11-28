@@ -141,6 +141,8 @@ Existing items, in order:
 
 ## Done
 
+* 2026-11-28 (daily challenger) UX-12: `/api/not-taken` and the Trades page strip, entries looked at and not taken by reason (display only). Weekend scan rewrote `docs/MONDAY_PLAN.md`. New: UX-13 (list the skipped ideas by name).
+
 * 2026-11-28: one platform budget for IBKR bar-costing requests (27 of the service's 30 per 10 minutes) with priority:
   the main account may use all of it, lanes and previews 21, research (scanner, Lab) 12. Held requests are not sent and
   use the research fallback. Measured before (#109): scanner 45 of about 104 per 10 minutes.

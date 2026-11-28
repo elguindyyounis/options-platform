@@ -1,38 +1,35 @@
 # Monday plan (research, not advice)
 
-As of 2026-11-22 02:20 UTC (Sunday); refreshed from the 2026-11-21 version. Run by the daily challenger from a cloud session, not from the owner's Mac.
+As of 2026-11-28 02:40 UTC (Saturday). Run by the daily challenger from a cloud session, not from the owner's Mac. Replaces the 2026-11-22 version.
 
-**Option scan: not run.** The platform's only option-chain provider (Yahoo) was refused again by this session's egress
-proxy (HTTP 000, re-tested this run). No other free option-chain source is wired in, so no strategy output exists and **no candidates are
-listed**. Demo data is fictional and is deliberately not used here.
+**Option scan: not run.** The platform's only option-chain provider (Yahoo) was refused by this session's egress proxy again (HTTP 403 at the
+proxy, tested this run). No other free option-chain source is wired in, so no strategy output exists and **no candidates are listed, in or out**.
+Demo data is fictional and is deliberately not used here.
 
 ## What real data was reachable
 
-* **Underlying prices** (TradingView screener via the session's MCP; last-session close and % change as returned, delay and
-  exact close time not stated by the source, not cross-checked):
-  SPY 689.81 (-3.64%), QQQ 608.45 (-5.67%), IWM 256.61 (-2.88%), DIA 481.08 (-1.98%), GLD 322.87 (-3.67%),
-  AAPL 342.56 (-1.90%), MSFT 484.52 (-2.77%), TSLA 345.82 (-7.64%), NVDA 125.53 (-14.01%). TLT was not found.
-  These are unusually large moves. **Verify on a second source before reading anything into them.** If true, implied
-  volatility is probably high and the platform's spread and OI filters will behave differently than on a calm week.
-* **Why that matters for the lanes (an observation, not a signal):** a broad drop of this size makes put-side lanes and
-  every stop/target (percent of premium) hit sooner, and wide spreads make bid exits look worse than the ask-in entry.
+* **Underlying prices** (TradingView screener via the session's MCP; "streaming" mode, last session close and % change as returned, exact close
+  time not stated, one source, not cross-checked): SPY 728.32 (+1.62%), QQQ 650.99 (+2.69%), IWM 273.79 (+1.83%), DIA 507.60 (+1.26%),
+  GLD 334.40 (+2.12%), TLT 81.27 (-1.18%), AAPL 358.54 (+0.83%), MSFT 492.85 (+0.60%), NVDA 150.49 (+0.80%), TSLA 400.00 (+5.22%).
+* **Same source, RSI(14) / 50-day / 200-day:** SPY 45.0 / 757.20 / 733.34 (below both); QQQ 44.0 / 705.73 / 683.69 (below both); IWM 50.1 /
+  276.93 / 279.63 (below both, close); DIA 47.9 / 515.04 / 507.63 (at the 200-day); NVDA 38.1 / 202.28 / 202.68; MSFT 40.4 / 519.45 / 445.33;
+  AAPL 60.2; TSLA 56.4; GLD 37.5; TLT 53.5.
+* **What changed since the 2026-11-22 plan** (one source, so treat as a description): SPY was 689.81 with RSI 24.9; it is now 728.32 with RSI 45.0,
+  a rebound of about 5.6% in prices. The market-regime guard (`regime.py`) is built for exactly this "oversold bounce" shape, so new puts may
+  be held back on Monday's first cycles while calls are not. That is an observation about the guard, not a signal. The Trades page now counts
+  entries held back by reason (UX-12), so a quiet put lane can be told apart from an idle one.
+* The size of the moves (TSLA +5.2% in a session, QQQ +2.7%) is unusual; **verify on a second source before reading anything into it.**
 
-* **Same source, second look (TradingView, same session close, still one source):** RSI(14) SPY 24.9, QQQ 26.6, IWM 30.2, DIA 27.0,
-  GLD 23.7, NVDA 15.0, MSFT 34.8, TSLA 37.8, AAPL 46.4. SPY 689.81 is below its 50-day (760.18) and 200-day (732.76) averages; QQQ, IWM,
-  DIA and MSFT too. Quotes are identical to the 11-21 pull, so nothing new has printed since Friday. The oversold readings are
-  consistent with the large drops, which makes a data error less likely but is **not** a second source. Oversold can stay oversold;
-  this is a description, not a signal.
+## Known events, week of 2026-11-30 (source: TradingView economic calendar, US, medium and high importance; times UTC)
 
-## Known events, week of 2026-11-23 (source: TradingView economic calendar, US, medium and high importance; times UTC)
-
-* Mon 11-23: Chicago Fed National Activity Index 13:30; S&P Global flash PMIs 14:45; 3M/6M bill auctions; 2Y note auction 18:00.
-* Tue 11-24: Case-Shiller 20-city (Sep) 14:00; Conference Board consumer confidence 15:00 (forecast 92.5, prior 91.7); 5Y note auction 18:00.
-* Wed 11-25 (13:30 and 15:00): **GDP 2nd estimate Q3** (forecast 3.4%, prior 1.5%), **Core PCE MoM** (forecast 0.3%), **Personal Income and
-  Personal Spending MoM**, **Durable Goods**, jobless claims (forecast 200K), new home sales, 7Y note auction, EIA crude stocks.
-  Releases are bunched on Wednesday, so the lanes should expect a volatile Wednesday morning.
-* Thu 11-26: the calendar lists no US releases, consistent with the Thanksgiving market holiday. **The platform's holiday table was
-  not touched** (owner-only, official exchange source needed); confirm the NYSE schedule, including an early close on Fri 11-27, yourself.
-* Fri 11-27: only low-importance releases (goods trade balance, inventories).
-* **Company earnings next week: unknown.** No trustworthy earnings source was reachable (Yahoo calendar blocked).
+* Mon 11-30: Chicago PMI 14:45 (forecast 55, prior 55.3); Dallas Fed manufacturing 15:30; 3M/6M bill auctions 16:30.
+* Tue 12-01: **ISM Manufacturing PMI** 15:00 (forecast 55, prior 55.5); **JOLTS job openings** 15:00 (forecast 7.5M, prior 7.52M); auto sales.
+* Wed 12-02: ADP employment 13:15 (forecast 80K, prior 86K); EIA crude stocks 15:30.
+* Thu 12-03: jobless claims 13:30 (forecast 195K); **ISM Services PMI** 15:00 (forecast 54.6, prior 54.5); factory orders; 4-week bill auction.
+* Fri 12-04: **Non-Farm Payrolls** 13:30 (forecast 90K, prior 165K); unemployment rate (forecast 4.1%); average hourly earnings (forecast +0.3% MoM);
+  Michigan sentiment preliminary 15:00 (forecast 52.5).
+* The week is built around Friday's jobs report; the forecast for payrolls is well below the prior print, so Friday's reaction may be large either way.
+* **Company earnings next week: unknown.** No trustworthy earnings source was reachable.
+* Market holidays: none expected this week; the platform's holiday table was not touched (owner-only).
 
 To get a real scan: run the platform on the Mac with `--data yahoo` and read `/api/engine/status`.

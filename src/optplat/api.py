@@ -296,6 +296,12 @@ def create_app(
             out["held_back"] = held_back(engine.store, engine.clock(), fictional=engine.provider.fictional)
             return out
 
+        @app.get("/api/not-taken", dependencies=[Depends(auth)])
+        def entries_not_taken() -> dict[str, Any]:
+            from .nottaken import not_taken
+
+            return not_taken(engine.store, engine.clock(), fictional=engine.provider.fictional)
+
         @app.get("/api/exposure", dependencies=[Depends(auth)])
         def open_exposure_report() -> dict[str, Any]:
             from .exposure import open_exposure
