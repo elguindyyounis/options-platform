@@ -151,7 +151,7 @@ Existing items, in order:
 
 * 2026-11-28 (owner request): the $1,000 account lane (`small_account.py`, lane `small-account-1k`): the aggressive
   short-term rule with tier 1 limits (10% of equity per trade, 25% open, contracts of $1.00 or less, settled cash only,
-  10% daily brake, never restarted). `GET /api/small-account`; shows on the Trades and Lanes pages with a $1,000 balance.
+  10% daily brake, never restarted). `GET /api/small-account`; shows on the Trades and Lanes pages with a $1,000 balance. #122.
 
 * 2026-11-28 (daily challenger) UX-12: `/api/not-taken` and the Trades page strip, entries looked at and not taken by reason (display only). Weekend scan rewrote `docs/MONDAY_PLAN.md`. New: UX-13 (list the skipped ideas by name).
 
