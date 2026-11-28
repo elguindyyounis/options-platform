@@ -141,8 +141,10 @@ def quote_fits(bid: float, ask: float, p: Params) -> bool:
     return bid > 0 and ask >= bid and ask >= p.min_ask and (ask - bid) / ask * 100 <= p.max_spread_pct
 
 
-def pick_contract(snap: MarketSnapshot, right: Right, now: datetime, p: Params, *, verify_later: bool = False) -> Optional[ChainRow]:
-    """The row nearest the aimed strike inside the expiry window that passes the lane's quote limits, or None."""
+def pick_contract(snap: MarketSnapshot, right: Right, now: datetime, p: Params, *, verify_later: bool = False,
+                  max_ask: Optional[float] = None) -> Optional[ChainRow]:
+    """The row nearest the aimed strike inside the expiry window that passes the lane's quote limits, or None.
+    ``max_ask`` (dollars per share) leaves out contracts that cost more, for a lane with a small account."""
     # Unverified IBKR chains, and Yahoo chains used as IBKR's fallback, never open a lane trade on their own quotes. With
     # ``verify_later`` the row may be CHOSEN from them, but the caller must then get IBKR's verified quote for that one
     # contract and fill only at it (OptionLane._enter does).
@@ -160,6 +162,8 @@ def pick_contract(snap: MarketSnapshot, right: Right, now: datetime, p: Params, 
         if not p.dte_min <= dte <= p.dte_max:
             continue
         if not (r.bid > 0 and r.ask >= r.bid and r.ask >= p.min_ask):  # a zero bid has no exit
+            continue
+        if max_ask is not None and r.ask > max_ask:
             continue
         if (r.ask - r.bid) / r.ask * 100 > p.max_spread_pct or (r.open_interest or 0) < p.min_oi or (r.volume or 0) < p.min_volume:
             continue
@@ -253,6 +257,8 @@ class Feed:
 
 # ------------------------------------------------------------ the lane
 class OptionLane:
+    max_ask: Optional[float] = None   # dollars per share; set by a lane that may only buy cheap contracts
+
     def __init__(self, provider: MarketDataProvider, store: Store, params: Params, feed: Feed, *, clock: Callable[[], datetime] = utcnow,
                  calendar: Optional[EventCalendar] = None) -> None:
         self.provider, self.store, self.p, self.feed, self.clock, self.calendar = provider, store, params, feed, clock, calendar
@@ -391,7 +397,8 @@ class OptionLane:
             out["errors"].append(f"{sym}: chain rejected by the data-quality gate ({chk.issues[-1].kind if chk.issues else 'unknown'})")
             return None
         needs_check = self._needs_verification() and unverified_ibkr(chk.snapshot)
-        row = pick_contract(chk.snapshot, Right(right), now, p, verify_later=needs_check and hasattr(self.provider, "execution_quote"))
+        row = pick_contract(chk.snapshot, Right(right), now, p, verify_later=needs_check and hasattr(self.provider, "execution_quote"),
+                            max_ask=self.max_ask)
         if row is None:
             out["skips"].append(f"{sym}: no {'call' if right == 'C' else 'put'} met the expiry, spread and open interest limits")
             return None
@@ -402,7 +409,7 @@ class OptionLane:
             if q is None:
                 out["skips"].append(f"{sym}: IBKR could not verify {row.contract.occ_symbol.strip()} just now; not bought")
                 return None
-            if not quote_fits(q.bid, q.ask, p):
+            if not quote_fits(q.bid, q.ask, p) or (self.max_ask is not None and q.ask > self.max_ask):
                 out["skips"].append(f"{sym}: the verified quote ({q.bid}/{q.ask}) is outside the lane's price or spread limits")
                 return None
             verified = {"quote_verified": True, "verified_quote_at": q.as_of.isoformat(), "chain_bid": row.bid, "chain_ask": row.ask}
@@ -663,12 +670,19 @@ class OptionLanes:
         from .challenge import ChallengeLane  # imported here: the challenge module builds on this one
 
         self.challenge = ChallengeLane(provider, store, self.feed, clock=clock, calendar=calendar)
+        from .small_account import SmallAccountLane
+
+        self.small = SmallAccountLane(provider, store, self.feed, clock=clock, calendar=calendar)
 
     def step(self, force: bool = False) -> list[dict[str, Any]]:
         out = [lane.step(force) for lane in self.lanes]
         try:
             self.challenge.step(force)  # its own account and history; kept out of the five-lane list
         except Exception:  # noqa: BLE001 - a research account must never raise into the engine
+            pass
+        try:
+            self.small.step(force)  # the $1,000 account: its own balance, kept out of the five-lane list too
+        except Exception:  # noqa: BLE001
             pass
         return out
 

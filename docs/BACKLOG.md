@@ -48,6 +48,14 @@ Own data the owner provides stays out of commits and logs, and results are label
 
 ## Next up
 
+0000000. **Capital plan lanes (owner, 2026-11-28).** Plan: https://claude.ai/artifact/GnYyVRc5TaVxJDTY3bvYjp. Lane 1, the
+   $1,000 account, is built (see Done). Still open, each paper only and written down before its first result: (2) the
+   short-term signal as one- or two-strike debit spreads; (3) LEAPS, 12 to 24 months, delta about 0.75, on SPY/QQQ/core
+   names above their 200-day average; (4) LEAPS with a 30- to 45-day short call; (5) the wheel on ETFs; (6) Minervini
+   trend-template swing calls. Spreads and short calls need a multi-leg position model the lanes do not have yet.
+   *Owner decision:* a registered pass test for the $1,000 account (it is not in `lane_hypotheses.REGISTERED`, whose
+   family size and Bonferroni split must not move without the owner).
+
 000000. **Challenge 10 (2026-11-21).** Check that no Desk equity or lane P&L figure sums only some positions' marks; show "n of m marked" instead. See `docs/CHALLENGES.md`.
 
 00000. **Callouts follow-up (2026-11-19).** `callouts.py` is built; still open: record `days_to_earnings` and the 5-day pre-event return in the shadow book so E6 can run, then evaluate E6/C1 only after 30 resolved callouts.
@@ -140,6 +148,10 @@ Existing items, in order:
 * Multi-leg support is deliberately out of scope until single-leg paper results are understood.
 
 ## Done
+
+* 2026-11-28 (owner request): the $1,000 account lane (`small_account.py`, lane `small-account-1k`): the aggressive
+  short-term rule with tier 1 limits (10% of equity per trade, 25% open, contracts of $1.00 or less, settled cash only,
+  10% daily brake, never restarted). `GET /api/small-account`; shows on the Trades and Lanes pages with a $1,000 balance.
 
 * 2026-11-28 (daily challenger) UX-12: `/api/not-taken` and the Trades page strip, entries looked at and not taken by reason (display only). Weekend scan rewrote `docs/MONDAY_PLAN.md`. New: UX-13 (list the skipped ideas by name).
 

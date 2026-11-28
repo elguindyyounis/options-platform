@@ -307,7 +307,7 @@ def create_app(
             from .exposure import open_exposure
             from .optionlanes import ALL_PARAMS
 
-            lanes = [p.lane for p in ALL_PARAMS] + ["challenge-10x"]
+            lanes = [p.lane for p in ALL_PARAMS] + ["challenge-10x", "small-account-1k"]
             return open_exposure(engine.store, lanes, engine.provider.fictional, engine.clock())
 
         @app.get("/api/engine/status", dependencies=[Depends(auth)])
@@ -511,6 +511,10 @@ def create_app(
         @app.get("/api/challenge", dependencies=[Depends(auth)])
         def challenge_report() -> dict[str, Any]:
             return {**engine.option_lanes.challenge.report(engine.clock()), "enabled": engine.config().option_lanes_enabled}
+
+        @app.get("/api/small-account", dependencies=[Depends(auth)])
+        def small_account_report() -> dict[str, Any]:
+            return {**engine.option_lanes.small.report(engine.clock()), "enabled": engine.config().option_lanes_enabled}
 
         @app.post("/api/challenge/restart", dependencies=[Depends(auth)])
         def challenge_restart() -> dict[str, Any]:

@@ -71,11 +71,12 @@ def lane_capital(manager: Any, option_lanes: Any) -> dict[str, dict[str, Any]]:
     """The capital each book works with, so a result can be read against it (owner, 2026-11-28: "not being able to see the
     starting capital is kind of weird"). Display only; nothing here sizes a trade.
 
-    Only the options account and the 10x challenge have a balance. Every other lane spends a fixed amount per trade with a
+    Only the options account, the 10x challenge and the $1,000 account have a balance. Every other lane spends a fixed amount per trade with a
     cap on open trades, so the capital it needs is the most it can have at risk at once: per-trade size × most open. Each
     entry says which of the two it is, because they are not the same thing."""
     from . import challenge as ch_mod
     from . import shortterm as st_mod
+    from . import small_account as sa_mod
     from . import swing as sw_mod
     from .optionlanes import ALL_PARAMS
 
@@ -85,6 +86,8 @@ def lane_capital(manager: Any, option_lanes: Any) -> dict[str, dict[str, Any]]:
         out["main"] = {"amount": float(start), "basis": "balance", "text": f"${start:,.0f} paper account balance at its start"}
     out["challenge-10x"] = {"amount": ch_mod.START_EQUITY, "basis": "balance",
                             "text": f"${ch_mod.START_EQUITY:,.0f} per attempt; a new attempt starts after the goal or ruin"}
+    out[sa_mod.LANE] = {"amount": sa_mod.START_EQUITY, "basis": "balance",
+                        "text": f"${sa_mod.START_EQUITY:,.0f} balance, never restarted: the size the platform would start live with"}
     for p in ALL_PARAMS:
         out[p.lane] = {"amount": float(p.budget_usd * p.max_open), "basis": "most at risk",
                        "text": f"${p.budget_usd:,.0f} per trade × up to {p.max_open} open: the most it can have at risk at once"}
@@ -93,6 +96,8 @@ def lane_capital(manager: Any, option_lanes: Any) -> dict[str, dict[str, Any]]:
                          "text": f"${mod.NOTIONAL_USD:,.0f} per trade × up to {mod.MAX_OPEN} open: the most it can have invested at once"}
     if option_lanes is not None and getattr(option_lanes, "challenge", None) is None:
         out.pop("challenge-10x", None)
+    if option_lanes is not None and getattr(option_lanes, "small", None) is None:
+        out.pop(sa_mod.LANE, None)
     return out
 
 
@@ -106,6 +111,10 @@ def build_all(manager: Any, store: Any, fictional: bool, now: datetime, option_l
     for lane in ops["lanes"]:
         rows += _lane_rows(lane, lane["lane"], lane["label"], horizon.get(lane["kind"], "Lane"), "options")
     rows += _lane_rows(option_lanes.challenge.report(now), "challenge-10x", "10x challenge", "Challenge", "options")
+    if getattr(option_lanes, "small", None) is not None:
+        from .small_account import LANE as SMALL_LANE
+
+        rows += _lane_rows(option_lanes.small.report(now), SMALL_LANE, "$1,000 account", "Short-term", "options")
     rows += _lane_rows(sw_mod.build_report(store, fictional, now), sw_mod.LANE, "Swing, shares", "Swing", "shares")
     rows += _lane_rows(st_mod.build_report(store, fictional, now), st_mod.LANE, "Short-term, shares", "Short-term", "shares")
     rows.sort(key=lambda r: r["opened_at"] or "", reverse=True)
