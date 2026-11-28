@@ -21,11 +21,13 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, time, timezone
 from typing import Any, Optional
 
 from . import robustness
-from .exits import ExitPolicy
+from .exit_agent import decide
+from .exits import EXIT, TRIM, ExitPolicy
+from .models import OptionContract, Position, Quote, Right
 from .shadow import MAX_AGE, one_per_underlying_day
 
 LATER_FRACTION = 0.3
@@ -141,6 +143,60 @@ def replay(rule: ExitRule, follows: list[dict[str, Any]], points: list[dict[str,
     return [replay_path(rule, f, paths.get(_path_key(f["contract"], f["followed_day"]), []), today) for f in one_per_underlying_day(follows)]
 
 
+X6_NAME = "X6 exit agent"
+X6_QUANTITY = 2  # the agent trims only a position of two or more contracts; the replay holds two and blends the halves 50/50
+
+
+def replay_path_agent(follow: dict[str, Any], path: list[dict[str, Any]], today: date) -> dict[str, Any]:
+    """X6: replay the exit agent (``exit_agent.decide``) over one recorded path, with the same fill rules as ``replay_path``.
+
+    The agent reads the underlying's daily closes stored on each point. A path with ANY usable point lacking closes is
+    ``unresolved`` with reason ``no_closes`` (older points have none); the agent's fall-back to the fixed rules is never
+    used here, because that would measure the baseline, not the agent. Entry at the ask, exit (and trim) at the bid.
+    """
+    entry = follow.get("entry_ask")
+    base = {"contract": follow["contract"], "symbol": follow["symbol"], "followed_day": follow["followed_day"]}
+    if not entry or entry <= 0:
+        return {**base, "resolved": False, "reason": "no_entry_ask"}
+    expiry = date.fromisoformat(follow["expiry"])
+    try:
+        contract = OptionContract(follow["symbol"], expiry, Right(follow["right"]), float(follow["strike"]))
+    except (KeyError, ValueError, TypeError):
+        return {**base, "resolved": False, "reason": "bad_contract"}
+    usable = [p for p in path if p.get("bid") is not None and p["bid"] > 0 and p.get("observed_day")]
+    if any(not p.get("closes") for p in usable):
+        return {**base, "resolved": False, "reason": "no_closes"}
+    policy = ExitPolicy()
+    position = Position(contract, X6_QUANTITY, entry)
+    trim: Optional[tuple[float, float]] = None
+    last: Optional[dict[str, Any]] = None
+    for p in usable:
+        last = p
+        now = datetime.combine(date.fromisoformat(p["observed_day"]), time(20, 0), tzinfo=timezone.utc)
+        ask = p["ask"] if p.get("ask") is not None and p["ask"] >= p["bid"] else p["bid"]
+        d = decide(position, Quote(contract, p["bid"], ask, now, "shadow"), p["closes"], entry_time=None, now=now, policy=policy,
+                   trimmed=trim is not None)
+        ret, stressed = p["bid"] / entry - 1, _stressed(p, entry)
+        if d.action == TRIM and trim is None:
+            trim = (ret, stressed)
+            continue
+        if d.action == EXIT:
+            if trim is not None:
+                ret, stressed = 0.5 * trim[0] + 0.5 * ret, 0.5 * trim[1] + 0.5 * stressed
+            return {**base, "resolved": True, "reason": d.trigger or "exit", "ret": ret, "ret_stressed": stressed, "age": p["age"]}
+    if last is not None and (last["age"] >= MAX_AGE or expiry < today):
+        ret, stressed = last["bid"] / entry - 1, _stressed(last, entry)
+        if trim is not None:
+            ret, stressed = 0.5 * trim[0] + 0.5 * ret, 0.5 * trim[1] + 0.5 * stressed
+        return {**base, "resolved": True, "reason": "horizon", "ret": ret, "ret_stressed": stressed, "age": last["age"]}
+    return {**base, "resolved": False, "reason": "unresolved"}
+
+
+def replay_agent(follows: list[dict[str, Any]], points: list[dict[str, Any]], today: date) -> list[dict[str, Any]]:
+    paths = _group_points(points)
+    return [replay_path_agent(f, paths.get(_path_key(f["contract"], f["followed_day"]), []), today) for f in one_per_underlying_day(follows)]
+
+
 def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     done = [r for r in rows if r["resolved"]]
     reasons: dict[str, int] = {}
@@ -201,7 +257,10 @@ def report(store: Any, fictional: bool, today: date) -> dict[str, Any]:
     for rule in grid_rules():
         rows = base_rows if rule is BASELINE else replay(rule, follows, points, today)
         rules.append({"rule": rule.name, **summarize(rows), "vs_baseline_later_30pct": None if rule is BASELINE else compare(rows, base_rows)})
-    return {"fictional": fictional, "rules_tried": len(rules) - 1, "rules": rules,
+    agent_rows = replay_agent(follows, points, today)
+    x6 = {"rule": X6_NAME, **summarize(agent_rows), "vs_baseline_later_30pct": compare(agent_rows, base_rows),
+          "no_closes": sum(1 for r in agent_rows if r.get("reason") == "no_closes")}
+    return {"fictional": fictional, "rules_tried": len(rules) - 1, "rules": rules, "x6": x6,
             "note": "Replay over recorded bid paths, entry at the ask, exit at the bid (stressed: bid minus half the spread). One observation per underlying per day. "
                     "Exploratory: rules are only registered as hypotheses through research.py, and every rule tried here counts towards a stricter bar. "
                     "Simulated data when fictional is true; nothing here is proof of an edge."}
